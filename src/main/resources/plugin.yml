@@ -1,0 +1,43 @@
+name: HahGPS
+version: '${project.version}'
+main: ru.hahgps.HahGPSPlugin
+api-version: '1.21'
+authors: [ hah ]
+description: Мультимодальная навигация (GPS) с послойным графом дорог, A* и HUD (BossBar/ActionBar/ItemsAdder).
+load: POSTWORLD
+softdepend: [ ItemsAdder ]
+commands:
+  gps:
+    description: Проложить маршрут до ключевой точки мира
+    usage: /gps «точка» [транспорт] | /gps off | /gps list
+    aliases: [ navigps ]
+    permission: hahgps.use
+  nav:
+    description: Администрирование мультимодальной дорожной сетки
+    usage: /nav help
+    aliases: [ gpsadmin ]
+    permission: hahgps.admin
+permissions:
+  hahgps.use:
+    description: Доступ к навигации /gps
+    default: true
+  hahgps.admin:
+    description: Полный доступ к /nav
+    default: op
+    children:
+      hahgps.admin.node: true
+      hahgps.admin.edge: true
+      hahgps.admin.visual: true
+      hahgps.admin.reload: true
+  hahgps.admin.node:
+    description: Создание и правка узлов сетки
+    default: op
+  hahgps.admin.edge:
+    description: Создание и правка рёбер сетки
+    default: op
+  hahgps.admin.visual:
+    description: Визуализация сетки партиклами
+    default: op
+  hahgps.admin.reload:
+    description: Перезагрузка конфигов и данных
+    default: op

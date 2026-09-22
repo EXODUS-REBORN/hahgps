@@ -1,0 +1,125 @@
+# ============================================================
+#  HahGPS — мультимодальная навигация (Paper 1.21.11, Java 21)
+# ============================================================
+#  Все значения можно менять на живом сервере: /nav reload
+# ============================================================
+
+routing:
+  # Скорость слоя в блоках/сек. Используется как вес в A*:
+  #   cost = длина_ребра / speed * weight_ребра + node-penalty
+  # Больше значение = слой "предпочтительнее" для алгоритма.
+  speeds:
+    foot: 4.3
+    car: 16.0
+    transit: 24.0
+    air: 42.0
+    water: 10.0
+
+  # Множитель эвристики. 1.0 — оптимальный путь (рекомендуется).
+  # Уменьшайте (0.6-0.9), если используете weight < 1 на рёбрах: эвристика
+  # должна оставаться "оптимистичной", иначе A* может вернуть не лучший путь.
+  heuristic-factor: 1.0
+
+  # Штраф за проход через узел (в "секундах"). Мешает маршруту петлять.
+  node-penalty: 0.4
+
+  # Лимит итераций A* (защита от фризов на огромных графах).
+  max-iterations: 60000
+
+  # Если ближайший узел сети дальше этого расстояния — в маршрут
+  # добавляется отдельный пеший шаг "дойти до узла сети".
+  walk-approach-threshold: 6.0
+
+  # Максимальный крюк пешего подхода относительно прямой (2.0 = не длиннее
+  # чем в два раза), иначе игрок идёт по прямой.
+  max-walk-detour: 2.0
+
+  # Шаги короче этого расстояния не попадают в маршрут.
+  min-step-length: 1.5
+
+  # Радиус, в котором точка считается достигнутой (по типам транспорта).
+  arrive-radius:
+    foot: 4.0
+    car: 9.0
+    transit: 12.0
+    air: 16.0
+    water: 9.0
+
+  # Если игрок отошёл от линии маршрута дальше этого расстояния —
+  # маршрут перестраивается автоматически.
+  recompute-distance: 26.0
+  recompute-cooldown-ms: 5000
+
+  # Покрытие дороги -> скорость ребра (блоков/сек). Приоритет в A* выше у
+  # более быстрых покрытий: шоссе дешевле грунтовки, хотя путь может быть длиннее.
+  # Назначается командой /nav edge surface «id1» «id2» «пресет».
+  surfaces:
+    highway: 34.0
+    asphalt: 20.0
+    gravel: 9.0
+    ground: 6.0
+    path: 4.5
+    rail: 40.0
+    canal: 12.0
+
+navigation:
+  # Пороги определения поворота (градусы изменения курса).
+  turn-straight-degrees: 20.0
+  turn-slight-degrees: 45.0
+  turn-sharp-degrees: 135.0
+
+hud:
+  # Полоса босса сверху экрана.
+  bossbar: true
+  # Подсказка над хотбаром (иконка поворота + транспорт + дистанции).
+  actionbar: true
+  # Как часто обновлять HUD (тиков).
+  update-period-ticks: 5
+  # Кастомный HUD ItemsAdder (необязательно, нужен установленный ItemsAdder).
+  itemsadder:
+    enabled: true
+    # CUSTOM HUD: слева иконки (поворот + транспорт), значение %value% = метров до поворота.
+    hud-id: "hahgps:nav"
+    # QUANTITY HUD: %value% = всего метров осталось.
+    total-hud-id: "hahgps:nav_total"
+    # Передавать значения в HUD (setFloatValue).
+    set-quantity: true
+    # Иконки транспорта (font images ItemsAdder).
+    transport-images:
+      foot: "hahgps:icon_foot"
+      car: "hahgps:icon_car"
+      transit: "hahgps:icon_transit"
+      air: "hahgps:icon_air"
+      water: "hahgps:icon_water"
+    # Иконки поворотов (font images ItemsAdder).
+    turn-images:
+      straight: "hahgps:turn_straight"
+      slight-left: "hahgps:turn_slight_left"
+      left: "hahgps:turn_left"
+      sharp-left: "hahgps:turn_sharp_left"
+      back: "hahgps:turn_back"
+      slight-right: "hahgps:turn_slight_right"
+      right: "hahgps:turn_right"
+      sharp-right: "hahgps:turn_sharp_right"
+      arrive: "hahgps:turn_arrive"
+
+visualization:
+  # /nav visual — подсветка сетки партиклами
+  update-period-ticks: 20
+  view-distance: 96
+  # Расстояние между партиклами вдоль ребра.
+  particle-step: 3.0
+  particle-size: 1.0
+  # Для слоя air партиклы рисуются выше узла (узел = площадка).
+  air-height-offset: 2.5
+  # Показывать ID и имя узлов (TextDisplay).
+  labels: true
+  label-height: 2.2
+  # Максимум подписей одновременно на игрока (ближайшие).
+  max-labels: 40
+
+storage:
+  # Автосохранение сетки, если были изменения (секунды).
+  autosave-seconds: 60
+  # Файл с сеткой в папке плагина.
+  file: graph.yml
