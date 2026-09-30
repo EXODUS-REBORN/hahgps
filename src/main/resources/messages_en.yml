@@ -126,4 +126,12 @@ gui:
   logging: "<#8fc6ff>Chat hints: {state}</#8fc6ff>"
   transport-foot: "<#8fc6ff>On foot</#8fc6ff>"
   transport-car: "<#8fc6ff>Car</#8fc6ff>"
-  transport-airplane: "<#8fc6ff>Airplane</#8fc6ff>"
+  transport-transit: "<#8fc6ff>Transit</#8fc6ff>"
+  transport-air: "<#8fc6ff>Air</#8fc6ff>"
+  transport-water: "<#8fc6ff>Water</#8fc6ff>"
+
+edge-connected: "<#8fc6ff>Edge <#b8dcff>{id1} → {id2}</#b8dcff> created."
+edge-not-found: "<#3f86ff>Edge not found."
+edge-updated: "<#8fc6ff>Edge updated."
+visual-enabled: "<#8fc6ff>Visualization <#b8dcff>{type}</#b8dcff> enabled."
+visual-disabled: "<#8fc6ff>Visualization disabled."

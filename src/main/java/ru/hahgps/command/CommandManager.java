@@ -6,7 +6,11 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.subcommands.*;
+import ru.hahgps.model.Poi;
+import ru.hahgps.model.TransportType;
+import ru.hahgps.service.GraphService;
 import ru.hahgps.service.RouteService;
+import ru.hahgps.service.VisualizationService;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -29,7 +33,10 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         register(new LogCommand());
         register(new ReloadCommand());
         register(new UpdateCommand());
-        register(new HelpCommand());    }
+        register(new HelpCommand());
+        register(new EdgeCommand());
+        register(new VisualCommand());
+    }
 
     private void register(SubCommand cmd) {
         roots.put(cmd.name().toLowerCase(), cmd);
@@ -51,12 +58,18 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             return true;
         }
 
+        if (args[0].equalsIgnoreCase("off")) {
+            plugin.getNavigationService().stopNavigation(player);
+            player.sendMessage(plugin.getMessages().getPrefixed("route-stopped"));
+            return true;
+        }
+
         SubCommand node = null;
         int i = 0;
 
         SubCommand current = roots.get(args[0].toLowerCase());
         if (current == null) {
-            player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", "/gps " + args[0]));
+            tryGoto(player, args);
             return true;
         }
         node = current;
@@ -75,7 +88,6 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         System.arraycopy(args, i, remaining, 0, remaining.length);
 
         if (!node.isLeaf()) {
-
             node.execute(player, remaining);
             return true;
         }
@@ -87,6 +99,30 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 
         node.execute(player, remaining);
         return true;
+    }
+
+    private void tryGoto(Player player, String[] args) {
+        String pointName = args[0];
+        TransportType transport = TransportType.FOOT;
+        if (args.length >= 2) {
+            transport = TransportType.fromKey(args[1]);
+        }
+        final TransportType finalTransport = transport;
+        plugin.getPoiService().loadPoiWithRating(pointName).thenAcceptAsync(poi -> {
+            if (poi == null) {
+                plugin.getDataService().runSync(() -> {
+                    if (player.isOnline()) {
+                        player.sendMessage(plugin.getMessages().getPrefixed("point-not-found", "name", pointName));
+                    }
+                });
+                return;
+            }
+            plugin.getDataService().runSync(() -> {
+                if (player.isOnline()) {
+                    gotoPoi(player, poi, finalTransport);
+                }
+            });
+        });
     }
 
     private SubCommand findChild(SubCommand parent, String name) {
@@ -123,13 +159,13 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         }
 
         if (node == null) {
-
             List<String> names = new ArrayList<>();
             for (SubCommand cmd : roots.values()) {
                 if (cmd.permission().isEmpty() || player.hasPermission(cmd.permission())) {
                     names.add(cmd.name());
                 }
             }
+            names.add("off");
             return filter(names, args.length > 0 ? args[0] : "");
         }
 
@@ -158,7 +194,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         return result;
     }
 
-    public void gotoPoi(Player player, ru.hahgps.model.Poi poi, ru.hahgps.model.TransportType transport) {
+    public void gotoPoi(Player player, Poi poi, TransportType transport) {
         var routeService = plugin.getRouteService();
         var navService = plugin.getNavigationService();
         var messages = plugin.getMessages();
@@ -169,15 +205,15 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             return;
         }
 
-        routeService.buildPathToAsync(player, loc, transport).thenAcceptAsync(result -> {
+        routeService.buildMultiModalAsync(player, loc, transport).thenAcceptAsync(result -> {
             plugin.getDataService().runSync(() -> {
                 if (!player.isOnline()) {
                     return;
                 }
-                navService.startNavigation(player, poi.getName(), loc, result.path, result.distance, transport);
+                navService.startNavigation(player, poi.getName(), loc, result, result.size(), transport);
                 player.sendMessage(messages.getPrefixed("route-started",
                         "name", poi.getName(),
-                        "distance", String.format("%.0f", result.distance)));
+                        "distance", String.format("%.0f", result.size())));
             });
         });
     }

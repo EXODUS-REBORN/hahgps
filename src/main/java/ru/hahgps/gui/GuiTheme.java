@@ -32,8 +32,8 @@ public final class GuiTheme {
             "#3f86ff",
             "#66aaff",
             "#8fc6ff",
-            "#b8dcff",
-            "#e8f4ff"
+            "#4fd1e0",
+            "#8fe9f5"
     };
 
     public static final String GRADIENT_START = TONES[1];
@@ -109,7 +109,7 @@ public final class GuiTheme {
                     case 'f' -> "white";
                     case '7' -> "gray";
                     case '8' -> "dark_gray";
-                    case 'c' -> "blue";
+                    case 'c' -> "red";
                     case 'l' -> "bold";
                     case 'o' -> "italic";
                     case 'r' -> "reset";

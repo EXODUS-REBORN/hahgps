@@ -126,3 +126,12 @@ gui:
   logging: "<#8fc6ff>Подсказки в чате: {state}</#8fc6ff>"
   transport-foot: "<#8fc6ff>Пешком</#8fc6ff>"
   transport-car: "<#8fc6ff>Машина</#8fc6ff>"
+  transport-transit: "<#8fc6ff>Общественный</#8fc6ff>"
+  transport-air: "<#8fc6ff>Авиа</#8fc6ff>"
+  transport-water: "<#8fc6ff>Водный</#8fc6ff>"
+
+edge-connected: "<#8fc6ff>Ребро <#b8dcff>{id1} → {id2}</#b8dcff> создано."
+edge-not-found: "<#3f86ff>Ребро не найдено."
+edge-updated: "<#8fc6ff>Ребро обновлено."
+visual-enabled: "<#8fc6ff>Визуализация <#b8dcff>{type}</#b8dcff> включена."
+visual-disabled: "<#8fc6ff>Визуализация выключена."

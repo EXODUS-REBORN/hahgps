@@ -2,11 +2,12 @@ package ru.hahgps.service;
 import ru.hahgps.model.GraphEdge;
 import ru.hahgps.model.GraphNode;
 import ru.hahgps.model.RoadGraph;
+import ru.hahgps.model.TransportType;
 import org.bukkit.Location;
 import java.util.*;
 public class Pathfinder {
 
-    public static List<GraphNode> findPath(RoadGraph graph, GraphNode from, GraphNode to) {
+    public static List<GraphNode> findPath(RoadGraph graph, GraphNode from, GraphNode to, TransportType transport) {
         if (from == null || to == null) {
             return Collections.emptyList();
         }
@@ -35,12 +36,13 @@ public class Pathfinder {
             }
             closed.add(current.getId());
 
-            for (GraphEdge edge : graph.getEdges(current)) {
+            for (GraphEdge edge : graph.getEdges(current, transport)) {
                 GraphNode neighbor = edge.getTo();
                 if (closed.contains(neighbor.getId())) {
                     continue;
                 }
-                double tentativeG = gScore.getOrDefault(current.getId(), Double.MAX_VALUE) + edge.getWeight();
+                double cost = edge.getWeight() / transport.getSpeed();
+                double tentativeG = gScore.getOrDefault(current.getId(), Double.MAX_VALUE) + cost;
                 if (tentativeG < gScore.getOrDefault(neighbor.getId(), Double.MAX_VALUE)) {
                     cameFrom.put(neighbor.getId(), current);
                     gScore.put(neighbor.getId(), tentativeG);
@@ -67,7 +69,7 @@ public class Pathfinder {
         return path;
     }
 
-    public static List<Location> buildRoute(RoadGraph graph, Location start, Location end) {
+    public static List<Location> buildRoute(RoadGraph graph, Location start, Location end, TransportType transport) {
         List<Location> route = new ArrayList<>();
         if (start.getWorld() == null || end.getWorld() == null
                 || !start.getWorld().equals(end.getWorld())) {
@@ -82,8 +84,8 @@ public class Pathfinder {
             return route;
         }
 
-        GraphNode startNode = graph.findNearestNode(start);
-        GraphNode endNode = graph.findNearestNode(end);
+        GraphNode startNode = graph.findNearestNode(start, transport);
+        GraphNode endNode = graph.findNearestNode(end, transport);
 
         if (startNode == null || endNode == null) {
             route.add(start);
@@ -91,7 +93,7 @@ public class Pathfinder {
             return route;
         }
 
-        List<GraphNode> path = findPath(graph, startNode, endNode);
+        List<GraphNode> path = findPath(graph, startNode, endNode, transport);
         if (path.isEmpty()) {
             route.add(start);
             route.add(end);
@@ -103,6 +105,42 @@ public class Pathfinder {
             route.add(node.getLocation());
         }
         route.add(end);
+        return route;
+    }
+
+    public static List<Location> buildMultiModalRoute(RoadGraph graph, Location start, Location end,
+                                                      TransportType mainTransport) {
+        List<Location> route = new ArrayList<>();
+        route.add(start);
+
+        if (start.getWorld() == null || end.getWorld() == null
+                || !start.getWorld().equals(end.getWorld())) {
+            route.add(end);
+            return route;
+        }
+
+        GraphNode transitStart = graph.findNearestNode(start, mainTransport);
+        GraphNode transitEnd = graph.findNearestNode(end, mainTransport);
+
+        if (transitStart != null && !transitStart.getLocation().equals(start)) {
+            List<Location> walkTo = buildRoute(graph, start, transitStart.getLocation(), TransportType.FOOT);
+            route.addAll(walkTo.subList(1, walkTo.size()));
+        }
+
+        if (transitStart != null && transitEnd != null) {
+            List<Location> transitPath = buildRoute(graph, transitStart.getLocation(),
+                    transitEnd.getLocation(), mainTransport);
+            route.addAll(transitPath.subList(1, transitPath.size()));
+        }
+
+        if (transitEnd != null && !transitEnd.getLocation().equals(end)) {
+            List<Location> walkFrom = buildRoute(graph, transitEnd.getLocation(), end, TransportType.FOOT);
+            route.addAll(walkFrom.subList(1, walkFrom.size()));
+        }
+
+        if (route.size() == 1) {
+            route.add(end);
+        }
         return route;
     }
 

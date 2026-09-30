@@ -71,7 +71,8 @@ public class DataService {
                 GraphNode node = new GraphNode(nodeId++, loc);
                 graph.addNode(node);
                 if (prev != null) {
-                    graph.addEdge(prev, node);
+                    graph.addEdge(prev, node, java.util.EnumSet.of(
+                            ru.hahgps.model.TransportType.FOOT, ru.hahgps.model.TransportType.CAR));
                 }
                 prev = node;
             }

@@ -11,6 +11,7 @@ import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.config.ConfigManager;
 import ru.hahgps.config.MessagesManager;
 import ru.hahgps.model.NavigationSession;
+import ru.hahgps.model.TransportType;
 import ru.hahgps.util.DirectionUtil;
 import ru.hahgps.util.LocationUtil;
 import java.util.Iterator;
@@ -54,7 +55,7 @@ public class NavigationService {
 
     public void startNavigation(Player player, String targetName, Location target,
                                 java.util.List<Location> path, double totalDistance,
-                                ru.hahgps.model.TransportType transport) {
+                                TransportType transport) {
         stopNavigation(player);
         NavigationSession session = new NavigationSession(player.getUniqueId(), targetName, target,
                 path, totalDistance, transport);
@@ -130,20 +131,29 @@ public class NavigationService {
         double delta = LocationUtil.normalizeAngle(angleToTarget - facing);
 
         String arrow = config.isShowArrow() ? DirectionUtil.getArrow(delta) : "";
+        String transportIcon = getTransportIcon(session.getTransport());
 
         BossBar bar = bossBars.get(player.getUniqueId());
         if (bar != null) {
-            String title = String.format("%s %s — %s", arrow, session.getTargetName(),
-                    LocationUtil.formatDistance(distanceToTarget));
-            bar.setTitle(title);
+            Component title = miniMessage.deserialize(
+                    "<#8fc6ff>" + transportIcon + " <#e8f4ff>" + session.getTargetName()
+                            + " <#c8e4ff>" + arrow + " <#b8dcff>"
+                            + LocationUtil.formatDistance(distanceToTarget));
+            bar.setTitle(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+                    .plainText().serialize(title));
             float progress = session.getTotalDistance() > 0
                     ? (float) Math.max(0.0, Math.min(1.0, distanceToTarget / session.getTotalDistance()))
                     : 0.0f;
             bar.setProgress(progress);
         }
 
-        String actionText = messages.get("distance-format", "value", LocationUtil.formatDistance(distanceToTarget));
-        player.sendActionBar(miniMessage.deserialize("<gray>Осталось: " + actionText + "</gray>"));
+        Component hotbarText = miniMessage.deserialize(
+                "<#c8e4ff>" + transportIcon + " <#8fc6ff>" + session.getTargetName()
+                        + " <#b8dcff>| <#e8f4ff>"
+                        + LocationUtil.formatDistance(distanceToTarget)
+                        + " <#c8e4ff>| <#66aaff>"
+                        + (int) distanceToTarget + " <#8fc6ff>m");
+        player.sendActionBar(hotbarText);
 
         if (session.isLoggingEnabled()) {
             String hintKey = DirectionUtil.getHintKey(delta);
@@ -152,6 +162,16 @@ public class NavigationService {
                 player.sendMessage(messages.getPrefixed(hintKey));
             }
         }
+    }
+
+    private String getTransportIcon(TransportType type) {
+        return switch (type) {
+            case FOOT -> "👣";
+            case CAR -> "🚗";
+            case TRANSIT -> "🚌";
+            case AIR -> "🚁";
+            case WATER -> "🚢";
+        };
     }
 
     private BarColor parseColor(String name) {

@@ -52,3 +52,9 @@ permissions:
   gps.reload:
     description: Reload config
     default: op
+  gps.edge:
+    description: Manage graph edges
+    default: op
+  gps.visual:
+    description: Toggle grid visualization
+    default: op

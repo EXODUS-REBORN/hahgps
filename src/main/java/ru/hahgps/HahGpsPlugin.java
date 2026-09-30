@@ -16,6 +16,7 @@ import ru.hahgps.storage.SqliteStorageProvider;
 import ru.hahgps.storage.StorageProvider;
 import ru.hahgps.update.HotSwap;
 import ru.hahgps.update.UpdaterService;
+import ru.hahgps.util.ConsoleBanner;
 import java.io.File;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
@@ -37,6 +38,9 @@ public class HahGpsPlugin extends JavaPlugin {
     private MapService mapService;
     private CommandManager commandManager;
     private UpdaterService updater;
+    private GraphService graphService;
+    private VisualizationService visualizationService;
+    private HudService hudService;
 
     private volatile boolean hotSwapping;
 
@@ -52,7 +56,6 @@ public class HahGpsPlugin extends JavaPlugin {
         messagesManager.load(configManager.getLanguage());
 
         initStorage();
-
     }
 
     private void initStorage() {
@@ -89,11 +92,15 @@ public class HahGpsPlugin extends JavaPlugin {
 
         poiService = new PoiService(dataService);
         categoryService = new CategoryService(dataService);
-        routeService = new RouteService();
+        graphService = new GraphService(dataService);
+        graphService.loadGraph();
+        routeService = new RouteService(graphService);
         navigationService = new NavigationService(this, configManager, messagesManager);
         searchService = new SearchService(dataService,
                 configManager.getSearchMaxResults(), configManager.getSearchThreshold());
         mapService = new MapService(this);
+        visualizationService = new VisualizationService(graphService);
+        hudService = new HudService();
         commandManager = new CommandManager(this);
 
         categoryService.seedDefaults(configManager.getDefaultCategories());
@@ -109,10 +116,12 @@ public class HahGpsPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new PlayerQuitListener(), this);
 
         navigationService.start();
+        Bukkit.getScheduler().runTaskTimer(this, () -> visualizationService.tick(), 20L, 20L);
 
         initUpdater();
 
         ready = true;
+        ConsoleBanner.printBanner(getLogger(), getPluginMeta().getVersion());
         getLogger().info("HahGps enabled. Storage: " + configManager.getStorageType());
     }
 
@@ -133,6 +142,11 @@ public class HahGpsPlugin extends JavaPlugin {
         }
         if (mapService != null) {
             mapService.stop();
+        }
+        if (visualizationService != null) {
+            for (var player : Bukkit.getOnlinePlayers()) {
+                visualizationService.disableAll(player);
+            }
         }
         GuiManager.getInstance().closeAll();
         if (dataService != null) {
@@ -206,6 +220,18 @@ public class HahGpsPlugin extends JavaPlugin {
 
     public UpdaterService getUpdater() {
         return updater;
+    }
+
+    public GraphService getGraphService() {
+        return graphService;
+    }
+
+    public VisualizationService getVisualizationService() {
+        return visualizationService;
+    }
+
+    public HudService getHudService() {
+        return hudService;
     }
 
     public boolean isHotSwapping() {
