@@ -1,43 +1,54 @@
-name: HahGPS
+name: HahGps
 version: '${project.version}'
-main: ru.hahgps.HahGPSPlugin
+main: ru.hahgps.HahGpsPlugin
 api-version: '1.21'
-authors: [ hah ]
-description: Мультимодальная навигация (GPS) с послойным графом дорог, A* и HUD (BossBar/ActionBar/ItemsAdder).
-load: POSTWORLD
-softdepend: [ ItemsAdder ]
+author: hah
+description: GPS navigation plugin for PaperMC
+website: https://example.com
+
 commands:
   gps:
-    description: Проложить маршрут до ключевой точки мира
-    usage: /gps «точка» [транспорт] | /gps off | /gps list
-    aliases: [ navigps ]
-    permission: hahgps.use
-  nav:
-    description: Администрирование мультимодальной дорожной сетки
-    usage: /nav help
-    aliases: [ gpsadmin ]
-    permission: hahgps.admin
+    description: Main GPS command
+    usage: /gps <subcommand>
+    aliases: [navigation, nav]
+
 permissions:
-  hahgps.use:
-    description: Доступ к навигации /gps
+  gps.use:
+    description: Basic GPS usage
     default: true
-  hahgps.admin:
-    description: Полный доступ к /nav
+  gps.admin:
+    description: Full admin access
     default: op
-    children:
-      hahgps.admin.node: true
-      hahgps.admin.edge: true
-      hahgps.admin.visual: true
-      hahgps.admin.reload: true
-  hahgps.admin.node:
-    description: Создание и правка узлов сетки
+  gps.point.create:
+    description: Create points
+    default: true
+  gps.point.delete:
+    description: Delete points
     default: op
-  hahgps.admin.edge:
-    description: Создание и правка рёбер сетки
+  gps.point.rate:
+    description: Rate points
+    default: true
+  gps.category.create:
+    description: Create categories
     default: op
-  hahgps.admin.visual:
-    description: Визуализация сетки партиклами
+  gps.category.delete:
+    description: Delete categories
     default: op
-  hahgps.admin.reload:
-    description: Перезагрузка конфигов и данных
+  gps.route.record:
+    description: Record routes
+    default: op
+  gps.route.save:
+    description: Save routes
+    default: op
+  gps.map:
+    description: Open map
+    default: true
+  gps.search:
+    description: Search points
+    default: true
+  gps.transport:
+    description: Select transport
+    default: true
+  gps.reload:
+    description: Reload config
     default: op

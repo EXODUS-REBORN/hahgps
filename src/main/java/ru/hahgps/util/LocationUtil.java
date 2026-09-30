@@ -1,0 +1,81 @@
+package ru.hahgps.util;
+
+import org.bukkit.Location;
+import org.bukkit.World;
+
+/**
+ * Утилиты для работы с локациями.
+ */
+public final class LocationUtil {
+
+    private LocationUtil() {
+    }
+
+    /**
+     * Расстояние между двумя точками в одном мире (по прямой).
+     */
+    public static double distance(Location a, Location b) {
+        if (a.getWorld() == null || b.getWorld() == null) {
+            return Double.MAX_VALUE;
+        }
+        if (!a.getWorld().equals(b.getWorld())) {
+            return Double.MAX_VALUE;
+        }
+        return a.distance(b);
+    }
+
+    /**
+     * Расстояние по горизонтали (без учёта Y).
+     */
+    public static double distanceHorizontal(Location a, Location b) {
+        if (a.getWorld() == null || b.getWorld() == null) {
+            return Double.MAX_VALUE;
+        }
+        if (!a.getWorld().equals(b.getWorld())) {
+            return Double.MAX_VALUE;
+        }
+        double dx = a.getX() - b.getX();
+        double dz = a.getZ() - b.getZ();
+        return Math.sqrt(dx * dx + dz * dz);
+    }
+
+    /**
+     * Форматирование расстояния.
+     */
+    public static String formatDistance(double distance) {
+        if (distance >= 1000) {
+            return String.format("%.1f км", distance / 1000.0);
+        }
+        return String.format("%.0f м", distance);
+    }
+
+    /**
+     * Угол (в градусах) от точки from к точке to.
+     * 0° = на юг (положительный Z), по часовой стрелке.
+     */
+    public static double angleTo(Location from, Location to) {
+        double dx = to.getX() - from.getX();
+        double dz = to.getZ() - from.getZ();
+        return Math.toDegrees(Math.atan2(dx, dz));
+    }
+
+    /**
+     * Нормализация угла в диапазон [-180, 180].
+     */
+    public static double normalizeAngle(double angle) {
+        while (angle > 180) {
+            angle -= 360;
+        }
+        while (angle < -180) {
+            angle += 360;
+        }
+        return angle;
+    }
+
+    /**
+     * Название мира или "unknown".
+     */
+    public static String worldName(World world) {
+        return world != null ? world.getName() : "unknown";
+    }
+}

@@ -1,0 +1,84 @@
+name: Release
+
+# Публикация релиза с jar-файлом.
+#
+# Как выпустить новую версию:
+#   1. поднять <version> в pom.xml (например 1.0.2);
+#   2. git commit + git push;
+#   3. git tag v1.0.2 && git push origin v1.0.2.
+# Workflow соберёт плагин и создаст GitHub Release с вложением hahgps-1.0.2.jar.
+# Именно этот файл скачивает автообновление в плагине (/gps update) — имя вложения
+# обязано начинаться с «hahgps» и кончаться «.jar».
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Тег релиза (например v1.0.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Код
+        uses: actions/checkout@v4
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Тег должен совпадать с версией в pom.xml
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          POM="v$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          echo "тег: $TAG, версия в pom.xml: $POM"
+          if [ "$TAG" != "$POM" ]; then
+            echo "::error::Тег $TAG не совпадает с версией в pom.xml ($POM). Исправь <version> в pom.xml и переставь тег."
+            exit 1
+          fi
+
+      - name: Сборка
+        run: mvn -B --no-transfer-progress package
+
+      - name: Токен сборки внутри jar
+        run: |
+          set -euo pipefail
+          VERSION="$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          JAR="target/hahgps-${VERSION}.jar"
+          unzip -l "$JAR" | grep -q "hahtojer.token" || {
+            echo "::error::В $JAR нет hahtojer.token — автообновление откажется ставить такой файл."
+            exit 1
+          }
+
+      - name: Публикация релиза с jar
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          # Имя файла берём по версии из pom.xml, а не «первый попавшийся»:
+          # иначе в релиз может уехать посторонний jar, случайно лежащий в target/.
+          JAR="target/hahgps-${VERSION}.jar"
+          if [ ! -f "$JAR" ]; then
+            echo "::error::Не найден $JAR — имя собранного файла разошлось с версией в pom.xml. В target/:"
+            ls -la target/*.jar || true
+            exit 1
+          fi
+          echo "публикую $TAG с файлом $JAR"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$JAR" --clobber
+          else
+            gh release create "$TAG" "$JAR" --title "HahGPS $TAG" --generate-notes
+          fi
