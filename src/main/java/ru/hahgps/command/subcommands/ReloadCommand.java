@@ -1,14 +1,10 @@
 package ru.hahgps.command.subcommands;
-
 import org.bukkit.entity.Player;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.SubCommand;
 
 import java.util.List;
 
-/**
- * /gps reload
- */
 public class ReloadCommand implements SubCommand {
 
     @Override

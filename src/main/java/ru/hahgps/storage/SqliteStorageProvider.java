@@ -1,13 +1,9 @@
 package ru.hahgps.storage;
-
 import java.io.File;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
-/**
- * SQLite-провайдер.
- */
 public class SqliteStorageProvider extends AbstractSqlStorageProvider {
 
     private final File dbFile;

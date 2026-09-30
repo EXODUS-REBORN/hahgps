@@ -1,5 +1,4 @@
 package ru.hahgps.model;
-
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -8,9 +7,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Сохранённый маршрут (записанный админом путь).
- */
 public class Route {
 
     private final int id;
@@ -64,9 +60,6 @@ public class Route {
         return nodes.size();
     }
 
-    /**
-     * Длина маршрута в блоках.
-     */
     public double getLength() {
         double length = 0.0;
         for (int i = 1; i < nodes.size(); i++) {

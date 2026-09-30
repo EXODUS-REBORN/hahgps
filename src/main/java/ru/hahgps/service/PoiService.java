@@ -1,19 +1,13 @@
 package ru.hahgps.service;
-
 import ru.hahgps.model.Category;
 import ru.hahgps.model.Poi;
 import ru.hahgps.storage.DataService;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
-
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-
-/**
- * Сервис точек интереса (POI).
- */
 public class PoiService {
 
     private final DataService dataService;
@@ -22,16 +16,13 @@ public class PoiService {
         this.dataService = dataService;
     }
 
-    /**
-     * Создать точку на основе позиции игрока.
-     */
     public CompletableFuture<Poi> createPoi(Player player, String name, String categoryName, String description) {
         return dataService.getCategoryByName(categoryName).thenCompose(category -> {
             int categoryId;
             if (category != null) {
                 categoryId = category.getId();
             } else {
-                // Если категория не найдена — берём первую доступную
+
                 return dataService.getCategories().thenCompose(categories -> {
                     if (categories.isEmpty()) {
                         return CompletableFuture.completedFuture(null);
@@ -53,9 +44,6 @@ public class PoiService {
         return dataService.createPoi(poi);
     }
 
-    /**
-     * Удалить точку по имени.
-     */
     public CompletableFuture<Boolean> deletePoi(String name) {
         return dataService.getPoiByName(name).thenCompose(poi -> {
             if (poi == null) {
@@ -65,9 +53,6 @@ public class PoiService {
         });
     }
 
-    /**
-     * Загрузить точку с рейтингом.
-     */
     public CompletableFuture<Poi> loadPoiWithRating(String name) {
         return dataService.getPoiByName(name).thenCompose(poi -> {
             if (poi == null) {
@@ -84,9 +69,6 @@ public class PoiService {
         });
     }
 
-    /**
-     * Загрузить все точки с рейтингами.
-     */
     public CompletableFuture<List<Poi>> loadAllPoisWithRatings() {
         return dataService.getPois().thenCompose(pois -> {
             List<CompletableFuture<Void>> futures = pois.stream()
@@ -103,9 +85,6 @@ public class PoiService {
         });
     }
 
-    /**
-     * Поставить рейтинг точке.
-     */
     public CompletableFuture<Void> ratePoi(String name, UUID playerId, int rating) {
         return dataService.getPoiByName(name).thenCompose(poi -> {
             if (poi == null) {
@@ -115,9 +94,6 @@ public class PoiService {
         });
     }
 
-    /**
-     * Расстояние от игрока до точки.
-     */
     public double distanceTo(Player player, Poi poi) {
         Location poiLoc = poi.getLocation();
         if (poiLoc == null) {

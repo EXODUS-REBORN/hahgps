@@ -1,5 +1,4 @@
 package ru.hahgps.command;
-
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -8,15 +7,11 @@ import org.bukkit.entity.Player;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.subcommands.*;
 import ru.hahgps.service.RouteService;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Диспетчер команды /gps с древовидной структурой.
- */
 public class CommandManager implements CommandExecutor, TabCompleter {
 
     private final HahGpsPlugin plugin;
@@ -56,10 +51,9 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // Навигация по дереву команд
         SubCommand node = null;
         int i = 0;
-        // Корень: ищем среди корневых команд
+
         SubCommand current = roots.get(args[0].toLowerCase());
         if (current == null) {
             player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", "/gps " + args[0]));
@@ -67,7 +61,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         }
         node = current;
         i = 1;
-        // Спускаемся глубже, пока есть вложенные команды
+
         while (i < args.length && !node.isLeaf()) {
             SubCommand child = findChild(node, args[i].toLowerCase());
             if (child == null) {
@@ -81,7 +75,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         System.arraycopy(args, i, remaining, 0, remaining.length);
 
         if (!node.isLeaf()) {
-            // Группа команд — показываем использование
+
             node.execute(player, remaining);
             return true;
         }
@@ -110,7 +104,6 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             return new ArrayList<>();
         }
 
-        // Навигация по дереву для автодополнения
         SubCommand node = null;
         int i = 0;
         if (args.length >= 1) {
@@ -130,7 +123,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         }
 
         if (node == null) {
-            // Автодополнение корневых команд
+
             List<String> names = new ArrayList<>();
             for (SubCommand cmd : roots.values()) {
                 if (cmd.permission().isEmpty() || player.hasPermission(cmd.permission())) {
@@ -146,7 +139,6 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             return node.tabComplete(player, remaining);
         }
 
-        // Автодополнение вложенных команд
         List<String> names = new ArrayList<>();
         for (SubCommand child : node.children()) {
             if (child.permission().isEmpty() || player.hasPermission(child.permission())) {
@@ -166,9 +158,6 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         return result;
     }
 
-    /**
-     * Построить маршрут к точке и начать навигацию.
-     */
     public void gotoPoi(Player player, ru.hahgps.model.Poi poi, ru.hahgps.model.TransportType transport) {
         var routeService = plugin.getRouteService();
         var navService = plugin.getNavigationService();

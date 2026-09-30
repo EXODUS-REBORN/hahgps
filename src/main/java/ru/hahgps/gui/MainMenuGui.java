@@ -1,5 +1,4 @@
 package ru.hahgps.gui;
-
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -9,9 +8,6 @@ import ru.hahgps.HahGpsPlugin;
 
 import java.util.List;
 
-/**
- * Главное меню GPS.
- */
 public class MainMenuGui extends GuiScreen {
 
     public MainMenuGui(Player player) {
@@ -30,32 +26,27 @@ public class MainMenuGui extends GuiScreen {
 
     @Override
     public void build() {
-        // Мои точки
+
         inventory.setItem(10, GuiUtil.item(Material.COMPASS,
                 msg("gui.my-points"),
-                List.of(Component.text("Просмотр и управление точками", NamedTextColor.GRAY))));
+                List.of(Component.text("Просмотр и управление точками", NamedTextColor.AQUA))));
 
-        // Категории
         inventory.setItem(12, GuiUtil.item(Material.BOOK,
                 msg("gui.categories"),
-                List.of(Component.text("Управление категориями", NamedTextColor.GRAY))));
+                List.of(Component.text("Управление категориями", NamedTextColor.AQUA))));
 
-        // Карта
         inventory.setItem(14, GuiUtil.item(Material.MAP,
                 msg("gui.map"),
-                List.of(Component.text("Открыть карту местности", NamedTextColor.GRAY))));
+                List.of(Component.text("Открыть карту местности", NamedTextColor.AQUA))));
 
-        // Поиск
         inventory.setItem(16, GuiUtil.item(Material.PAPER,
                 msg("gui.search"),
-                List.of(Component.text("Поиск точек", NamedTextColor.GRAY))));
+                List.of(Component.text("Поиск точек", NamedTextColor.AQUA))));
 
-        // Настройки
         inventory.setItem(22, GuiUtil.item(Material.REDSTONE,
                 msg("gui.settings"),
-                List.of(Component.text("Настройки плагина", NamedTextColor.GRAY))));
+                List.of(Component.text("Настройки плагина", NamedTextColor.AQUA))));
 
-        // Заполнитель
         for (int i = 0; i < size(); i++) {
             if (inventory.getItem(i) == null) {
                 inventory.setItem(i, GuiUtil.filler());

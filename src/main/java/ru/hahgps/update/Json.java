@@ -1,17 +1,9 @@
 package ru.hahgps.update;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Минимальный JSON-парсер для ответов GitHub API.
- *
- * <p>Своя реализация, а не Gson: наличие Gson в рантайме Paper не гарантировано для плагинов,
- * а тянуть лишнюю библиотеку ради одного ответа API незачем.
- * Понимает объекты, массивы, строки (с экранированием и юникод-последовательностями), числа, true/false/null.
- */
 final class Json {
 
     private final String src;
@@ -21,7 +13,6 @@ final class Json {
         this.src = src;
     }
 
-    /** Разбор текста: объект → Map, массив → List, прочее — String/Double/Boolean/null. */
     static Object parse(String text) {
         Json p = new Json(text == null ? "" : text);
         p.skipWs();
@@ -71,7 +62,7 @@ final class Json {
 
     private Map<String, Object> objectBody() {
         Map<String, Object> out = new LinkedHashMap<>();
-        pos++; // {
+        pos++;
         skipWs();
         if (pos < src.length() && src.charAt(pos) == '}') {
             pos++;
@@ -95,7 +86,7 @@ final class Json {
 
     private List<Object> arrayBody() {
         List<Object> out = new ArrayList<>();
-        pos++; // [
+        pos++;
         skipWs();
         if (pos < src.length() && src.charAt(pos) == ']') {
             pos++;

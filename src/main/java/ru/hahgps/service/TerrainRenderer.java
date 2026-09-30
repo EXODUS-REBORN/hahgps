@@ -1,12 +1,10 @@
 package ru.hahgps.service;
-
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.map.MapView;
 import ru.hahgps.model.Poi;
-
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -15,38 +13,26 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-
-/**
- * Асинхронный рендерер террейна для карты.
- * Загружает чанки, сэмплирует блоки, рисует цветное изображение.
- */
 public class TerrainRenderer {
 
     private static final int MAP_SIZE = 128;
 
-    /**
-     * Блоков на пиксель для каждого масштаба.
-     */
     public static double blocksPerPixel(MapView.Scale scale) {
         return switch (scale) {
-            case FARTHEST -> 8.0;
-            case FAR -> 4.0;
-            case NORMAL -> 2.0;
-            case CLOSE -> 1.0;
-            case CLOSEST -> 0.5;
+            case FARTHEST -> 16.0;
+            case FAR -> 8.0;
+            case NORMAL -> 4.0;
+            case CLOSE -> 2.0;
+            case CLOSEST -> 1.0;
         };
     }
 
-    /**
-     * Асинхронный рендер карты.
-     */
     public CompletableFuture<BufferedImage> render(World world, int centerX, int centerZ,
                                                    MapView.Scale scale, List<Poi> pois,
                                                    List<Location> route, Location playerLoc) {
         double bpp = blocksPerPixel(scale);
         int radius = (int) (MAP_SIZE / 2 * bpp);
 
-        // Загружаем все необходимые чанки
         Set<Long> chunkKeys = new HashSet<>();
         List<CompletableFuture<Chunk>> futures = new ArrayList<>();
         int minChunkX = (centerX - radius) >> 4;
@@ -71,11 +57,9 @@ public class TerrainRenderer {
         BufferedImage image = new BufferedImage(MAP_SIZE, MAP_SIZE, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = image.createGraphics();
 
-        // Фон (вода по умолчанию)
         g.setColor(new Color(30, 60, 120));
         g.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
 
-        // Террейн
         for (int px = 0; px < MAP_SIZE; px++) {
             for (int pz = 0; pz < MAP_SIZE; pz++) {
                 int worldX = centerX + (int) ((px - MAP_SIZE / 2) * bpp);
@@ -86,9 +70,8 @@ public class TerrainRenderer {
             }
         }
 
-        // Маршрут
         if (route != null && route.size() >= 2) {
-            g.setColor(new Color(0, 255, 200));
+            g.setColor(new Color(102, 170, 255));
             for (int i = 1; i < route.size(); i++) {
                 Location a = route.get(i - 1);
                 Location b = route.get(i);
@@ -103,7 +86,6 @@ public class TerrainRenderer {
             }
         }
 
-        // Точки (POI)
         if (pois != null) {
             for (Poi poi : pois) {
                 Location loc = poi.getLocation();
@@ -113,12 +95,11 @@ public class TerrainRenderer {
                 int px = (int) ((loc.getX() - centerX) / bpp) + MAP_SIZE / 2;
                 int pz = (int) ((loc.getZ() - centerZ) / bpp) + MAP_SIZE / 2;
                 if (px >= 0 && px < MAP_SIZE && pz >= 0 && pz < MAP_SIZE) {
-                    drawMarker(g, px, pz, Color.RED);
+                    drawMarker(g, px, pz, new Color(63, 134, 255));
                 }
             }
         }
 
-        // Игрок
         if (playerLoc != null && playerLoc.getWorld() != null && playerLoc.getWorld().equals(world)) {
             int px = (int) ((playerLoc.getX() - centerX) / bpp) + MAP_SIZE / 2;
             int pz = (int) ((playerLoc.getZ() - centerZ) / bpp) + MAP_SIZE / 2;
@@ -131,15 +112,12 @@ public class TerrainRenderer {
         return image;
     }
 
-    /**
-     * Сэмплирование цвета блока с учётом высоты.
-     */
     private int sampleBlockColor(World world, int x, int z) {
         try {
             int y = world.getHighestBlockYAt(x, z);
             Material material = world.getBlockAt(x, y, z).getType();
             int base = getMaterialColor(material);
-            // Затемнение по высоте
+
             double shade = Math.max(0.4, Math.min(1.0, 0.6 + (y / 256.0) * 0.4));
             int r = (int) (((base >> 16) & 0xFF) * shade);
             int g = (int) (((base >> 8) & 0xFF) * shade);
@@ -150,9 +128,6 @@ public class TerrainRenderer {
         }
     }
 
-    /**
-     * Цвета материалов (упрощённая палитра).
-     */
     private int getMaterialColor(Material material) {
         return switch (material) {
             case GRASS_BLOCK, SHORT_GRASS, TALL_GRASS -> 0x4C9935;
@@ -205,19 +180,13 @@ public class TerrainRenderer {
         };
     }
 
-    /**
-     * Маркер 3x3 с тёмной окантовкой.
-     */
     private void drawMarker(Graphics2D g, int x, int y, Color color) {
-        g.setColor(Color.BLACK);
+        g.setColor(new Color(8, 18, 43));
         g.fillRect(x - 2, y - 2, 5, 5);
         g.setColor(color);
         g.fillRect(x - 1, y - 1, 3, 3);
     }
 
-    /**
-     * Линия (алгоритм Брезенхэма).
-     */
     private void drawLine(Graphics2D g, int x0, int y0, int x1, int y1) {
         int dx = Math.abs(x1 - x0);
         int dy = Math.abs(y1 - y0);

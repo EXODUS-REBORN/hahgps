@@ -1,5 +1,4 @@
 package ru.hahgps.service;
-
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
@@ -14,15 +13,11 @@ import ru.hahgps.config.MessagesManager;
 import ru.hahgps.model.NavigationSession;
 import ru.hahgps.util.DirectionUtil;
 import ru.hahgps.util.LocationUtil;
-
 import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Сервис навигации: BossBar, ActionBar, подсказки, обновление.
- */
 public class NavigationService {
 
     private final HahGpsPlugin plugin;
@@ -40,9 +35,6 @@ public class NavigationService {
         this.messages = messages;
     }
 
-    /**
-     * Запуск задачи обновления.
-     */
     public void start() {
         int interval = config.getUpdateInterval();
         updateTask = Bukkit.getScheduler().runTaskTimer(plugin, this::updateAll, interval, interval);
@@ -60,9 +52,6 @@ public class NavigationService {
         sessions.clear();
     }
 
-    /**
-     * Начать навигацию к цели.
-     */
     public void startNavigation(Player player, String targetName, Location target,
                                 java.util.List<Location> path, double totalDistance,
                                 ru.hahgps.model.TransportType transport) {
@@ -80,9 +69,6 @@ public class NavigationService {
         bossBars.put(player.getUniqueId(), bar);
     }
 
-    /**
-     * Остановить навигацию.
-     */
     public void stopNavigation(Player player) {
         sessions.remove(player.getUniqueId());
         BossBar bar = bossBars.remove(player.getUniqueId());
@@ -100,9 +86,6 @@ public class NavigationService {
         return sessions.get(player.getUniqueId());
     }
 
-    /**
-     * Переключить журналирование для игрока.
-     */
     public boolean toggleLogging(Player player) {
         NavigationSession session = sessions.get(player.getUniqueId());
         if (session != null) {
@@ -112,9 +95,6 @@ public class NavigationService {
         return false;
     }
 
-    /**
-     * Обновление всех активных сессий.
-     */
     private void updateAll() {
         Iterator<Map.Entry<UUID, NavigationSession>> it = sessions.entrySet().iterator();
         while (it.hasNext()) {
@@ -136,7 +116,6 @@ public class NavigationService {
         Location target = session.getTarget();
         Location playerLoc = player.getLocation();
 
-        // Проверка достижения цели
         double distanceToTarget = LocationUtil.distance(playerLoc, target);
         if (distanceToTarget <= config.getArrivalRadius()) {
             player.sendMessage(messages.getPrefixed("arrival"));
@@ -146,14 +125,12 @@ public class NavigationService {
 
         session.setRemainingDistance(distanceToTarget);
 
-        // Направление
         double angleToTarget = LocationUtil.angleTo(playerLoc, target);
         double facing = LocationUtil.normalizeAngle(-playerLoc.getYaw());
         double delta = LocationUtil.normalizeAngle(angleToTarget - facing);
 
         String arrow = config.isShowArrow() ? DirectionUtil.getArrow(delta) : "";
 
-        // BossBar
         BossBar bar = bossBars.get(player.getUniqueId());
         if (bar != null) {
             String title = String.format("%s %s — %s", arrow, session.getTargetName(),
@@ -165,11 +142,9 @@ public class NavigationService {
             bar.setProgress(progress);
         }
 
-        // ActionBar
         String actionText = messages.get("distance-format", "value", LocationUtil.formatDistance(distanceToTarget));
         player.sendActionBar(miniMessage.deserialize("<gray>Осталось: " + actionText + "</gray>"));
 
-        // Подсказки в чате
         if (session.isLoggingEnabled()) {
             String hintKey = DirectionUtil.getHintKey(delta);
             if (!hintKey.equals(session.getLastHint())) {

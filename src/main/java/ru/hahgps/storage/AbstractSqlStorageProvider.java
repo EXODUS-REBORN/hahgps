@@ -1,12 +1,10 @@
 package ru.hahgps.storage;
-
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import ru.hahgps.model.Category;
 import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
-
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -14,11 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Базовый SQL-провайдер с общей JDBC-логикой.
- * Подклассы задают диалект и способ получения соединения.
- * Все публичные методы синхронизированы — один Connection на провайдер.
- */
 public abstract class AbstractSqlStorageProvider implements StorageProvider {
 
     protected final boolean mysql;
@@ -28,9 +21,6 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         this.mysql = mysql;
     }
 
-    /**
-     * Переподключение при потере соединения.
-     */
     protected abstract void reconnect() throws SQLException;
 
     protected void ensureConnected() throws SQLException {
@@ -38,8 +28,6 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
             reconnect();
         }
     }
-
-    // ---------------- Диалект ----------------
 
     protected String autoIncrement() {
         return mysql ? "AUTO_INCREMENT" : "AUTOINCREMENT";
@@ -53,8 +41,6 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         return "INSERT INTO ratings (poi_id, player_uuid, rating) VALUES (?, ?, ?) " +
                 "ON CONFLICT(poi_id, player_uuid) DO UPDATE SET rating = excluded.rating";
     }
-
-    // ---------------- Схема ----------------
 
     protected void createSchema() throws SQLException {
         try (Statement st = connection.createStatement()) {
@@ -95,8 +81,6 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                     "x DOUBLE NOT NULL, y DOUBLE NOT NULL, z DOUBLE NOT NULL)");
         }
     }
-
-    // ---------------- Категории ----------------
 
     @Override
     public synchronized Category createCategory(String name, boolean defaultCategory) {
@@ -184,8 +168,6 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         }
         return null;
     }
-
-    // ---------------- Точки ----------------
 
     @Override
     public synchronized Poi createPoi(Poi poi) {
@@ -340,8 +322,6 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 rs.getLong("created_at"));
     }
 
-    // ---------------- Рейтинги ----------------
-
     @Override
     public synchronized void setRating(int poiId, UUID playerId, int rating) {
         try {
@@ -375,8 +355,6 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         }
         return map;
     }
-
-    // ---------------- Маршруты ----------------
 
     @Override
     public synchronized Route createRoute(Route route) {
@@ -498,7 +476,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 connection.close();
             }
         } catch (SQLException e) {
-            // ignore
+
         }
     }
 }

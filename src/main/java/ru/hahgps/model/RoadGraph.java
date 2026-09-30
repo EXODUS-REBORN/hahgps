@@ -1,17 +1,11 @@
 package ru.hahgps.model;
-
 import org.bukkit.Location;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Граф дорог: узлы и рёбра.
- * Строится из записанных маршрутов.
- */
 public class RoadGraph {
 
     private final List<GraphNode> nodes = new ArrayList<>();
@@ -45,9 +39,6 @@ public class RoadGraph {
         return nodes.isEmpty();
     }
 
-    /**
-     * Ближайший узел к локации (в том же мире).
-     */
     public GraphNode findNearestNode(Location location) {
         GraphNode nearest = null;
         double min = Double.MAX_VALUE;

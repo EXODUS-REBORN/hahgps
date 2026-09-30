@@ -1,8 +1,5 @@
 package ru.hahgps.model;
 
-/**
- * Ребро графа дорог.
- */
 public class GraphEdge {
 
     private final GraphNode from;

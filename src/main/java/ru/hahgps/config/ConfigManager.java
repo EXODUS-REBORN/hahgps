@@ -1,5 +1,4 @@
 package ru.hahgps.config;
-
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import ru.hahgps.HahGpsPlugin;
@@ -7,9 +6,6 @@ import ru.hahgps.HahGpsPlugin;
 import java.io.File;
 import java.util.List;
 
-/**
- * Менеджер конфигурации.
- */
 public class ConfigManager {
 
     private final HahGpsPlugin plugin;

@@ -1,5 +1,4 @@
 package ru.hahgps.gui;
-
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -13,9 +12,6 @@ import ru.hahgps.util.LocationUtil;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Список точек с пагинацией.
- */
 public class PointsListGui extends GuiScreen {
 
     private static final int PER_PAGE = 45;
@@ -41,7 +37,7 @@ public class PointsListGui extends GuiScreen {
 
     @Override
     public void build() {
-        // Загружаем точки асинхронно
+
         HahGpsPlugin.getInstance().getPoiService().loadAllPoisWithRatings().thenAcceptAsync(list -> {
             this.pois = list;
             if (categoryId != null) {
@@ -53,7 +49,7 @@ public class PointsListGui extends GuiScreen {
                 }
             });
         });
-        // Пока данных нет — показываем заглушку
+
         if (inventory != null) {
             inventory.clear();
             for (int i = 0; i < size(); i++) {
@@ -75,7 +71,6 @@ public class PointsListGui extends GuiScreen {
             inventory.setItem(i - start, createPoiItem(poi));
         }
 
-        // Нижняя панель навигации
         int navRow = 45;
         if (page > 0) {
             inventory.setItem(navRow, GuiUtil.item(Material.ARROW,
@@ -89,7 +84,6 @@ public class PointsListGui extends GuiScreen {
                 HahGpsPlugin.getInstance().getMessages().getComponent("gui.page-info",
                         "page", String.valueOf(page + 1), "pages", String.valueOf(pages))));
 
-        // Заполнитель
         for (int i = 0; i < size(); i++) {
             if (inventory.getItem(i) == null) {
                 inventory.setItem(i, GuiUtil.filler());
@@ -133,7 +127,7 @@ public class PointsListGui extends GuiScreen {
     @Override
     public void onClick(int slot, ClickType clickType) {
         if (slot >= 45) {
-            // Навигация
+
             if (slot == 45 && page > 0) {
                 page--;
                 buildPage();

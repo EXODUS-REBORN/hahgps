@@ -1,5 +1,4 @@
 package ru.hahgps.gui;
-
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -16,10 +15,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Карта: отображает террейн, точки и маршрут.
- * Клик по точке выбирает её как цель.
- */
 public class MapGui extends GuiScreen {
 
     private final Map<Integer, Poi> slotToPoi = new HashMap<>();
@@ -43,7 +38,6 @@ public class MapGui extends GuiScreen {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
         MapView view = plugin.getMapService().getMapView(player);
 
-        // Центр — карта
         if (view != null) {
             ItemStack mapItem = new ItemStack(Material.FILLED_MAP);
             MapMeta meta = (MapMeta) mapItem.getItemMeta();
@@ -54,24 +48,20 @@ public class MapGui extends GuiScreen {
             inventory.setItem(13, mapItem);
         } else {
             inventory.setItem(13, GuiUtil.item(Material.MAP,
-                    Component.text("Карта не открыта", NamedTextColor.RED)));
+                    Component.text("Карта не открыта", NamedTextColor.BLUE)));
         }
 
-        // Зум
         inventory.setItem(20, GuiUtil.item(Material.GOLD_NUGGET,
                 plugin.getMessages().getComponent("gui.zoom-in")));
         inventory.setItem(24, GuiUtil.item(Material.IRON_NUGGET,
                 plugin.getMessages().getComponent("gui.zoom-out")));
 
-        // Центрировать
         inventory.setItem(31, GuiUtil.item(Material.COMPASS,
                 plugin.getMessages().getComponent("gui.recenter")));
 
-        // Назад
         inventory.setItem(49, GuiUtil.item(Material.ARROW,
                 plugin.getMessages().getComponent("gui.back")));
 
-        // Точки вокруг карты
         slotToPoi.clear();
         plugin.getPoiService().loadAllPoisWithRatings().thenAcceptAsync(pois -> {
             plugin.getDataService().runSync(() -> {
@@ -91,7 +81,7 @@ public class MapGui extends GuiScreen {
                     double distance = LocationUtil.distance(player.getLocation(), loc);
                     inventory.setItem(slots[idx], GuiUtil.item(Material.COMPASS,
                             GuiUtil.tonedName(9, poi.getName()),
-                            List.of(Component.text(LocationUtil.formatDistance(distance), NamedTextColor.GRAY))));
+                            List.of(Component.text(LocationUtil.formatDistance(distance), NamedTextColor.AQUA))));
                     slotToPoi.put(slots[idx], poi);
                     idx++;
                 }

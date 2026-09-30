@@ -1,5 +1,4 @@
 package ru.hahgps.model;
-
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -8,9 +7,6 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
-/**
- * Точка интереса (POI).
- */
 public class Poi {
 
     private final int id;

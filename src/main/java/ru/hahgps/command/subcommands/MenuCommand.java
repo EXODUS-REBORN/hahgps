@@ -1,5 +1,4 @@
 package ru.hahgps.command.subcommands;
-
 import org.bukkit.entity.Player;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.SubCommand;
@@ -7,9 +6,6 @@ import ru.hahgps.gui.MainMenuGui;
 
 import java.util.List;
 
-/**
- * /gps menu
- */
 public class MenuCommand implements SubCommand {
 
     @Override

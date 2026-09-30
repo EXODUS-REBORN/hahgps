@@ -1,5 +1,4 @@
 package ru.hahgps.gui;
-
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -9,9 +8,6 @@ import ru.hahgps.HahGpsPlugin;
 
 import java.util.List;
 
-/**
- * Настройки плагина.
- */
 public class SettingsGui extends GuiScreen {
 
     public SettingsGui(Player player) {
@@ -36,15 +32,15 @@ public class SettingsGui extends GuiScreen {
 
         inventory.setItem(11, GuiUtil.item(Material.BOOK,
                 plugin.getMessages().getComponent("gui.language", "language", lang.toUpperCase()),
-                List.of(Component.text("Нажмите, чтобы переключить RU/EN", NamedTextColor.GRAY))));
+                List.of(Component.text("Нажмите, чтобы переключить RU/EN", NamedTextColor.AQUA))));
 
         inventory.setItem(13, GuiUtil.item(Material.PAPER,
                 plugin.getMessages().getComponent("gui.logging", "state", logging ? "Вкл" : "Выкл"),
-                List.of(Component.text("Подсказки в чате при навигации", NamedTextColor.GRAY))));
+                List.of(Component.text("Подсказки в чате при навигации", NamedTextColor.AQUA))));
 
         inventory.setItem(15, GuiUtil.item(Material.MAP,
                 GuiUtil.tonedName(9, "Масштаб карты"),
-                List.of(Component.text("Нажмите, чтобы изменить", NamedTextColor.GRAY))));
+                List.of(Component.text("Нажмите, чтобы изменить", NamedTextColor.AQUA))));
 
         inventory.setItem(22, GuiUtil.item(Material.ARROW,
                 plugin.getMessages().getComponent("gui.back")));
@@ -61,7 +57,7 @@ public class SettingsGui extends GuiScreen {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
         switch (slot) {
             case 11 -> {
-                // Переключить язык
+
                 String current = plugin.getConfigManager().getLanguage();
                 String next = current.equals("ru") ? "en" : "ru";
                 plugin.getConfigManager().get().set("language", next);
@@ -71,14 +67,14 @@ public class SettingsGui extends GuiScreen {
                 refresh();
             }
             case 13 -> {
-                // Переключить подсказки
+
                 boolean logging = !plugin.getConfigManager().isLogHints();
                 plugin.getConfigManager().get().set("navigation.log-hints", logging);
                 plugin.getConfigManager().reload();
                 refresh();
             }
             case 15 -> {
-                // Масштаб карты
+
                 String[] zooms = {"FARTHEST", "FAR", "NORMAL", "CLOSE", "CLOSEST"};
                 String current = plugin.getConfigManager().getMapZoom();
                 int idx = 0;

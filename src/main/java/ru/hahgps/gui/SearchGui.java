@@ -1,5 +1,4 @@
 package ru.hahgps.gui;
-
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -10,9 +9,6 @@ import ru.hahgps.service.SearchService;
 
 import java.util.List;
 
-/**
- * Поиск точек и улиц.
- */
 public class SearchGui extends GuiScreen {
 
     private List<SearchService.SearchResult> results = new java.util.ArrayList<>();
@@ -34,14 +30,14 @@ public class SearchGui extends GuiScreen {
     @Override
     public void build() {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
-        // Кнопка ввода запроса
+
         inventory.setItem(11, GuiUtil.item(Material.PAPER,
                 GuiUtil.tonedName(9, "Введите запрос в чат"),
-                List.of(Component.text("Нажмите, чтобы начать поиск", NamedTextColor.GRAY))));
+                List.of(Component.text("Нажмите, чтобы начать поиск", NamedTextColor.AQUA))));
 
         inventory.setItem(15, GuiUtil.item(Material.COMPASS,
                 GuiUtil.tonedName(9, "Быстрый поиск"),
-                List.of(Component.text("По названию точки", NamedTextColor.GRAY))));
+                List.of(Component.text("По названию точки", NamedTextColor.AQUA))));
 
         inventory.setItem(22, GuiUtil.item(Material.ARROW,
                 plugin.getMessages().getComponent("gui.back")));
@@ -61,7 +57,7 @@ public class SearchGui extends GuiScreen {
             return;
         }
         if (slot == 11 || slot == 15) {
-            // Запросить ввод запроса
+
             player.closeInventory();
             InputManager.getInstance().request(player,
                     plugin.getMessages().getPrefixed("gui.search-hint"),
@@ -93,8 +89,8 @@ public class SearchGui extends GuiScreen {
                 inventory.setItem(slot++, GuiUtil.item(Material.COMPASS,
                         GuiUtil.tonedName(9, result.name),
                         List.of(
-                                Component.text("Точка", NamedTextColor.GRAY),
-                                Component.text("Совпадение: " + (int) (result.similarity * 100) + "%", NamedTextColor.GRAY))));
+                                Component.text("Точка", NamedTextColor.AQUA),
+                                Component.text("Совпадение: " + (int) (result.similarity * 100) + "%", NamedTextColor.AQUA))));
             }
         }
         inventory.setItem(53, GuiUtil.item(Material.ARROW,

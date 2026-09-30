@@ -1,52 +1,28 @@
 package ru.hahgps.service;
-
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import ru.hahgps.model.TransportType;
-
 import java.util.*;
-
-/**
- * Процедурный граф мира для транспортно-зависимой прокладки маршрута.
- *
- * Строит сетку узлов между игроком и целью. Каждое ребро тегируется
- * допустимыми видами транспорта на основе типа поверхности:
- *  - FOOT: проходит по любой проходимой поверхности, предпочитая тропинки;
- *  - CAR:  проходит только по «дорожным» материалам (гравий, камень, бетон и т.п.).
- */
 public class WorldGraph {
-
-    // Размер ячейки сетки в блоках
     private static final int CELL = 4;
-    // Отступ вокруг старта/финиша
     private static final int MARGIN = 24;
-    // Максимальное расстояние поиска (блоки) — защита от слишком большого графа
     private static final int MAX_DISTANCE = 512;
-
-    /**
-     * Результат поиска пути.
-     */
     public static class PathResult {
         public final List<Location> path;
         public final double distance;
         public final boolean found;
-
         public PathResult(List<Location> path, double distance, boolean found) {
             this.path = path;
             this.distance = distance;
             this.found = found;
         }
     }
-
-    /**
-     * Узел графа.
-     */
     private static class Node {
         final int gx, gz;
         final Location location;
-        final boolean road;      // дорожная поверхность
-        final boolean walkable;  // проходимый
+        final boolean road;
+        final boolean walkable;
 
         Node(int gx, int gz, Location location, boolean road, boolean walkable) {
             this.gx = gx;
@@ -57,11 +33,9 @@ public class WorldGraph {
         }
     }
 
-    /**
-     * Найти путь от start до end с учётом транспорта.
-     */
     public PathResult findPath(World world, Location start, Location end, TransportType transport) {
-        if (start == null || end == null || world == null) {
+        if (start == null || end == null || world == null
+                || start.getWorld() == null || end.getWorld() == null) {
             return straightLine(start, end);
         }
         if (!start.getWorld().equals(end.getWorld())) {
@@ -71,7 +45,6 @@ public class WorldGraph {
             return straightLine(start, end);
         }
 
-        // Границы области
         int minX = (int) Math.floor(Math.min(start.getX(), end.getX())) - MARGIN;
         int maxX = (int) Math.ceil(Math.max(start.getX(), end.getX())) + MARGIN;
         int minZ = (int) Math.floor(Math.min(start.getZ(), end.getZ())) - MARGIN;
@@ -82,7 +55,6 @@ public class WorldGraph {
         int minGZ = minZ / CELL;
         int maxGZ = maxZ / CELL;
 
-        // Строим узлы
         Map<Long, Node> nodes = new HashMap<>();
         for (int gx = minGX; gx <= maxGX; gx++) {
             for (int gz = minGZ; gz <= maxGZ; gz++) {
@@ -95,7 +67,6 @@ public class WorldGraph {
             }
         }
 
-        // Ближайшие узлы к старту и финишу
         Node startNode = nearestNode(nodes, start);
         Node endNode = nearestNode(nodes, end);
 
@@ -103,14 +74,12 @@ public class WorldGraph {
             return straightLine(start, end);
         }
 
-        // A*
         List<Node> pathNodes = astar(nodes, startNode, endNode, transport);
         if (pathNodes == null) {
-            // Путь не найден (например, авто без дорог) — fallback на прямую
+
             return straightLine(start, end);
         }
 
-        // Собираем локации
         List<Location> path = new ArrayList<>();
         path.add(start);
         for (Node node : pathNodes) {
@@ -118,7 +87,6 @@ public class WorldGraph {
         }
         path.add(end);
 
-        // Упрощаем путь (убираем коллинеарные точки)
         path = simplify(path);
 
         double distance = 0;
@@ -128,16 +96,16 @@ public class WorldGraph {
         return new PathResult(path, distance, true);
     }
 
-    /**
-     * Построить узел в ячейке сетки.
-     */
     private Node buildNode(World world, int gx, int gz, int wx, int wz) {
         int y = world.getHighestBlockYAt(wx, wz);
+        int minY = world.getMinHeight();
+        if (y - 1 < minY) {
+            return null;
+        }
         Material ground = world.getBlockAt(wx, y - 1, wz).getType();
         Material feet = world.getBlockAt(wx, y, wz).getType();
         Material head = world.getBlockAt(wx, y + 1, wz).getType();
 
-        // Проходимый: твёрдая поверхность под ногами и свободное пространство над головой
         boolean walkable = ground.isSolid()
                 && !feet.isSolid() && !head.isSolid()
                 && feet != Material.WATER && feet != Material.LAVA
@@ -151,9 +119,6 @@ public class WorldGraph {
         return new Node(gx, gz, new Location(world, wx, y, wz), road, walkable);
     }
 
-    /**
-     * Является ли материал «дорожным» (проезжим для авто).
-     */
     private boolean isRoad(Material material) {
         return switch (material) {
             case GRAVEL, STONE, STONE_BRICKS, COBBLESTONE, MOSSY_COBBLESTONE,
@@ -165,13 +130,10 @@ public class WorldGraph {
         };
     }
 
-    /**
-     * Ближайший валидный узел к локации.
-     */
     private Node nearestNode(Map<Long, Node> nodes, Location loc) {
         int gx = (int) Math.floor(loc.getX() / CELL);
         int gz = (int) Math.floor(loc.getZ() / CELL);
-        // Ищем в радиусе 2 ячеек
+
         Node best = null;
         double bestDist = Double.MAX_VALUE;
         for (int dx = -2; dx <= 2; dx++) {
@@ -190,9 +152,6 @@ public class WorldGraph {
         return best;
     }
 
-    /**
-     * A* по сетке узлов с фильтром по транспорту.
-     */
     private List<Node> astar(Map<Long, Node> nodes, Node start, Node end, TransportType transport) {
         Map<Node, Double> gScore = new HashMap<>();
         Map<Node, Double> fScore = new HashMap<>();
@@ -214,7 +173,6 @@ public class WorldGraph {
             }
             closed.add(current);
 
-            // 8 соседей
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dz = -1; dz <= 1; dz++) {
                     if (dx == 0 && dz == 0) {
@@ -224,7 +182,7 @@ public class WorldGraph {
                     if (neighbor == null || closed.contains(neighbor)) {
                         continue;
                     }
-                    // Фильтр по транспорту
+
                     if (!isCompatible(neighbor, transport)) {
                         continue;
                     }
@@ -242,9 +200,6 @@ public class WorldGraph {
         return null;
     }
 
-    /**
-     * Совместимость узла с транспортом.
-     */
     private boolean isCompatible(Node node, TransportType transport) {
         if (transport == TransportType.CAR) {
             return node.road;
@@ -252,21 +207,18 @@ public class WorldGraph {
         return node.walkable;
     }
 
-    /**
-     * Стоимость ребра с учётом транспорта и типа поверхности.
-     */
     private double edgeCost(Node a, Node b, TransportType transport) {
         double dist = a.location.distance(b.location);
         if (transport == TransportType.CAR) {
-            return dist; // дороги — базовая стоимость
+            return dist;
         }
-        // Пешком: предпочитаем тропинки/мягкую поверхность, дороги — чуть дороже
+
         boolean aPath = !a.road;
         boolean bPath = !b.road;
         if (aPath && bPath) {
-            return dist * 0.8; // тропинка
+            return dist * 0.8;
         } else if (a.road && b.road) {
-            return dist * 1.3; // по дороге
+            return dist * 1.3;
         }
         return dist * 1.0;
     }
@@ -286,9 +238,6 @@ public class WorldGraph {
         return path;
     }
 
-    /**
-     * Упрощение пути: удаление коллинеарных точек.
-     */
     private List<Location> simplify(List<Location> path) {
         if (path.size() <= 2) {
             return path;
@@ -299,7 +248,7 @@ public class WorldGraph {
             Location prev = path.get(i - 1);
             Location curr = path.get(i);
             Location next = path.get(i + 1);
-            // Если направление не меняется — пропускаем
+
             if (!isCollinear(prev, curr, next)) {
                 result.add(curr);
             }
@@ -313,9 +262,11 @@ public class WorldGraph {
         double dz1 = b.getZ() - a.getZ();
         double dx2 = c.getX() - b.getX();
         double dz2 = c.getZ() - b.getZ();
-        // Коллинеарны, если векторы сонаправлены (произведение ~ 0 и скалярное > 0)
         double cross = dx1 * dz2 - dz1 * dx2;
-        return Math.abs(cross) < 0.001;
+        if (Math.abs(cross) >= 0.001) {
+            return false;
+        }
+        return dx1 * dx2 + dz1 * dz2 > 0;
     }
 
     private PathResult straightLine(Location start, Location end) {

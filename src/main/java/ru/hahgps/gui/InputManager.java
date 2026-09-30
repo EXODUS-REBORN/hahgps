@@ -1,18 +1,11 @@
 package ru.hahgps.gui;
-
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 
-/**
- * Менеджер ввода текста через чат.
- * Когда игроку нужно ввести текст (например, название категории),
- * он пишет в чат, и результат передаётся в callback.
- */
 public class InputManager {
 
     private static InputManager instance;
@@ -26,19 +19,11 @@ public class InputManager {
         return instance;
     }
 
-    /**
-     * Запросить ввод от игрока.
-     */
     public void request(Player player, Component prompt, Consumer<String> callback) {
         pending.put(player.getUniqueId(), callback);
         player.sendMessage(prompt);
     }
 
-    /**
-     * Обработать сообщение в чате.
-     *
-     * @return true, если сообщение было перехвачено как ввод
-     */
     public boolean handleChat(Player player, String message) {
         Consumer<String> callback = pending.remove(player.getUniqueId());
         if (callback != null) {

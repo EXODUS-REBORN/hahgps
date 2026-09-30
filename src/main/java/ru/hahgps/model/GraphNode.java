@@ -1,5 +1,4 @@
 package ru.hahgps.model;
-
 import org.bukkit.Location;
 
 import java.util.ArrayList;
@@ -9,9 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/**
- * Узел графа дорог.
- */
 public class GraphNode {
 
     private final int id;

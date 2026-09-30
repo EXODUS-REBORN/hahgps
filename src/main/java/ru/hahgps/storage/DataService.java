@@ -1,5 +1,4 @@
 package ru.hahgps.storage;
-
 import ru.hahgps.model.Category;
 import ru.hahgps.model.GraphNode;
 import ru.hahgps.model.Poi;
@@ -9,7 +8,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.plugin.java.JavaPlugin;
 import ru.hahgps.HahGpsPlugin;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -20,21 +18,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
 
-/**
- * Асинхронный сервис данных поверх {@link StorageProvider}.
- * Кэширует категории и маршруты, строит граф дорог.
- */
 public class DataService {
 
     private final HahGpsPlugin plugin;
     private final StorageProvider provider;
     private final ExecutorService executor;
 
-    // Кэш категорий
     private final Map<Integer, Category> categoryCache = new ConcurrentHashMap<>();
     private final Map<String, Category> categoryByName = new ConcurrentHashMap<>();
 
-    // Кэш маршрутов (для графа)
     private final List<Route> routeCache = new ArrayList<>();
     private volatile RoadGraph roadGraph = new RoadGraph();
 
@@ -48,13 +40,10 @@ public class DataService {
         });
     }
 
-    /**
-     * Загрузка кэша после инициализации провайдера.
-     */
     public CompletableFuture<Void> loadCache() {
         return CompletableFuture.runAsync(() -> {
             try {
-                // Категории
+
                 List<Category> categories = provider.getCategories();
                 categoryCache.clear();
                 categoryByName.clear();
@@ -62,7 +51,7 @@ public class DataService {
                     categoryCache.put(c.getId(), c);
                     categoryByName.put(c.getName().toLowerCase(), c);
                 }
-                // Маршруты + граф
+
                 List<Route> routes = provider.getRoutes();
                 routeCache.clear();
                 routeCache.addAll(routes);
@@ -73,9 +62,6 @@ public class DataService {
         }, executor);
     }
 
-    /**
-     * Перестроение графа дорог из кэша маршрутов.
-     */
     public synchronized void rebuildGraph() {
         RoadGraph graph = new RoadGraph();
         int nodeId = 1;
@@ -109,8 +95,6 @@ public class DataService {
         return new ArrayList<>(categoryCache.values());
     }
 
-    // ---------------- Асинхронные обёртки ----------------
-
     private <T> CompletableFuture<T> async(Supplier<T> action) {
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -132,8 +116,6 @@ public class DataService {
             }
         }, executor);
     }
-
-    // ---------------- Категории ----------------
 
     public CompletableFuture<Category> createCategory(String name, boolean defaultCategory) {
         return async(() -> {
@@ -169,8 +151,6 @@ public class DataService {
         return async(() -> provider.getCategoryById(id));
     }
 
-    // ---------------- Точки ----------------
-
     public CompletableFuture<Poi> createPoi(Poi poi) {
         return async(() -> provider.createPoi(poi));
     }
@@ -199,8 +179,6 @@ public class DataService {
         return async(() -> provider.updatePoi(poi));
     }
 
-    // ---------------- Рейтинги ----------------
-
     public CompletableFuture<Void> setRating(int poiId, UUID playerId, int rating) {
         return asyncVoid(() -> provider.setRating(poiId, playerId, rating));
     }
@@ -208,8 +186,6 @@ public class DataService {
     public CompletableFuture<Map<UUID, Integer>> getRatings(int poiId) {
         return async(() -> provider.getRatings(poiId));
     }
-
-    // ---------------- Маршруты ----------------
 
     public CompletableFuture<Route> createRoute(Route route) {
         return async(() -> {
@@ -243,11 +219,6 @@ public class DataService {
         return async(() -> provider.getRouteByName(name));
     }
 
-    // ---------------- Служебное ----------------
-
-    /**
-     * Выполнение задачи в главном потоке (для GUI и т.п.).
-     */
     public void runSync(Runnable runnable) {
         Bukkit.getScheduler().runTask(plugin, runnable);
     }

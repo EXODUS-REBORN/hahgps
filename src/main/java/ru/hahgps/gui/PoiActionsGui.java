@@ -1,5 +1,4 @@
 package ru.hahgps.gui;
-
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -11,9 +10,6 @@ import ru.hahgps.model.Poi;
 
 import java.util.List;
 
-/**
- * Действия с конкретной точкой.
- */
 public class PoiActionsGui extends GuiScreen {
 
     private final Poi poi;
@@ -37,19 +33,19 @@ public class PoiActionsGui extends GuiScreen {
     public void build() {
         inventory.setItem(10, GuiUtil.item(Material.PAPER,
                 HahGpsPlugin.getInstance().getMessages().getComponent("gui.info"),
-                List.of(Component.text("Подробная информация", NamedTextColor.GRAY))));
+                List.of(Component.text("Подробная информация", NamedTextColor.AQUA))));
 
         inventory.setItem(12, GuiUtil.item(Material.COMPASS,
                 HahGpsPlugin.getInstance().getMessages().getComponent("gui.goto"),
-                List.of(Component.text("Построить маршрут", NamedTextColor.GRAY))));
+                List.of(Component.text("Построить маршрут", NamedTextColor.AQUA))));
 
         inventory.setItem(14, GuiUtil.item(Material.NETHER_STAR,
                 HahGpsPlugin.getInstance().getMessages().getComponent("gui.rate"),
-                List.of(Component.text("Оценить (1-10)", NamedTextColor.GRAY))));
+                List.of(Component.text("Оценить (1-10)", NamedTextColor.AQUA))));
 
         inventory.setItem(16, GuiUtil.item(Material.LAVA_BUCKET,
                 HahGpsPlugin.getInstance().getMessages().getComponent("gui.delete"),
-                List.of(Component.text("Удалить точку", NamedTextColor.GRAY))));
+                List.of(Component.text("Удалить точку", NamedTextColor.AQUA))));
 
         inventory.setItem(22, GuiUtil.item(Material.ARROW,
                 HahGpsPlugin.getInstance().getMessages().getComponent("gui.back")));
@@ -66,7 +62,7 @@ public class PoiActionsGui extends GuiScreen {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
         switch (slot) {
             case 10 -> {
-                // Инфо
+
                 plugin.getPoiService().loadPoiWithRating(poi.getName()).thenAcceptAsync(loaded -> {
                     if (loaded == null) {
                         return;
@@ -79,7 +75,7 @@ public class PoiActionsGui extends GuiScreen {
                 });
             }
             case 12 -> {
-                // Построить маршрут — сначала выбрать транспорт
+
                 player.closeInventory();
                 plugin.getPoiService().loadPoiWithRating(poi.getName()).thenAcceptAsync(loaded -> {
                     if (loaded == null) {
@@ -94,9 +90,8 @@ public class PoiActionsGui extends GuiScreen {
                 });
             }
             case 14 -> {
-                // Оценить — ввод через чат
+
                 player.closeInventory();
-                plugin.getMessages().getComponent("gui.rate");
                 ru.hahgps.gui.InputManager.getInstance().request(player,
                         plugin.getMessages().getPrefixed("gui.rate"),
                         input -> {
@@ -116,7 +111,7 @@ public class PoiActionsGui extends GuiScreen {
                         });
             }
             case 16 -> {
-                // Удалить
+
                 player.closeInventory();
                 plugin.getPoiService().deletePoi(poi.getName()).thenRun(() -> {
                     plugin.getDataService().runSync(() -> {

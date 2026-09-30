@@ -1,14 +1,10 @@
 package ru.hahgps.command.subcommands;
-
 import org.bukkit.entity.Player;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.SubCommand;
 
 import java.util.List;
 
-/**
- * /gps category create <имя>
- */
 public class CategoryCreateCommand implements SubCommand {
 
     @Override

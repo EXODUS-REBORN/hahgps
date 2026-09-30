@@ -1,5 +1,4 @@
 package ru.hahgps.gui;
-
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -11,9 +10,6 @@ import ru.hahgps.model.TransportType;
 import java.util.List;
 import java.util.function.Consumer;
 
-/**
- * Выбор транспорта перед построением маршрута.
- */
 public class TransportSelectGui extends GuiScreen {
 
     private final Consumer<TransportType> callback;
@@ -37,11 +33,11 @@ public class TransportSelectGui extends GuiScreen {
     public void build() {
         inventory.setItem(11, GuiUtil.item(Material.LEATHER_BOOTS,
                 HahGpsPlugin.getInstance().getMessages().getComponent("gui.transport-foot"),
-                List.of(Component.text("Маршрут по тропинкам и пешеходным переходам", NamedTextColor.GRAY))));
+                List.of(Component.text("Маршрут по тропинкам и пешеходным переходам", NamedTextColor.AQUA))));
 
         inventory.setItem(15, GuiUtil.item(Material.MINECART,
                 HahGpsPlugin.getInstance().getMessages().getComponent("gui.transport-car"),
-                List.of(Component.text("Маршрут по дорогам для авто", NamedTextColor.GRAY))));
+                List.of(Component.text("Маршрут по дорогам для авто", NamedTextColor.AQUA))));
 
         inventory.setItem(22, GuiUtil.item(Material.ARROW,
                 HahGpsPlugin.getInstance().getMessages().getComponent("gui.back")));

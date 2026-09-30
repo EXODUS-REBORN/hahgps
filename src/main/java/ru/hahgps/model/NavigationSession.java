@@ -1,14 +1,9 @@
 package ru.hahgps.model;
-
 import org.bukkit.Location;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Активная сессия навигации игрока.
- */
 public class NavigationSession {
 
     private final UUID playerId;
@@ -99,9 +94,6 @@ public class NavigationSession {
         this.lastHint = lastHint;
     }
 
-    /**
-     * Следующая контрольная точка маршрута.
-     */
     public Location getNextWaypoint() {
         if (segmentIndex < path.size()) {
             return path.get(segmentIndex);

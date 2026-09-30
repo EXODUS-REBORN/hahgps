@@ -1,5 +1,4 @@
 package ru.hahgps.command.subcommands;
-
 import org.bukkit.entity.Player;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.SubCommand;
@@ -8,9 +7,6 @@ import ru.hahgps.model.Category;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-/**
- * /gps category list
- */
 public class CategoryListCommand implements SubCommand {
 
     @Override

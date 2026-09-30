@@ -1,8 +1,5 @@
 package ru.hahgps.model;
 
-/**
- * Категория точек.
- */
 public class Category {
 
     private final int id;

@@ -4,3 +4,4 @@ target/
 .vscode/
 *.log
 run/
+test-server/

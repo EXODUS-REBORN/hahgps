@@ -1,16 +1,11 @@
 package ru.hahgps.service;
-
 import ru.hahgps.model.Poi;
 import ru.hahgps.storage.DataService;
 import ru.hahgps.util.FuzzyMatcher;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-/**
- * Сервис поиска по точкам с нечётким совпадением.
- */
 public class SearchService {
 
     private final DataService dataService;
@@ -23,9 +18,6 @@ public class SearchService {
         this.threshold = threshold;
     }
 
-    /**
-     * Результат поиска.
-     */
     public static class SearchResult {
         public final String name;
         public final double similarity;
@@ -38,9 +30,6 @@ public class SearchService {
         }
     }
 
-    /**
-     * Поиск по точкам.
-     */
     public CompletableFuture<List<SearchResult>> search(String query) {
         if (query == null || query.trim().isEmpty()) {
             return CompletableFuture.completedFuture(new ArrayList<>());

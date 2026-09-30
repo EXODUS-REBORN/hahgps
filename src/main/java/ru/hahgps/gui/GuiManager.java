@@ -1,14 +1,9 @@
 package ru.hahgps.gui;
-
 import org.bukkit.entity.Player;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Менеджер открытых GUI.
- */
 public class GuiManager {
 
     private static GuiManager instance;
@@ -38,9 +33,6 @@ public class GuiManager {
         return openGuis.containsKey(player.getUniqueId());
     }
 
-    /**
-     * Закрыть все GUI (при выключении плагина).
-     */
     public void closeAll() {
         for (GuiScreen gui : openGuis.values()) {
             gui.getPlayer().closeInventory();

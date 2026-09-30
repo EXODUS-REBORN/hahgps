@@ -1,5 +1,4 @@
 package ru.hahgps.command.subcommands;
-
 import org.bukkit.entity.Player;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.SubCommand;
@@ -13,10 +12,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
 
-/**
- * /gps update [status|check|install|apply|reload] — проверка и установка новой версии
- * из GitHub Releases.
- */
 public class UpdateCommand implements SubCommand {
 
     private static final List<String> SUBS = List.of("status", "check", "install", "apply", "reload");
@@ -41,33 +36,33 @@ public class UpdateCommand implements SubCommand {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
         UpdaterService updater = plugin.getUpdater();
         if (updater == null) {
-            player.sendMessage("§cОбновление ещё не готово: хранилище загружается, повтори позже.");
+            player.sendMessage("§9Обновление ещё не готово: хранилище загружается, повтори позже.");
             return;
         }
         Consumer<String> feedback = text -> player.sendMessage("§b" + text);
         String sub = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
         switch (sub) {
-            case "status" -> updater.statusLines().forEach(line -> player.sendMessage("§8│ §7" + line));
+            case "status" -> updater.statusLines().forEach(line -> player.sendMessage("§1│ §9" + line));
             case "check" -> {
-                player.sendMessage("§7Проверяю релизы…");
+                player.sendMessage("§9Проверяю релизы…");
                 updater.checkAsync(feedback, false);
             }
             case "install" -> {
-                player.sendMessage("§7Проверяю и скачиваю новую версию…");
+                player.sendMessage("§9Проверяю и скачиваю новую версию…");
                 updater.checkAsync(feedback, true);
             }
             case "apply" -> {
                 Path staged = updater.stagedJar();
                 if (staged == null || !Files.isRegularFile(staged)) {
-                    player.sendMessage("§7Применять нечего: подготовленного обновления нет "
+                    player.sendMessage("§9Применять нечего: подготовленного обновления нет "
                             + "(сначала /gps update install).");
                     return;
                 }
-                // force = true: ручная команда пробует даже после прошлой неудачной попытки.
+
                 var result = HotSwap.apply(plugin, staged, true, feedback);
                 if (!result.applied() && !"поставлено в очередь".equals(result.reason())
                         && !"перенесено в главный поток".equals(result.reason())) {
-                    player.sendMessage("§cГорячая подмена не удалась: " + result.reason());
+                    player.sendMessage("§9Горячая подмена не удалась: " + result.reason());
                 }
             }
             case "reload" -> {
@@ -76,7 +71,7 @@ public class UpdateCommand implements SubCommand {
                 updater.start();
                 player.sendMessage("§bНастройки обновления перечитаны.");
             }
-            default -> player.sendMessage("§8│ §7" + usage());
+            default -> player.sendMessage("§1│ §9" + usage());
         }
     }
 

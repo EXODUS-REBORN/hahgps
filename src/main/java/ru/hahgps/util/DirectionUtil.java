@@ -1,24 +1,8 @@
 package ru.hahgps.util;
-
-/**
- * Утилиты направления: стрелки и подсказки.
- *
- * Соглашение: deltaAngle > 0 — цель СЛЕВА от направления взгляда,
- * deltaAngle < 0 — цель СПРАВА (для системы координат Minecraft,
- * где yaw=0 — юг, а угол цели считается через atan2(dx, dz)).
- */
 public final class DirectionUtil {
-
     private DirectionUtil() {
     }
 
-    /**
-     * Стрелка направления на основе угла относительно взгляда игрока.
-     *
-     * @param deltaAngle угол между направлением взгляда и направлением на цель (градусы),
-     *                   нормализованный в [-180, 180]. Положительный = цель слева.
-     * @return символ стрелки
-     */
     public static String getArrow(double deltaAngle) {
         double a = Math.abs(deltaAngle);
         if (a <= 22.5) {
@@ -34,12 +18,6 @@ public final class DirectionUtil {
         }
     }
 
-    /**
-     * Подсказка для журнала маршрута.
-     *
-     * @param deltaAngle угол относительно взгляда
-     * @return ключ сообщения подсказки
-     */
     public static String getHintKey(double deltaAngle) {
         double a = Math.abs(deltaAngle);
         if (a <= 30) {

@@ -1,5 +1,4 @@
 package ru.hahgps.command.subcommands;
-
 import org.bukkit.entity.Player;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.SubCommand;
@@ -8,9 +7,6 @@ import ru.hahgps.model.Poi;
 
 import java.util.List;
 
-/**
- * /gps point info <имя>
- */
 public class PointInfoCommand implements SubCommand {
 
     @Override

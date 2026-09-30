@@ -1,5 +1,4 @@
 package ru.hahgps.gui;
-
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -10,9 +9,6 @@ import ru.hahgps.model.Category;
 
 import java.util.List;
 
-/**
- * Список категорий.
- */
 public class CategoriesGui extends GuiScreen {
 
     private List<Category> categories = new java.util.ArrayList<>();
@@ -36,7 +32,7 @@ public class CategoriesGui extends GuiScreen {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
         plugin.getCategoryService().listCategories().thenCompose(cats -> {
             this.categories = cats;
-            // Асинхронно загружаем количество точек в каждой категории
+
             List<java.util.concurrent.CompletableFuture<Integer>> countFutures = cats.stream()
                     .map(c -> plugin.getDataService().getPoisByCategory(c.getId())
                             .thenApply(List::size))
@@ -55,10 +51,9 @@ public class CategoriesGui extends GuiScreen {
                     int count = counts.get(i);
                     inventory.setItem(slot++, GuiUtil.item(Material.BOOK,
                             GuiUtil.tonedName(9, category.getName()),
-                            List.of(Component.text("Точек: " + count, NamedTextColor.GRAY))));
+                            List.of(Component.text("Точек: " + count, NamedTextColor.AQUA))));
                 }
 
-                // Кнопки
                 if (player.hasPermission("gps.category.create")) {
                     inventory.setItem(45, GuiUtil.item(Material.EMERALD,
                             plugin.getMessages().getComponent("gui.create")));
@@ -87,7 +82,7 @@ public class CategoriesGui extends GuiScreen {
             return;
         }
         if (slot == 45 && player.hasPermission("gps.category.create")) {
-            // Создать категорию — ввод через чат
+
             player.closeInventory();
             InputManager.getInstance().request(player,
                     plugin.getMessages().getPrefixed("gui.create"),
@@ -107,7 +102,7 @@ public class CategoriesGui extends GuiScreen {
             return;
         }
         if (slot == 46 && player.hasPermission("gps.category.delete")) {
-            // Удалить категорию — ввод через чат
+
             player.closeInventory();
             InputManager.getInstance().request(player,
                     plugin.getMessages().getPrefixed("gui.delete"),
@@ -126,7 +121,7 @@ public class CategoriesGui extends GuiScreen {
                     });
             return;
         }
-        // Клик по категории
+
         if (slot < categories.size()) {
             Category category = categories.get(slot);
             new PointsListGui(player, category.getId()).open();

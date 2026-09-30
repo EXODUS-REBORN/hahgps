@@ -1,14 +1,10 @@
 package ru.hahgps.command.subcommands;
-
 import org.bukkit.entity.Player;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.SubCommand;
 
 import java.util.List;
 
-/**
- * Группа команд /gps route.
- */
 public class RouteCommand implements SubCommand {
 
     private final List<SubCommand> children = List.of(

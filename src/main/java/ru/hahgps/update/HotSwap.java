@@ -1,5 +1,4 @@
 package ru.hahgps.update;
-
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandMap;
@@ -7,7 +6,6 @@ import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import ru.hahgps.HahGpsPlugin;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -21,86 +19,31 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-/**
- * Горячая подмена плагина: новая версия ставится и запускается <b>без перезапуска сервера</b>.
- *
- * <p>Как это работает (Paper 1.21+):
- * <ol>
- *   <li>свежий jar копируется в {@code plugins/hahgps-<версия>.jar} — до всякой выгрузки,
- *       поэтому неудача на этом шаге ничего не ломает;</li>
- *   <li>у старого экземпляра закрываются открытые меню игроков и снимаются команды (иначе
- *       {@code /gps} остался бы за выгруженным плагином и отвечал «plugin is disabled»,
- *       а из «мёртвого» меню можно было бы забрать предметы);</li>
- *   <li>{@code PluginManager.disablePlugin} сохраняет данные и закрывает classloader старого
- *       плагина — заодно отпускается блокировка jar-файла (важно для Windows);</li>
- *   <li>{@code PluginManager.loadPlugin} + {@code enablePlugin} поднимают новую версию из свежего
- *       jar; она сама открывает базы и перечитывает состояние;</li>
- *   <li>старый jar удаляется, команды пересобираются в Brigadier — игроки ничего не замечают.</li>
- * </ol>
- *
- * <p>Если на любом шаге после выгрузки что-то падает — откат: прежний jar загружается обратно,
- * версия помечается как «не встала на ходу» (повтор автоматически не долбим), а в лог и админам
- * уходит причина. Обновление в этом случае применится при следующем рестарте сервера.
- *
- * <p><b>Важно про classloader.</b> Код этого класса продолжает выполняться уже после того, как
- * classloader старого плагина закрыт. Поэтому после выгрузки нельзя ни загружать новые классы
- * плагина, ни звать его утилиты: всё, что нужно показать, готовится заранее, а после подмены
- * используются только JDK, Bukkit API и файлы-маркеры, которые читает новая (или возвращённая)
- * копия плагина при своём {@code onEnable}.
- */
 public final class HotSwap {
-
-    /** Что получилось. {@code reason} — причина отказа для лога и маркера. */
     public record Result(boolean applied, String version, String reason) {
     }
-
-    /** Результат последней попытки (для статуса/диагностики). */
     private static volatile String lastResult = "";
-
-    /** Идёт ли подмена прямо сейчас (повторно не запускаем). */
     private static volatile boolean running;
-
-    /** Подмена уже поставлена в очередь задач (повторно не планируем). */
     private static volatile boolean queued;
-
-    /** Файл-маркер: версия, которая не встала на ходу (автоповтор не делаем). */
     private static final String FAILED = "hot-failed.txt";
-
-    /** Файл-маркер: результат последней подмены — его читает уже новая копия плагина. */
     private static final String STATE = "hot-last.txt";
-
-    /** Через сколько минут маркер результата считается устаревшим (после падения сервера). */
     private static final long STATE_FRESH_MS = 5L * 60L * 1000L;
-
     private HotSwap() {
     }
-
     public static boolean running() {
         return running;
     }
 
+    public static void reset() {
+        queued = false;
+        running = false;
+    }
     public static String lastResult() {
         return lastResult;
     }
-
-    // ── запуск ───────────────────────────────────────────────────────────────────
-
-    /**
-     * Подменяет плагин на скачанный jar и перезагружает его на ходу.
-     *
-     * <p>Работа всегда уходит в отдельную задачу сервера: команда (или проверка обновления),
-     * которая попросила подмену, успевает завершиться <b>до</b> выгрузки, поэтому после подмены
-     * управление не возвращается в код уже закрытого classloader'а.
-     *
-     * @param staged   подготовленный (полностью скачанный) jar
-     * @param force    {@code true} — ручная команда: пробуем даже после прошлой неудачи
-     * @param feedback куда сказать про начало попытки (до выгрузки; после — уже молчит)
-     */
     public static Result apply(HahGpsPlugin plugin, Path staged, boolean force, Consumer<String> feedback) {
         return apply(plugin, staged, force, feedback, false);
     }
-
     private static Result apply(HahGpsPlugin plugin, Path staged, boolean force, Consumer<String> feedback,
                                 boolean deferred) {
         if (running || queued) {
@@ -126,7 +69,7 @@ public final class HotSwap {
             return new Result(false, versionFromJarName(staged), "поставлено в очередь");
         }
         if (!Bukkit.isPrimaryThread()) {
-            // Выгрузка/загрузка плагина — только в главном потоке.
+
             try {
                 Bukkit.getScheduler().runTask(plugin, () -> apply(plugin, staged, force, feedback, true));
             } catch (Throwable t) {
@@ -151,11 +94,6 @@ public final class HotSwap {
         }
     }
 
-    /**
-     * Подтягиваем классы, которые понадобятся <b>после</b> закрытия classloader'а плагина.
-     * Запись {@code Result} грузится лениво при первом {@code new Result(...)} — без прогрева
-     * она падала бы уже после выгрузки («zip file closed»).
-     */
     private static void warmup() {
         Result probe = new Result(false, "", "");
         probe.applied();
@@ -167,8 +105,6 @@ public final class HotSwap {
         String version = versionFromJarName(staged);
         warmup();
 
-        // Всё, что нужно сказать и записать, готовим ДО выгрузки: после закрытия classloader'а
-        // обращаться к классам плагина уже нельзя.
         String textStart = "Горячее обновление: ставлю " + version + " на ходу…";
         String textMissing = "Файл обновления не найден: " + staged.getFileName();
         String textNoJar = "Не удалось найти собственный jar в plugins/ — горячая подмена невозможна.";
@@ -176,7 +112,7 @@ public final class HotSwap {
         String textRetry = "Версия " + version + " уже не встала на ходу — автоматически не повторяю. "
                 + "Попробуй вручную: /gps update apply";
         String textOk = "Горячее обновление готово: " + version + " работает.";
-        // Шаблоны с %-подстановками: заполняем их уже после выгрузки обычным replace.
+
         String failTemplate = "Горячее обновление " + version + " не удалось: %ошибка%";
         String rollbackTemplate = "Вернулся на прежнюю версию: %ошибка%";
         Path updateDir = plugin.getDataFolder().toPath().resolve("update");
@@ -206,7 +142,6 @@ public final class HotSwap {
             return new Result(false, version, "прошлая попытка не удалась");
         }
 
-        // Шаг 1: кладём новый jar рядом со старым. Здесь ещё ничего не тронуто — любая ошибка безопасна.
         try {
             Files.copy(staged, target, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
@@ -218,12 +153,9 @@ public final class HotSwap {
         reply(feedback, textStart);
         log(Level.INFO, "Горячая подмена: ставлю " + version + " на ходу…", null);
 
-        // Шаг 2: закрываем открытые меню плагина и снимаем его команды со старого экземпляра.
         closeOwnGuis(plugin);
         unregisterCommands(plugin);
 
-        // Шаг 3: выгружаем старую версию — данные сохраняются, classloader закрывается,
-        //         блокировка jar снимается (важно для Windows).
         plugin.setHotSwapping(true);
         try {
             Bukkit.getPluginManager().disablePlugin(plugin);
@@ -235,16 +167,10 @@ public final class HotSwap {
             return new Result(false, version, reason);
         }
 
-        // Всё, что ниже, выполняется уже с закрытым classloader'ом старого плагина:
-        // только JDK, Bukkit API и файлы.
         Bukkit.getLogger().info("Горячая подмена: старая версия выгружена, поднимаю " + version + "…");
-        // Paper отказывается грузить jar с именем, которое уже занято (даже выключенным плагином):
-        // «attempted to add duplicate plugin identifier … THIS WILL CREATE BUGS». Поэтому снимаем
-        // старый экземпляр с реестров менеджера — как при настоящей выгрузке.
+
         releaseInstance(plugin);
 
-        // Шаг 4: снимаем старый jar с дороги только ПОСЛЕ успешного запуска новой версии —
-        //         иначе при откате нечего будет вернуть.
         Plugin loaded = null;
         try {
             loaded = Bukkit.getPluginManager().loadPlugin(target.toFile());
@@ -269,7 +195,6 @@ public final class HotSwap {
                     rollbackTemplate, loaded);
         }
 
-        // Успех: убираем прежний jar и подготовленный файл, пересобираем команды в Brigadier.
         clearFailed(updateDir);
         retireJar(oldJar, updateDir);
         try {
@@ -283,20 +208,13 @@ public final class HotSwap {
         return new Result(true, version, "");
     }
 
-    // ── откат ────────────────────────────────────────────────────────────────────
-
-    /**
-     * Откат: прежний jar поднимается обратно, версия помечается «не встала на ходу»,
-     * а причину показывает уже возвращённая копия плагина (через маркер).
-     */
     private static Result rollback(Path oldJar, Path target, Path updateDir,
                                    String version, String reason, String rollbackTemplate, Plugin failed) {
         log(Level.SEVERE, "Горячая подмена не удалась: " + reason + " — возвращаю прежнюю версию.", null);
         retire(target);
         markFailed(updateDir, version);
         writeState(updateDir, version, false, reason);
-        // Если новая версия успела зарегистрироваться (не включилась) — снимаем и её,
-        // иначе Paper не даст загрузить прежнюю под тем же именем.
+
         releaseInstance(failed);
 
         if (oldJar == null || !Files.isRegularFile(oldJar)) {
@@ -324,22 +242,15 @@ public final class HotSwap {
             Bukkit.getLogger().warning("Горячая подмена: вернулся на прежнюю версию, обновление применится "
                     + "при перезапуске сервера.");
         }
-        // Текст для игрока уже показала возвращённая копия плагина (маркер hot-last.txt).
+
         return new Result(false, version, reason);
     }
 
-    // ── объявление результата (уже из живой копии плагина) ────────────────────────
-
-    /**
-     * Читает маркер последней подмены и говорит админам, что версия сменилась на ходу
-     * (или почему не сменилась). Вызывается из {@code onEnable} — своих классов тут сколько угодно.
-     */
     public static void announceLastResult(HahGpsPlugin plugin) {
         if (plugin == null) return;
         Path state = plugin.getDataFolder().toPath().resolve("update").resolve(STATE);
         if (!Files.isRegularFile(state)) return;
-        // Свежесть смотрим ДО удаления: после падения сервера маркер может быть старым,
-        // и объявлять «обновлено на ходу» при обычном запуске нельзя.
+
         boolean fresh;
         try {
             fresh = System.currentTimeMillis() - Files.getLastModifiedTime(state).toMillis() <= STATE_FRESH_MS;
@@ -350,14 +261,14 @@ public final class HotSwap {
         try {
             Files.deleteIfExists(state);
         } catch (IOException ignored) {
-            // маркер не удалился — не страшно: при следующем запуске он будет уже не свежим
+
         }
         if (values.isEmpty()) return;
         String version = values.getOrDefault("version", "");
         boolean ok = Boolean.parseBoolean(values.getOrDefault("ok", "false"));
         String current = plugin.getPluginMeta().getVersion();
         if (ok) {
-            // Маркер успеха актуален только если мы и есть та самая новая версия и это не старый файл.
+
             if (!fresh || (!version.isBlank() && !version.equals(current))) return;
             lastResult = "применено на ходу: " + (version.isBlank() ? current : version);
             announce(plugin, "Горячее обновление готово: версия " + (version.isBlank() ? current : version)
@@ -375,18 +286,11 @@ public final class HotSwap {
         plugin.getLogger().info(text);
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.hasPermission("gps.admin") || player.isOp()) {
-                player.sendMessage("§b" + text);
+                player.sendMessage("§9" + text);
             }
         }
     }
 
-    // ── команды и Brigadier ──────────────────────────────────────────────────────
-
-    /**
-     * Закрывает открытые меню плагина у игроков. После подмены их holder'ы принадлежат выгруженной
-     * копии: клики по такому «мёртвому» меню уже никто не отменяет (слушатели старой копии сняты,
-     * новой — не узнают чужой holder), а значит из него можно было бы забрать предметы.
-     */
     private static void closeOwnGuis(HahGpsPlugin plugin) {
         ClassLoader own = plugin.getClass().getClassLoader();
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -399,15 +303,11 @@ public final class HotSwap {
                     player.closeInventory();
                 }
             } catch (Throwable ignored) {
-                // не смогли закрыть меню — не повод срывать обмен версий
+
             }
         }
     }
 
-    /**
-     * Снимает команды плагина с командной карты. Без этого после выгрузки {@code /gps}
-     * остаётся за старым (уже выключенным) экземпляром и отвечает «plugin is disabled».
-     */
     private static void unregisterCommands(HahGpsPlugin plugin) {
         try {
             CommandMap map = Bukkit.getCommandMap();
@@ -430,7 +330,7 @@ public final class HotSwap {
                 try {
                     command.unregister(map);
                 } catch (Throwable ignored) {
-                    // запись из карты уже убрана выше — этого достаточно
+
                 }
             }
         } catch (Throwable t) {
@@ -438,16 +338,6 @@ public final class HotSwap {
         }
     }
 
-    /**
-     * Снимает выгруженный экземпляр с реестров менеджера плагинов. Без этого Paper не даёт
-     * загрузить jar с тем же именем: «attempted to add duplicate plugin identifier … THIS WILL
-     * CREATE BUGS» — проверка идёт по {@code lookupNames} (имя занято даже выключенным плагином).
-     *
-     * <p>Имена полей у Paper меняются от версии к версии ({@code SimplePluginManager} →
-     * {@code paperPluginManager} → {@code instanceManager} → {@code lookupNames}/{@code plugins}),
-     * поэтому не угадываем их, а идём по объектам менеджера и вычищаем наш экземпляр из всех
-     * коллекций и карт, где он лежит: по ссылке ({@code ==}) — чужие записи не тронем.
-     */
     private static void releaseInstance(Plugin plugin) {
         if (plugin == null) return;
         try {
@@ -458,7 +348,6 @@ public final class HotSwap {
         }
     }
 
-    /** Обход объектов менеджера плагинов на 3 уровня вглубь: коллекции — чистим, «*Manager» — идём дальше. */
     private static void scrub(Object target, Plugin plugin, int depth) {
         if (target == null || depth > 3) return;
         Class<?> type = target.getClass();
@@ -498,7 +387,7 @@ public final class HotSwap {
                 if (it.next() == plugin) it.remove();
             }
         } catch (Throwable ignored) {
-            // неизменяемая карта — не наша забота
+
         }
     }
 
@@ -509,11 +398,10 @@ public final class HotSwap {
                 if (it.next() == plugin) it.remove();
             }
         } catch (Throwable ignored) {
-            // неизменяемая коллекция — не наша забота
+
         }
     }
 
-    /** Пересобирает дерево команд Brigadier, иначе клиент видит старое и падает на «plugin is disabled». */
     private static void syncCommands() {
         try {
             Object server = Bukkit.getServer();
@@ -524,29 +412,22 @@ public final class HotSwap {
                     player.updateCommands();
                 }
             } catch (Throwable ignored) {
-                // без пересборки команд плагин всё равно работает: /gps идёт через CommandMap
+
             }
         }
     }
 
-    // ── файлы ────────────────────────────────────────────────────────────────────
-
-    /** Каталог plugins/ (туда кладём новую версию и оттуда убираем старую). */
     static Path pluginsFolder(HahGpsPlugin plugin) {
         try {
             java.io.File dir = Bukkit.getPluginsFolder();
             if (dir != null) return dir.toPath().toAbsolutePath();
         } catch (Throwable ignored) {
-            // ниже — запасной путь через данные плагина
+
         }
         java.io.File parent = plugin.getDataFolder().getParentFile();
         return parent == null ? null : parent.toPath().toAbsolutePath();
     }
 
-    /**
-     * Собственный jar плагина: сначала путь из CodeSource (Paper грузит плагин прямо из
-     * {@code plugins/}), иначе — поиск по имени в {@code plugins/}.
-     */
     static Path currentJar(HahGpsPlugin plugin, Path pluginsDir) {
         Path own = null;
         try {
@@ -561,7 +442,7 @@ public final class HotSwap {
                 && own.getParent().equals(pluginsDir) && Files.isRegularFile(own)) {
             return own;
         }
-        // CodeSource не в plugins/ (например, кэш ремапа) — берём jar текущей версии по имени.
+
         if (pluginsDir == null || !Files.isDirectory(pluginsDir)) return null;
         String current = plugin.getPluginMeta().getVersion();
         Path fallback = null;
@@ -587,7 +468,6 @@ public final class HotSwap {
         }
     }
 
-    /** Убирает файл, который не пригодился (новый jar при откате). */
     private static void retire(Path file) {
         if (file == null) return;
         try {
@@ -598,10 +478,6 @@ public final class HotSwap {
         }
     }
 
-    /**
-     * Убирает прежний jar после успешной подмены. Если файл занят — переименовываем в {@code .old}
-     * (два jar в plugins/ на следующем запуске дали бы два плагина) и пишем скрипт для ручного шага.
-     */
     private static void retireJar(Path oldJar, Path updateDir) {
         if (oldJar == null || !Files.isRegularFile(oldJar)) return;
         try {
@@ -621,7 +497,6 @@ public final class HotSwap {
         writeFallbackScript(updateDir, oldJar);
     }
 
-    /** Скрипт для ручного шага, если автоматика не смогла убрать старый файл. */
     private static void writeFallbackScript(Path updateDir, Path oldJar) {
         if (updateDir == null) return;
         try {
@@ -643,8 +518,6 @@ public final class HotSwap {
         }
     }
 
-    // ── маркеры ──────────────────────────────────────────────────────────────────
-    /** Версия, которая уже не встала на ходу (автоматически больше не пробуем). */
     static String failedVersion(Path updateDir) {
         Path file = updateDir == null ? null : updateDir.resolve(FAILED);
         if (file == null || !Files.isRegularFile(file)) return "";
@@ -670,11 +543,10 @@ public final class HotSwap {
         try {
             Files.deleteIfExists(updateDir.resolve(FAILED));
         } catch (IOException ignored) {
-            // не критично: маркер лишь запрещает автоповтор
+
         }
     }
 
-    /** Результат последней подмены для следующего запуска кода плагина. */
     static void writeState(Path updateDir, String version, boolean ok, String reason) {
         if (updateDir == null) return;
         try {
@@ -703,8 +575,6 @@ public final class HotSwap {
         return out;
     }
 
-    // ── мелочи ───────────────────────────────────────────────────────────────────
-
     static String versionFromJarName(Path jar) {
         if (jar == null || jar.getFileName() == null) return "";
         return UpdaterService.versionFromJarName(jar);
@@ -726,7 +596,7 @@ public final class HotSwap {
         try {
             feedback.accept(text);
         } catch (Throwable ignored) {
-            // отправитель мог уже отключиться — не повод срывать подмену
+
         }
     }
 
@@ -740,7 +610,7 @@ public final class HotSwap {
                 logger.log(level, text, error);
             }
         } catch (Throwable ignored) {
-            // вне сервера (unit-тесты) логировать некуда
+
         }
     }
 

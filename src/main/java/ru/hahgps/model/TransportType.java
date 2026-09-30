@@ -1,8 +1,5 @@
 package ru.hahgps.model;
 
-/**
- * Вид транспорта. Выбирается при выборе цели и влияет на прокладку маршрута.
- */
 public enum TransportType {
 
     FOOT("foot", true),

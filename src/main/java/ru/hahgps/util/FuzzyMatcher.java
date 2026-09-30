@@ -1,19 +1,9 @@
 package ru.hahgps.util;
-
 import java.util.ArrayList;
 import java.util.List;
-
-/**
- * Нечёткий поиск: расстояние Левенштейна и похожесть строк.
- */
 public final class FuzzyMatcher {
-
     private FuzzyMatcher() {
     }
-
-    /**
-     * Расстояние Левенштейна между двумя строками.
-     */
     public static int levenshtein(String a, String b) {
         if (a == null || b == null) {
             return Integer.MAX_VALUE;
@@ -38,9 +28,6 @@ public final class FuzzyMatcher {
         return prev[b.length()];
     }
 
-    /**
-     * Похожесть строк в диапазоне [0, 1].
-     */
     public static double similarity(String a, String b) {
         if (a == null || b == null) {
             return 0.0;
@@ -57,9 +44,6 @@ public final class FuzzyMatcher {
         return 1.0 - (double) levenshtein(a, b) / maxLen;
     }
 
-    /**
-     * Проверка: считается ли строка "похожей" на запрос.
-     */
     public static boolean matches(String query, String target, double threshold) {
         if (query == null || target == null) {
             return false;
@@ -75,15 +59,6 @@ public final class FuzzyMatcher {
         return similarity(q, t) >= threshold;
     }
 
-    /**
-     * Поиск лучших совпадений в списке.
-     *
-     * @param query     запрос
-     * @param targets   список целей
-     * @param limit     максимум результатов
-     * @param threshold порог похожести
-     * @return список пар (цель, похожесть), отсортированный по убыванию похожести
-     */
     public static List<Match> findBest(String query, List<String> targets, int limit, double threshold) {
         List<Match> results = new ArrayList<>();
         for (String target : targets) {

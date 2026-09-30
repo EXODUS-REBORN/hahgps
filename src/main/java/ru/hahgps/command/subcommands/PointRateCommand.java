@@ -1,5 +1,4 @@
 package ru.hahgps.command.subcommands;
-
 import org.bukkit.entity.Player;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.SubCommand;
@@ -7,9 +6,6 @@ import ru.hahgps.model.Poi;
 
 import java.util.List;
 
-/**
- * /gps point rate <имя> <1-10>
- */
 public class PointRateCommand implements SubCommand {
 
     @Override

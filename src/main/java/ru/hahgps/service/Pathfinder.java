@@ -1,22 +1,11 @@
 package ru.hahgps.service;
-
 import ru.hahgps.model.GraphEdge;
 import ru.hahgps.model.GraphNode;
 import ru.hahgps.model.RoadGraph;
 import org.bukkit.Location;
-
 import java.util.*;
-
-/**
- * Поиск пути по графу дорог (A*).
- */
 public class Pathfinder {
 
-    /**
-     * Найти путь между двумя узлами графа.
-     *
-     * @return список узлов от from до to (включая оба) или пустой список, если путь не найден
-     */
     public static List<GraphNode> findPath(RoadGraph graph, GraphNode from, GraphNode to) {
         if (from == null || to == null) {
             return Collections.emptyList();
@@ -63,9 +52,6 @@ public class Pathfinder {
         return Collections.emptyList();
     }
 
-    /**
-     * Эвристика: прямое расстояние до цели.
-     */
     private static double heuristic(GraphNode a, GraphNode b) {
         return a.distanceTo(b);
     }
@@ -81,12 +67,6 @@ public class Pathfinder {
         return path;
     }
 
-    /**
-     * Построить полный маршрут от локации игрока до целевой локации через граф.
-     * Если граф пуст или путь не найден — прямая линия.
-     *
-     * @return список контрольных точек (включая старт и финиш)
-     */
     public static List<Location> buildRoute(RoadGraph graph, Location start, Location end) {
         List<Location> route = new ArrayList<>();
         if (start.getWorld() == null || end.getWorld() == null
@@ -126,9 +106,6 @@ public class Pathfinder {
         return route;
     }
 
-    /**
-     * Длина маршрута в блоках.
-     */
     public static double routeLength(List<Location> route) {
         double length = 0.0;
         for (int i = 1; i < route.size(); i++) {
