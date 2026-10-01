@@ -11,7 +11,7 @@ import java.util.Map;
 public class MessagesManager {
 
     /** Версия схемы палитры: старые файлы заменяются эталоном (с бэкапом). */
-    public static final int PALETTE_VERSION = 2;
+    public static final int PALETTE_VERSION = 3;
 
     private final HahGpsPlugin plugin;
     private volatile YamlConfiguration messages;
@@ -120,9 +120,9 @@ public class MessagesManager {
         }
     }
 
-    /** Префикс старых версий (<#hex>[GPS]<reset>) → фирменный градиент hahtojer. */
+    /** Префикс старых версий (<#hex>[GPS]<reset>) → фирменный градиент в шрифте alt. */
     private static final String NEW_PREFIX =
-            "<gray>[</gray><gradient:#2464c8:#8fe9f5>GPS</gradient><gray>]</gray>";
+            "<gray>[</gray><font:minecraft:alt><gradient:#2464c8:#8fe9f5>GPS</gradient></font><gray>]</gray>";
 
     /** Вне-палитурные тона старых версий → ближайший тон GuiTheme.TONES. */
     static String remapPalette(String text) {

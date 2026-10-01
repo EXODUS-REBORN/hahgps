@@ -100,4 +100,33 @@ class GuiThemeTextTest {
         assertEquals("<color:#66aaff>версия</color> 1.0.4",
                 GuiTheme.toned(6, "версия") + " 1.0.4");
     }
+
+    /** font() заворачивает текст в ванильный шрифт и не ломает содержимое. */
+    @Test
+    void fontHelperKeepsTextAndSetsFontStyle() {
+        Component uniform = GuiTheme.mm(GuiTheme.font(GuiTheme.FONT_UNIFORM, "<white>123</white>"));
+        assertEquals("123", plain(uniform));
+        assertEquals(net.kyori.adventure.key.Key.key("minecraft", "uniform"), fontOf(uniform));
+
+        Component alt = GuiTheme.mm(GuiTheme.font(GuiTheme.FONT_ALT, GuiTheme.gradient("GPS")));
+        assertEquals("GPS", plain(alt));
+        assertEquals(net.kyori.adventure.key.Key.key("minecraft", "alt"), fontOf(alt));
+    }
+
+    /** Заголовок меню обязан нести шрифт uniform. */
+    @Test
+    void gradientTitleUsesUniformFont() {
+        assertEquals(net.kyori.adventure.key.Key.key("minecraft", "uniform"),
+                fontOf(GuiTheme.gradientTitle("Мои точки")));
+    }
+
+    /** Рекурсивный поиск стиля font по дереву компонентов. */
+    private static net.kyori.adventure.key.Key fontOf(Component c) {
+        if (c.style().font() != null) return c.style().font();
+        for (Component child : c.children()) {
+            net.kyori.adventure.key.Key found = fontOf(child);
+            if (found != null) return found;
+        }
+        return null;
+    }
 }

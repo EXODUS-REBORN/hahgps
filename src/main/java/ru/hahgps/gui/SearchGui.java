@@ -76,20 +76,41 @@ public class SearchGui extends GuiScreen {
             player.closeInventory();
             return;
         }
-        if (slot == 22 || slot == 53) {
-            if (showingResults) {
+
+        // Режим результатов: слоты 0-43 — найденные точки, 53 — «назад».
+        // Раньше результат в слоте 22 перехватывался кнопкой «назад» и
+        // вместо перехода к точке очищал поиск.
+        if (showingResults) {
+            if (slot == 53) {
                 results = new ArrayList<>();
                 query = "";
                 showingResults = false;
                 refresh();
-            } else {
-                new MainMenuGui(player).open();
+                GuiTheme.click(player);
+                return;
             }
+            if (slot >= 0 && slot < Math.min(44, results.size())) {
+                SearchService.SearchResult result = results.get(slot);
+                GuiTheme.click(player);
+                player.closeInventory();
+                if (result.poi == null) {
+                    player.sendMessage(plugin.getMessages().getPrefixed(
+                            "point-not-found", "name", result.name));
+                    return;
+                }
+                new TransportSelectGui(player, transport ->
+                        plugin.getCommandManager().gotoPoi(player, result.poi, transport)).open();
+            }
+            return;
+        }
+
+        // Обычный режим: 22 — «назад» в главное меню, 11/15 — ввод запроса
+        if (slot == 22) {
+            new MainMenuGui(player).open();
             GuiTheme.click(player);
             return;
         }
-        // В режиме результатов слоты 11/15 заняты найденными точками
-        if (!showingResults && (slot == 11 || slot == 15)) {
+        if (slot == 11 || slot == 15) {
             player.closeInventory();
             InputManager.getInstance().request(player,
                     plugin.getMessages().getPrefixed("input-search"),
@@ -105,20 +126,6 @@ public class SearchGui extends GuiScreen {
                             }
                         });
                     }));
-            return;
-        }
-        // Клик по результату поиска — сразу строим маршрут
-        if (slot >= 0 && slot < Math.min(44, results.size())) {
-            SearchService.SearchResult result = results.get(slot);
-            GuiTheme.click(player);
-            player.closeInventory();
-            if (result.poi == null) {
-                player.sendMessage(plugin.getMessages().getPrefixed(
-                        "point-not-found", "name", result.name));
-                return;
-            }
-            new TransportSelectGui(player, transport ->
-                    plugin.getCommandManager().gotoPoi(player, result.poi, transport)).open();
         }
     }
 

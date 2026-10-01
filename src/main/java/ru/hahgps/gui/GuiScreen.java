@@ -72,12 +72,27 @@ public abstract class GuiScreen implements InventoryHolder {
     /**
      * Бренд-предмет в углу меню (44 — для больших инвентарей, 26 — для маленьких),
      * как в hahtojer. Ставится только в пустой слот, чтобы не затирать содержимое.
+     * Пояснения берутся из messages_*.yml (gui.brand-*), чтобы EN-версия была полной.
      */
     protected void putBrand() {
         if (inventory == null) return;
         int slot = size() >= 54 ? 44 : 26;
         if (inventory.getItem(slot) == null) {
-            inventory.setItem(slot, GuiTheme.brand(GuiTheme.version()));
+            inventory.setItem(slot, GuiTheme.brand(brandLore()));
+        }
+    }
+
+    /** Строки бренда из messages_*.yml с подстановкой версии. */
+    private List<String> brandLore() {
+        try {
+            String version = GuiTheme.version();
+            var messages = HahGpsPlugin.getInstance().getMessages();
+            return List.of(
+                    messages.get("gui.brand-version", "version", version == null ? "" : version),
+                    messages.get("gui.brand-project"),
+                    messages.get("gui.brand-style"));
+        } catch (Throwable t) {
+            return List.of(); // сообщения ещё не подняты — бренд без пояснений
         }
     }
 

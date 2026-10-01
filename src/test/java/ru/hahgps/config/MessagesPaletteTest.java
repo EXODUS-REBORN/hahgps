@@ -40,7 +40,16 @@ class MessagesPaletteTest {
     private static final Set<String> ALLOWED = Set.of(
             "white", "gray", "dark_gray", "black", "red", "blue", "dark_blue", "dark_aqua",
             "bold", "italic", "underlined", "strikethrough", "obfuscated", "reset",
-            "gradient", "color", "colour", "click", "hover", "key", "newline");
+            "gradient", "color", "colour", "click", "hover", "key", "newline", "font");
+    /** Разрешённые ванильные шрифты: uniform — везде, alt — только латиница. */
+    private static final Set<String> ALLOWED_FONTS =
+            Set.of("minecraft:uniform", "minecraft:alt", "uniform", "alt");
+    /** Тег шрифта: <font:minecraft:uniform>…</font>. */
+    private static final Pattern FONT_TAG =
+            Pattern.compile("<font:([^>]+)>(.*?)</font>", Pattern.DOTALL);
+    /** Отдельный <font…> без закрытия или с незнакомым ключом. */
+    private static final Pattern ANY_FONT_OPEN =
+            Pattern.compile("<font:([^>]+)>");
 
     private static List<String[]> parse(Path file) throws IOException {
         List<String[]> out = new ArrayList<>();
@@ -90,7 +99,7 @@ class MessagesPaletteTest {
             for (String[] kv : parse(file)) {
                 if ("palette-version".equals(kv[0])) {
                     found = true;
-                    assertEquals("2", kv[1].trim(), lang + ": устаревшая схема палитры");
+                    assertEquals("3", kv[1].trim(), lang + ": устаревшая схема палитры");
                 }
             }
             assertTrue(found, lang + ": нет ключа palette-version");
@@ -157,5 +166,84 @@ class MessagesPaletteTest {
         onlyEn.removeAll(ru);
         assertTrue(onlyRu.isEmpty(), "ключ только в messages_ru.yml: " + onlyRu);
         assertTrue(onlyEn.isEmpty(), "ключ только в messages_en.yml: " + onlyEn);
+    }
+
+    /** Все теги шрифта закрыты и используют только ванильные ключи. */
+    @Test
+    void fontTagsAreClosedAndUseVanillaKeys() throws IOException {
+        for (String lang : List.of("ru", "en")) {
+            for (String[] kv : parse(RESOURCES.resolve("messages_" + lang + ".yml"))) {
+                String key = kv[0], value = kv[1];
+                long opens = ANY_FONT_OPEN.matcher(value).results().count();
+                long closes = value.split("</font>", -1).length - 1;
+                assertEquals(opens, closes, lang + " " + key + ": незакрытый <font> (открыто "
+                        + opens + ", закрыто " + closes + ")");
+
+                Matcher open = ANY_FONT_OPEN.matcher(value);
+                while (open.find()) {
+                    String fontKey = open.group(1).trim();
+                    assertTrue(ALLOWED_FONTS.contains(fontKey),
+                            lang + " " + key + ": неизвестный шрифт <font:" + fontKey + ">");
+                }
+            }
+        }
+    }
+
+    /**
+     * alt (руны зачарований) рисует только латиницу A-Z/a-z и пробел —
+     * кириллица и цифры дадут «тофу». Проверяем содержимое каждого alt-отрезка.
+     */
+    @Test
+    void altFontWrapsOnlyLatinText() throws IOException {
+        for (String lang : List.of("ru", "en")) {
+            for (String[] kv : parse(RESOURCES.resolve("messages_" + lang + ".yml"))) {
+                String key = kv[0], value = kv[1];
+                Matcher m = FONT_TAG.matcher(value);
+                while (m.find()) {
+                    String fontKey = m.group(1).trim();
+                    if (!fontKey.endsWith("alt")) continue;
+                    // вложенные теги (<gradient> и т.п.) вычищаем — остаётся текст
+                    String text = m.group(2).replaceAll("</?[a-zA-Z#][^>]*>", "");
+                    assertTrue(text.matches("[A-Za-z\\s]*"),
+                            lang + " " + key + ": в alt-шрифте не-латинский текст: '" + text + "'");
+                }
+            }
+        }
+    }
+
+    /**
+     * Числовые значения (координаты, расстояния, страницы, рейтинги, проценты)
+     * обязаны быть в uniform — моноширинный шрифт выравнивает цифры.
+     * Ключи с числами: точность — сами плейсхолдеры {x},{y},{z},{count} и т.п.
+     */
+    @Test
+    void numericPlaceholdersUseUniformFont() throws IOException {
+        Set<String> NUMERIC = Set.of(
+                "{x}", "{y}", "{z}", "{rating}", "{distance}", "{match}", "{percent}",
+                "{page}", "{pages}", "{count}", "{votes}", "{value}");
+        for (String lang : List.of("ru", "en")) {
+            for (String[] kv : parse(RESOURCES.resolve("messages_" + lang + ".yml"))) {
+                String key = kv[0], value = kv[1];
+                // значения без разметки (state-on/off, distance-format) не трогаем:
+                // distance-format уходит в BossBar обычным текстом
+                if (!value.contains("<")) continue;
+                if (key.equals("distance-format") || key.equals("distance-format-km")) continue;
+                for (String num : NUMERIC) {
+                    if (!value.contains(num)) continue;
+                    int idx = value.indexOf(num);
+                    // ближайший открывающий шрифт-тег перед плейсхолдером должен быть uniform
+                    String before = value.substring(0, idx);
+                    int lastFont = before.lastIndexOf("<font:");
+                    assertTrue(lastFont >= 0,
+                            lang + " " + key + ": число " + num + " без тега шрифта");
+                    // шрифт, открытый перед числом, обязан ещё быть открыт
+                    assertEquals(-1, before.indexOf("</font>", lastFont),
+                            lang + " " + key + ": число " + num + " вне <font> (шрифт закрыт раньше)");
+                    String fontKey = before.substring(lastFont + 6, before.indexOf('>', lastFont)).trim();
+                    assertEquals("minecraft:uniform", fontKey,
+                            lang + " " + key + ": число " + num + " не в uniform-шрифте");
+                }
+            }
+        }
     }
 }

@@ -210,12 +210,17 @@ public class NavigationService {
             bar.setProgress(progress);
         }
 
+        // Числа — в моноширинном uniform: цифры выравниваются и читаются как прибор.
+        // Теги закрываются явно — строка разбирается напрямую, без GuiTheme.safe().
         Component hotbarText = miniMessage.deserialize(
-                "<#66aaff>" + transportIcon + " <#8fc6ff>" + targetNameMm
-                        + " <#8fe9f5>| <#8fe9f5>"
-                        + LocationUtil.formatDistance(distanceToTarget)
-                        + " <#66aaff>| <#66aaff>"
-                        + (int) distanceToTarget + " <#8fc6ff>m");
+                "<#66aaff>" + transportIcon + " <#8fc6ff>" + targetNameMm + "</#8fc6ff>"
+                        + " <#8fe9f5>|</#8fe9f5> "
+                        + "<font:minecraft:uniform>"
+                        + "<#8fe9f5>" + LocationUtil.formatDistance(distanceToTarget) + "</#8fe9f5>"
+                        + " <#66aaff>|</#66aaff> "
+                        + "<#66aaff>" + (int) distanceToTarget + "</#66aaff>"
+                        + " <#8fc6ff>m</#8fc6ff>"
+                        + "</font>");
         player.sendActionBar(hotbarText);
 
         HudService hud = plugin.getHudService();

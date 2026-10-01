@@ -6,83 +6,93 @@
 #  #8fc6ff #4fd1e0 #8fe9f5
 #  Neutrals: <white> — values, <gray> — labels,
 #  <dark_gray> — separators, <red> — errors only.
+#
+#  Fonts (vanilla, no resource pack needed):
+#  <font:minecraft:uniform> — pixel monospace: headers,
+#      window titles, all numbers (coords, distances, pages).
+#      Full coverage: Cyrillic, digits, symbols.
+#  <font:minecraft:alt> — enchanting-table runes: ONLY pure
+#      Latin (A-Z, a-z, space). Digits and Cyrillic do NOT
+#      render in it — never use the tag for those.
+#  Regular text — the default Minecraft font.
 # ============================================================
 
-prefix: "<gray>[</gray><gradient:#2464c8:#8fe9f5>GPS</gradient><gray>]</gray> "
+prefix: "<gray>[</gray><font:minecraft:alt><gradient:#2464c8:#8fe9f5>GPS</gradient></font><gray>]</gray> "
 
 # Palette schema version: a mismatch replaces the file with the bundled one (old -> .bak)
-palette-version: 2
+palette-version: 3
 
-no-permission: "<red>You don't have permission to run this command."
-player-only: "<red>This command is for players only."
-usage: "<red>Usage: <white>{usage}"
-invalid-args: "<red>Invalid arguments. <white>{usage}"
+no-permission: "<red>✖ You don't have permission to run this command."
+player-only: "<red>✖ This command is for players only."
+usage: "<red>✖ Usage: <font:minecraft:uniform><white>{usage}</white></font>"
+invalid-args: "<red>✖ Invalid arguments. <font:minecraft:uniform><white>{usage}</white></font>"
 
 # --- Points ---
-point-created: "<#8fc6ff>Point <white>{name}</white> created."
-point-deleted: "<#8fc6ff>Point <white>{name}</white> deleted."
-point-not-found: "<red>Point <white>{name}</white> not found."
-point-exists: "<red>A point named <white>{name}</white> already exists."
+point-created: "<#8fe9f5>✔</#8fe9f5> <gray>Point</gray> <white>{name}</white> <dark_gray>created.</dark_gray>"
+point-deleted: "<#8fe9f5>✔</#8fe9f5> <gray>Point</gray> <white>{name}</white> <dark_gray>deleted.</dark_gray>"
+point-not-found: "<red>✖ Point <white>{name}</white> not found."
+point-exists: "<red>✖ A point named <white>{name}</white> already exists."
 point-info: |
-  <#8fc6ff>══════════ Point ══════════</#8fc6ff>
+  <font:minecraft:uniform><gradient:#2464c8:#8fe9f5>════════ POINT ════════</gradient></font>
   <gray>Name:</gray> <white>{name}</white>
   <gray>Category:</gray> <white>{category}</white>
-  <gray>Coordinates:</gray> <white>{x}, {y}, {z}</white>
+  <gray>Coordinates:</gray> <font:minecraft:uniform><#8fe9f5>{x}, {y}, {z}</#8fe9f5></font>
   <gray>World:</gray> <white>{world}</white>
-  <gray>Rating:</gray> <#8fe9f5>{rating}/10</#8fe9f5> <dark_gray>(votes: {votes})</dark_gray>
+  <gray>Rating:</gray> <font:minecraft:uniform><#8fe9f5>{rating}/10</#8fe9f5></font> <dark_gray>· votes: <font:minecraft:uniform>{votes}</font></dark_gray>
   <gray>Author:</gray> <white>{author}</white>
-  <gray>Created:</gray> <white>{date}</white>
+  <gray>Created:</gray> <font:minecraft:uniform><white>{date}</white></font>
   <gray>Description:</gray> <white>{description}</white>
-point-rated: "<#8fc6ff>You rated <white>{name}</white> as <#8fe9f5>{rating}</#8fe9f5>."
-invalid-rating: "<red>Rating must be between 1 and 10."
-point-list-header: "<#8fc6ff>═══ All points ({count}) ═══</#8fc6ff>"
-point-list-entry: "<gray>•</gray> <white>{name}</white> <dark_gray>|</dark_gray> <gray>{category}</gray> <dark_gray>|</dark_gray> <#8fe9f5>★{rating}</#8fe9f5> <dark_gray>|</dark_gray> <gray>{distance}m</gray>"
+point-rated: "<#8fe9f5>✔</#8fe9f5> <gray>You rated</gray> <white>{name}</white> <dark_gray>—</dark_gray> <font:minecraft:uniform><#8fe9f5>{rating}</#8fe9f5>/10</font>"
+invalid-rating: "<red>✖ Rating must be between <font:minecraft:uniform>1</font> and <font:minecraft:uniform>10</font>."
+point-list-header: "<font:minecraft:uniform><gradient:#2464c8:#8fe9f5>═══ POINTS ({count}) ═══</gradient></font>"
+point-list-entry: "<gray>•</gray> <white>{name}</white> <dark_gray>|</dark_gray> <gray>{category}</gray> <dark_gray>|</dark_gray> <font:minecraft:uniform><#8fe9f5>★{rating}</#8fe9f5></font> <dark_gray>|</dark_gray> <font:minecraft:uniform><gray>{distance}m</gray></font>"
 
 # --- Categories ---
-category-created: "<#8fc6ff>Category <white>{name}</white> created."
-category-deleted: "<#8fc6ff>Category <white>{name}</white> deleted."
-category-not-found: "<red>Category <white>{name}</white> not found."
-category-exists: "<red>A category with that name already exists."
-cannot-delete-default: "<red>Cannot delete a default category."
-category-list-header: "<#8fc6ff>═══ Categories ({count}) ═══</#8fc6ff>"
-category-list-entry: "<gray>•</gray> <white>{name}</white> <dark_gray>(</dark_gray><gray>{count} points</gray><dark_gray>)</dark_gray>"
+category-created: "<#8fe9f5>✔</#8fe9f5> <gray>Category</gray> <white>{name}</white> <dark_gray>created.</dark_gray>"
+category-deleted: "<#8fe9f5>✔</#8fe9f5> <gray>Category</gray> <white>{name}</white> <dark_gray>deleted.</dark_gray>"
+category-not-found: "<red>✖ Category <white>{name}</white> not found."
+category-exists: "<red>✖ A category with that name already exists."
+cannot-delete-default: "<red>✖ Cannot delete a default category."
+category-list-header: "<font:minecraft:uniform><gradient:#2464c8:#8fe9f5>═══ CATEGORIES ({count}) ═══</gradient></font>"
+category-list-entry: "<gray>•</gray> <white>{name}</white> <dark_gray>(</dark_gray><font:minecraft:uniform><gray>{count}</gray></font> <gray>points</gray><dark_gray>)</dark_gray>"
 
 # --- Routes & navigation ---
-route-started: "<#8fc6ff>Navigation to <white>{name}</white> started. Distance: <#8fe9f5>{distance} m</#8fe9f5>."
-route-stopped: "<#8fc6ff>Navigation stopped."
-no-active-route: "<red>You have no active navigation."
-arrival: "<#8fe9f5>✔ Destination reached!"
+route-started: "<#8fe9f5>✔</#8fe9f5> <gray>Navigation to</gray> <white>{name}</white> <dark_gray>started · remaining</dark_gray> <font:minecraft:uniform><#8fe9f5>{distance} m</#8fe9f5></font>"
+route-stopped: "<#8fe9f5>✔</#8fe9f5> <gray>Navigation stopped.</gray>"
+no-active-route: "<red>✖ You have no active navigation."
+arrival: "<font:minecraft:uniform><#8fe9f5>✔ DESTINATION REACHED</#8fe9f5></font>"
 
 # --- Hints ---
-hint-straight: "<#66aaff>↑ Go straight</#66aaff>"
-hint-slight-right: "<#8fc6ff>↗ Slight right</#8fc6ff>"
-hint-right: "<#8fc6ff>→ Turn right</#8fc6ff>"
-hint-sharp-right: "<#8fe9f5>↘ Sharp right</#8fe9f5>"
-hint-back: "<#3f86ff>↩ Turn around</#3f86ff>"
-hint-sharp-left: "<#8fe9f5>↙ Sharp left</#8fe9f5>"
-hint-left: "<#8fc6ff>← Turn left</#8fc6ff>"
-hint-slight-left: "<#8fc6ff>↖ Slight left</#8fc6ff>"
+hint-straight: "<font:minecraft:uniform><#66aaff>↑ Go straight</#66aaff></font>"
+hint-slight-right: "<font:minecraft:uniform><#8fc6ff>↗ Slight right</#8fc6ff></font>"
+hint-right: "<font:minecraft:uniform><#8fc6ff>→ Turn right</#8fc6ff></font>"
+hint-sharp-right: "<font:minecraft:uniform><#8fe9f5>↘ Sharp right</#8fe9f5></font>"
+hint-back: "<font:minecraft:uniform><#3f86ff>↩ Turn around</#3f86ff></font>"
+hint-sharp-left: "<font:minecraft:uniform><#8fe9f5>↙ Sharp left</#8fe9f5></font>"
+hint-left: "<font:minecraft:uniform><#8fc6ff>← Turn left</#8fc6ff></font>"
+hint-slight-left: "<font:minecraft:uniform><#8fc6ff>↖ Slight left</#8fc6ff></font>"
 
 # --- Logging ---
-log-enabled: "<#8fc6ff>Route logging enabled."
-log-disabled: "<#8fc6ff>Route logging disabled."
+log-enabled: "<#8fe9f5>✔</#8fe9f5> <gray>Route logging enabled.</gray>"
+log-disabled: "<#8fe9f5>✔</#8fe9f5> <gray>Route logging disabled.</gray>"
 
 # --- Search ---
-search-header: "<#8fc6ff>═══ Search results ({count}) ═══</#8fc6ff>"
-search-no-results: "<red>Nothing found for <white>{query}</white>."
-search-entry: "<gray>•</gray> <white>{name}</white> <dark_gray>|</dark_gray> <#8fe9f5>{match}%</#8fe9f5>"
+search-header: "<font:minecraft:uniform><gradient:#2464c8:#8fe9f5>═══ SEARCH ({count}) ═══</gradient></font>"
+search-no-results: "<red>✖ Nothing found for <white>{query}</white>."
+search-entry: "<gray>•</gray> <white>{name}</white> <dark_gray>|</dark_gray> <font:minecraft:uniform><#8fe9f5>{match}%</#8fe9f5></font>"
 
 # --- Misc ---
-reloaded: "<#8fc6ff>HahGps configuration reloaded."
-loading-data: "<gray>Loading data...</gray>"
-error-occurred: "<red>An error occurred: <white>{error}</white>"
-world-not-found: "<red>World <white>{world}</white> not found."
+reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>HahGps configuration reloaded.</gray>"
+loading-data: "<gray>Loading data…</gray>"
+error-occurred: "<red>✖ An error occurred: <white>{error}</white>"
+world-not-found: "<red>✖ World <white>{world}</white> not found."
+# NOTE: distance-format goes into the BossBar as plain text — no MiniMessage tags
 distance-format: "{value} m"
 distance-format-km: "{value} km"
 
 # --- Help ---
-help-header: "<#8fc6ff>═══ GPS commands ═══</#8fc6ff>"
-help-entry: "<#8fc6ff>{usage}</#8fc6ff> <gray>— {description}</gray>"
+help-header: "<font:minecraft:uniform><gradient:#2464c8:#8fe9f5>═══ GPS COMMANDS ═══</gradient></font>"
+help-entry: "<font:minecraft:uniform><#8fc6ff>{usage}</#8fc6ff></font> <dark_gray>──</dark_gray> <gray>{description}</gray>"
 help-menu: "Open main menu"
 help-point: "Manage points"
 help-category: "Manage categories"
@@ -98,17 +108,17 @@ help-edge: "Manage road graph edges"
 help-visual: "Visualize the road graph"
 
 # --- Updates (/gps update) ---
-update-checking: "<#8fc6ff>Checking releases…"
-update-downloading: "<#8fc6ff>Checking and downloading a new version…"
-update-nothing-to-apply: "<#8fc6ff>Nothing to apply: no staged update (run &f/gps update install<#8fc6ff> first)."
-update-hotswap-failed: "<red>Hot swap failed: <white>{reason}</white>"
-update-reloaded: "<#8fc6ff>Update settings reloaded."
+update-checking: "<gray>Checking releases…</gray>"
+update-downloading: "<gray>Checking and downloading a new version…</gray>"
+update-nothing-to-apply: "<red>✖ Nothing to apply: no staged update <dark_gray>(run</dark_gray> <font:minecraft:uniform><white>/gps update install</white></font><dark_gray> first)</dark_gray>."
+update-hotswap-failed: "<red>✖ Hot swap failed: <white>{reason}</white>"
+update-reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>Update settings reloaded.</gray>"
 
 # --- Chat input ---
-input-category-create: "<#8fc6ff>Type the new category name in chat:</#8fc6ff>"
-input-category-delete: "<#8fc6ff>Type the category name to delete in chat:</#8fc6ff>"
-input-rate: "<#8fc6ff>Rate the point from 1 to 10 — type a number in chat:</#8fc6ff>"
-input-search: "<#8fc6ff>Type a search query in chat:</#8fc6ff>"
+input-category-create: "<gray>→ Type the new category name in chat:</gray>"
+input-category-delete: "<gray>→ Type the category name to delete in chat:</gray>"
+input-rate: "<gray>→ Rate the point from</gray> <font:minecraft:uniform><#8fe9f5>1</#8fe9f5></font> <gray>to</gray> <font:minecraft:uniform><#8fe9f5>10</#8fe9f5></font> <dark_gray>— type a number in chat:</dark_gray>"
+input-search: "<gray>→ Type a search query in chat:</gray>"
 
 # --- GUI ---
 gui:
@@ -122,7 +132,7 @@ gui:
   close: "<#3f86ff>✖ Close</#3f86ff>"
   next-page: "<#8fc6ff>→ Next page</#8fc6ff>"
   prev-page: "<#8fc6ff>← Previous page</#8fc6ff>"
-  page-info: "<gray>Page {page}/{pages}</gray>"
+  page-info: "<gray>Page</gray> <font:minecraft:uniform><#8fe9f5>{page}/{pages}</#8fe9f5></font>"
   points-title: "<#8fc6ff>My points</#8fc6ff>"
   categories-title: "<#8fc6ff>Categories</#8fc6ff>"
   search-title: "<#8fc6ff>Search</#8fc6ff>"
@@ -138,11 +148,11 @@ gui:
   zoom-in: "<#8fc6ff>Zoom in</#8fc6ff>"
   zoom-out: "<#8fc6ff>Zoom out</#8fc6ff>"
   recenter: "<#8fc6ff>Recenter on me</#8fc6ff>"
-  rating-stars: "<#8fe9f5>{stars}</#8fe9f5><dark_gray>{empty}</dark_gray>"
-  distance: "<gray>{distance} m</gray>"
+  rating-stars: "<font:minecraft:uniform><#8fe9f5>{stars}</#8fe9f5><dark_gray>{empty}</dark_gray></font>"
+  distance: "<font:minecraft:uniform><gray>{distance}</gray></font>"
   category: "<gray>{category}</gray>"
-  language: "<#8fc6ff>Language: {language}</#8fc6ff>"
-  logging: "<#8fc6ff>Chat hints: {state}</#8fc6ff>"
+  language: "<#8fc6ff>Language:</#8fc6ff> <font:minecraft:uniform><white>{language}</white></font>"
+  logging: "<#8fc6ff>Chat hints:</#8fc6ff> <font:minecraft:uniform><#8fe9f5>{state}</#8fe9f5></font>"
   transport-foot: "<#8fc6ff>On foot</#8fc6ff>"
   transport-car: "<#8fc6ff>Car</#8fc6ff>"
   transport-transit: "<#8fc6ff>Transit</#8fc6ff>"
@@ -152,8 +162,14 @@ gui:
   search-quick: "<#8fc6ff>Quick search</#8fc6ff>"
   search-result-type: "<gray>Point</gray>"
   map-scale: "<#8fc6ff>Map scale</#8fc6ff>"
+  # Plain values without markup: substituted as {state} and escaped
   state-on: "On"
   state-off: "Off"
+
+  # Brand item in the corner (values substituted as arguments)
+  brand-version: "<gray>version</gray> <font:minecraft:uniform><white>{version}</white></font>"
+  brand-project: "<gray>project</gray> <font:minecraft:alt><white>NewJersey</white></font>"
+  brand-style: "<gray>style</gray> <font:minecraft:alt><white>hahtojer</white></font>"
 
   # Button hints (lore)
   lore-my-points: "<gray>View and manage points</gray>"
@@ -161,12 +177,12 @@ gui:
   lore-map: "<gray>Open the area map</gray>"
   lore-search: "<gray>Search points</gray>"
   lore-settings: "<gray>Plugin settings</gray>"
-  lore-category-count: "<gray>Points: <white>{count}</white></gray>"
+  lore-category-count: "<gray>Points: <font:minecraft:uniform><white>{count}</white></font></gray>"
   lore-map-closed: "<red>Map is not open</red>"
-  lore-distance: "<gray>{distance}</gray>"
+  lore-distance: "<font:minecraft:uniform><gray>{distance}</gray></font>"
   lore-search-start: "<gray>Click to start a search</gray>"
   lore-search-name: "<gray>Search by point name</gray>"
-  lore-search-result: "<gray>Match: <white>{percent}%</white></gray>"
+  lore-search-result: "<gray>Match: <font:minecraft:uniform><white>{percent}%</white></font></gray>"
   lore-info: "<gray>Detailed information</gray>"
   lore-goto: "<gray>Build a route</gray>"
   lore-rate: "<gray>Rate (1-10)</gray>"
@@ -180,8 +196,8 @@ gui:
   lore-transport-air: "<gray>Direct flight in a straight line — fast but long</gray>"
   lore-transport-water: "<gray>Route along rivers and other water</gray>"
 
-edge-connected: "<#8fc6ff>Edge <white>{id1} → {id2}</white> created."
-edge-not-found: "<red>Edge not found."
-edge-updated: "<#8fc6ff>Edge updated."
-visual-enabled: "<#8fc6ff>Visualization <white>{type}</white> enabled."
-visual-disabled: "<#8fc6ff>Visualization disabled."
+edge-connected: "<#8fe9f5>✔</#8fe9f5> <gray>Edge</gray> <font:minecraft:uniform><white>{id1} → {id2}</white></font> <dark_gray>created.</dark_gray>"
+edge-not-found: "<red>✖ Edge not found."
+edge-updated: "<#8fe9f5>✔</#8fe9f5> <gray>Edge updated.</gray>"
+visual-enabled: "<#8fe9f5>✔</#8fe9f5> <gray>Visualization</gray> <white>{type}</white> <dark_gray>enabled.</dark_gray>"
+visual-disabled: "<#8fe9f5>✔</#8fe9f5> <gray>Visualization disabled.</gray>"

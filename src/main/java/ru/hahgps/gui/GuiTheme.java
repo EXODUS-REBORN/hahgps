@@ -52,6 +52,20 @@ public final class GuiTheme {
     public static final String GRADIENT_MID = TONES[4];
     public static final String GRADIENT_TAIL = TONES[9];
 
+    /**
+     * Ванильные шрифты (ресурспак не нужен). uniform — пиксельный моноширинный
+     * с полным покрытием (кириллица, цифры, символы): шапки, заголовки, числа.
+     * alt — руны столов зачарований, ТОЛЬКО латиница A-Z/a-z: декоративные
+     * акценты (бренд), цифры и кириллица в нём не отрисуются.
+     */
+    public static final String FONT_UNIFORM = "minecraft:uniform";
+    public static final String FONT_ALT = "minecraft:alt";
+
+    /** Текст в заданном ванильном шрифте (готовая MiniMessage-разметка внутри). */
+    public static String font(String fontKey, String mini) {
+        return "<font:" + fontKey + ">" + mini + "</font>";
+    }
+
     public static Component mm(String mini) {
         return safe(mini);
     }
@@ -87,15 +101,17 @@ public final class GuiTheme {
                 + escapeForMini(text) + "</gradient>";
     }
 
+    /** Заголовок меню: градиент + жирный + моноширинный шрифт uniform. */
     public static Component gradientTitle(String text) {
-        return safe("<gradient:" + GRADIENT_START + ":" + GRADIENT_MID + ":" + GRADIENT_TAIL
-                + "><bold>" + escapeForMini(text) + "</bold></gradient>");
+        return safe(font(FONT_UNIFORM,
+                "<gradient:" + GRADIENT_START + ":" + GRADIENT_MID + ":" + GRADIENT_TAIL
+                        + "><bold>" + escapeForMini(text) + "</bold></gradient>"));
     }
 
     public static Component gradientTitle(String text, String tail) {
         Component head = gradientTitle(text);
         if (tail == null || tail.isBlank()) return head;
-        return head.append(safe(" <dark_gray>\u2022</dark_gray> " + toned(6, tail)));
+        return head.append(safe(font(FONT_UNIFORM, " <dark_gray>\u2022</dark_gray> " + toned(6, tail))));
     }
 
     static String escapeForMini(String s) {
@@ -336,11 +352,11 @@ public final class GuiTheme {
         return named(Material.BARRIER, toned(5, text));
     }
 
-    public static ItemStack brand(String version) {
-        return named(Material.PAPER, gradient("HahGPS"), List.of(
-                toned(6, "версия") + " " + VALUE_COLOR + (version == null ? "" : version),
-                toned(6, "для проекта") + " " + VALUE_COLOR + "NewJersey",
-                toned(6, "стиль меню") + " " + VALUE_COLOR + "hahtojer"));
+    /** Бренд-предмет: имя в фирменном градиенте, пояснения приходят из messages_*.yml. */
+    public static ItemStack brand(List<String> loreLines) {
+        List<String> lore = loreLines == null ? List.of() : loreLines;
+        return named(Material.PAPER,
+                font(FONT_ALT, gradient("HahGPS")), lore);
     }
 
     public static void click(Player p) {

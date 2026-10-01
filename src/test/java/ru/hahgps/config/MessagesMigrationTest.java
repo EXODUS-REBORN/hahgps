@@ -21,13 +21,14 @@ class MessagesMigrationTest {
     @Test
     void oldPrefixBecomesTheBrandedGradient() {
         String migrated = MessagesManager.remapPalette("<#8fc6ff>[GPS]<reset> ");
-        assertEquals("<gray>[</gray><gradient:#2464c8:#8fe9f5>GPS</gradient><gray>]</gray> ", migrated);
+        assertEquals("<gray>[</gray><font:minecraft:alt><gradient:#2464c8:#8fe9f5>GPS</gradient></font><gray>]</gray> ",
+                migrated);
         assertFalse(migrated.contains("[GPS]<reset>"), "старый префикс не заменён");
     }
 
     @Test
     void cleanStringsAreUntouched() {
-        String clean = "<gray>[</gray><gradient:#2464c8:#8fe9f5>GPS</gradient><gray>]</gray> "
+        String clean = "<gray>[</gray><font:minecraft:alt><gradient:#2464c8:#8fe9f5>GPS</gradient></font><gray>]</gray> "
                 + "<red>Ошибка</red> <white>Значение</white>";
         assertEquals(clean, MessagesManager.remapPalette(clean));
     }
