@@ -1,36 +1,49 @@
 package ru.hahgps.gui;
-import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import java.util.HashMap;
+
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 public class InputManager {
 
-    private static InputManager instance;
+    /** Сколько времени ждём ответа в чате, прежде чем снять запрос (мс). */
+    private static final long TIMEOUT_MS = 60_000L;
 
-    private final Map<UUID, Consumer<String>> pending = new HashMap<>();
+    private record Pending(Consumer<String> callback, long createdAt) {
+    }
+
+    private static InputManager instance = new InputManager();
+
+    // Чат приходит из асинхронного потока — только потокобезопасная коллекция
+    private final Map<UUID, Pending> pending = new ConcurrentHashMap<>();
 
     public static InputManager getInstance() {
-        if (instance == null) {
-            instance = new InputManager();
-        }
         return instance;
     }
 
-    public void request(Player player, Component prompt, Consumer<String> callback) {
-        pending.put(player.getUniqueId(), callback);
+    public void request(Player player, net.kyori.adventure.text.Component prompt, Consumer<String> callback) {
+        pending.put(player.getUniqueId(), new Pending(callback, System.currentTimeMillis()));
         player.sendMessage(prompt);
     }
 
     public boolean handleChat(Player player, String message) {
-        Consumer<String> callback = pending.remove(player.getUniqueId());
-        if (callback != null) {
-            callback.accept(message);
-            return true;
+        Pending entry = pending.remove(player.getUniqueId());
+        if (entry == null) {
+            return false;
         }
-        return false;
+        if (System.currentTimeMillis() - entry.createdAt() > TIMEOUT_MS) {
+            // Время вышло — пускаем сообщение в обычный чат
+            return false;
+        }
+        try {
+            entry.callback().accept(message);
+        } catch (Throwable t) {
+            Bukkit.getLogger().warning("[HahGps] Ошибка обработки ввода: " + t);
+        }
+        return true;
     }
 
     public boolean isPending(Player player) {

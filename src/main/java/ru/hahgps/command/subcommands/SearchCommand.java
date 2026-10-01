@@ -31,18 +31,23 @@ public class SearchCommand implements SubCommand {
             return;
         }
         String query = String.join(" ", args);
-        plugin.getSearchService().search(query).thenAcceptAsync(results -> {
+        plugin.getSearchService().search(query).whenComplete((results, error) -> {
             plugin.getDataService().runSync(() -> {
                 if (!player.isOnline()) {
                     return;
                 }
+                if (error != null) {
+                    ru.hahgps.command.SubCommand.sendError(player, error);
+                    return;
+                }
                 var messages = plugin.getMessages();
-                if (results.isEmpty()) {
+                var list = results == null ? List.<SearchService.SearchResult>of() : results;
+                if (list.isEmpty()) {
                     player.sendMessage(messages.getPrefixed("search-no-results", "query", query));
                     return;
                 }
-                player.sendMessage(messages.getPrefixed("search-header", "count", String.valueOf(results.size())));
-                for (SearchService.SearchResult result : results) {
+                player.sendMessage(messages.getPrefixed("search-header", "count", String.valueOf(list.size())));
+                for (SearchService.SearchResult result : list) {
                     player.sendMessage(messages.getPrefixed("search-entry",
                             "name", result.name,
                             "match", String.valueOf((int) (result.similarity * 100))));
@@ -54,7 +59,18 @@ public class SearchCommand implements SubCommand {
     @Override
     public List<String> tabComplete(Player player, String[] args) {
         if (args.length == 1) {
-            return List.of("<запрос>");
+            // подсказываем имена точек из кэша (без запроса к БД на главном потоке)
+            String prefix = args[0].toLowerCase();
+            java.util.List<String> names = new java.util.ArrayList<>();
+            for (var poi : HahGpsPlugin.getInstance().getDataService().getCachedPois()) {
+                if (poi.getName().toLowerCase().startsWith(prefix)) {
+                    names.add(poi.getName());
+                }
+                if (names.size() >= 30) {
+                    break;
+                }
+            }
+            return names;
         }
         return List.of();
     }

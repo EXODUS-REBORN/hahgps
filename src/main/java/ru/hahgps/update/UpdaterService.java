@@ -43,7 +43,9 @@ public final class UpdaterService {
     private boolean hotApply = true;
     private String token = "";
     private String api = API;
-    private BukkitTask task;
+    private volatile BukkitTask task;
+    /** false после stop(): отложенный async-скан не должен перезапустить проверку. */
+    private volatile boolean active;
     private volatile boolean busy;
     private volatile String lastError = "";
     private volatile long lastCheckMs;
@@ -214,7 +216,7 @@ public final class UpdaterService {
         return repo;
     }
 
-    public void start() {
+    public synchronized void start() {
         reload();
         HotSwap.reset();
         if (!BuildToken.enabled()) {
@@ -222,37 +224,73 @@ public final class UpdaterService {
             plugin.getLogger().info("Обновление: в этой сборке нет токена — проверка подлинности "
                     + "скачиваемого файла пропускается; включится сама после обновления.");
         }
-        stagedJar = newestStagedOnDisk();
-        stagedVersion = stagedJar == null ? "" : versionFromJarName(stagedJar);
-        if (stagedJar != null) {
-            plugin.getLogger().info("Обновление: подготовлен " + stagedJar.getFileName()
-                    + (hotApply ? " — поставится на ходу, без рестарта сервера."
-                                : " — применится при выключении сервера."));
-            if (hotApply && enabled) {
-
-                final Path staged = stagedJar;
-                Bukkit.getScheduler().runTaskLater(plugin,
-                        () -> HotSwap.apply(plugin, staged, false, text -> { }), 20L * 20L);
-            }
+        active = true;
+        try {
+            // сканирование update/ (чтение jar, проверка токена) уходит с главного потока
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, this::scanStagedAndSchedule);
+        } catch (Throwable t) {
+            active = false;
+            plugin.getLogger().warning("Обновление: не удалось запустить проверку ("
+                    + (t.getMessage() == null ? t.toString() : t.getMessage()) + ").");
         }
-        if (!enabled) {
-            plugin.getLogger().info("Обновление: автопроверка выключена (обновление.включено: false).");
-            return;
-        }
-        if (intervalMinutes <= 0) {
-            plugin.getLogger().info("Обновление: периодическая проверка выключена (интервал-минут: 0).");
-            return;
-        }
-        long period = intervalMinutes * 60L * 20L;
-
-        task = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin,
-                () -> checkAsync(text -> { }, autoDownload), 20L * 60L, period);
     }
 
-    public void stop() {
-        if (task != null) {
-            task.cancel();
-            task = null;
+    /** async: диск и таймеры — вне главного потока. */
+    private void scanStagedAndSchedule() {
+        if (!active || !plugin.isEnabled()) {
+            return;
+        }
+        try {
+            Path jar = newestStagedOnDisk();
+            stagedJar = jar;
+            stagedVersion = jar == null ? "" : versionFromJarName(jar);
+            if (jar != null) {
+                plugin.getLogger().info("Обновление: подготовлен " + jar.getFileName()
+                        + (hotApply ? " — поставится на ходу, без рестарта сервера."
+                                    : " — применится при выключении сервера."));
+                if (hotApply && enabled) {
+                    final Path staged = jar;
+                    try {
+                        Bukkit.getScheduler().runTaskLater(plugin,
+                                () -> HotSwap.apply(plugin, staged, false, text -> { }), 20L * 20L);
+                    } catch (Throwable t) {
+                        plugin.getLogger().warning("Обновление: не удалось запланировать применение ("
+                                + (t.getMessage() == null ? t.toString() : t.getMessage()) + ").");
+                    }
+                }
+            }
+            if (!active || !plugin.isEnabled()) {
+                return;
+            }
+            if (!enabled) {
+                plugin.getLogger().info("Обновление: автопроверка выключена (обновление.включено: false).");
+                return;
+            }
+            if (intervalMinutes <= 0) {
+                plugin.getLogger().info("Обновление: периодическая проверка выключена (интервал-минут: 0).");
+                return;
+            }
+            long period = intervalMinutes * 60L * 20L;
+            BukkitTask timer = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin,
+                    () -> checkAsync(text -> { }, autoDownload), 20L * 60L, period);
+            if (active) {
+                task = timer;
+            } else {
+                // stop() успел вызваться, пока сканировали диск — таймер не должен пережить остановку
+                timer.cancel();
+            }
+        } catch (Throwable t) {
+            plugin.getLogger().warning("Обновление: автопроверка не запущена ("
+                    + (t.getMessage() == null ? t.toString() : t.getMessage()) + ").");
+        }
+    }
+
+    public synchronized void stop() {
+        active = false;
+        BukkitTask current = task;
+        task = null;
+        if (current != null) {
+            current.cancel();
         }
     }
 
@@ -267,8 +305,9 @@ public final class UpdaterService {
         }
         busy = true;
         String current = currentVersion();
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            try {
+        try {
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                try {
                 Release release = fetchLatest();
                 lastCheckMs = System.currentTimeMillis();
                 lastError = "";
@@ -333,7 +372,15 @@ public final class UpdaterService {
             } finally {
                 busy = false;
             }
-        });
+            });
+        } catch (Throwable t) {
+            // например, плагин уже выгружен: без этого флага busy навсегда остался бы true
+            // и ни одна следующая проверка не прошла бы
+            busy = false;
+            String message = t.getMessage() == null ? t.toString() : t.getMessage();
+            plugin.getLogger().warning("Обновление: не удалось запустить проверку (" + message + ")");
+            reply(feedback, "Не удалось запустить проверку обновления: " + message);
+        }
     }
 
     private Release fetchLatest() throws IOException, InterruptedException {
@@ -419,47 +466,60 @@ public final class UpdaterService {
 
     static void ensureJar(Path file) throws IOException {
         byte[] head = new byte[4];
+        boolean zipHeader;
         try (InputStream in = Files.newInputStream(file)) {
-            if (in.readNBytes(head, 0, head.length) == head.length
-                    && head[0] == 0x50 && head[1] == 0x4B && head[2] == 0x03 && head[3] == 0x04) {
-                return;
-            }
+            zipHeader = in.readNBytes(head, 0, head.length) == head.length
+                    && head[0] == 0x50 && head[1] == 0x4B && head[2] == 0x03 && head[3] == 0x04;
         }
-        long size = Files.size(file);
-        String preview;
-        try (InputStream in = Files.newInputStream(file)) {
-            byte[] chunk = in.readNBytes(120);
-            StringBuilder sb = new StringBuilder(chunk.length + 3);
-            for (byte b : chunk) {
-                char c = (char) (b & 0xFF);
-                sb.append(c >= 0x20 && c < 0x7F ? c : '.');
+        if (!zipHeader) {
+            long size = Files.size(file);
+            String preview;
+            try (InputStream in = Files.newInputStream(file)) {
+                byte[] chunk = in.readNBytes(120);
+                StringBuilder sb = new StringBuilder(chunk.length + 3);
+                for (byte b : chunk) {
+                    char c = (char) (b & 0xFF);
+                    sb.append(c >= 0x20 && c < 0x7F ? c : '.');
+                }
+                preview = sb.append("...").toString().replaceAll("\\s+", " ");
+            } catch (IOException e) {
+                preview = "?";
             }
-            preview = sb.append("...").toString().replaceAll("\\s+", " ");
-        } catch (IOException e) {
-            preview = "?";
+            throw new IOException("скачанный файл не jar (" + size + " байт), начинается с: " + preview);
         }
-        throw new IOException("скачанный файл не jar (" + size + " байт), начинается с: " + preview);
+        // заголовок PK бывает и у обрезанного файла — проверяем, что это действительно
+        // читаемый архив с plugin.yml, иначе битый jar доедет до plugins/ и уронит загрузку
+        try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(file.toFile(),
+                java.nio.charset.StandardCharsets.UTF_8)) {
+            if (zip.getEntry("plugin.yml") == null) {
+                throw new IOException("в скачанном файле нет plugin.yml — это не jar плагина");
+            }
+        } catch (java.util.zip.ZipException e) {
+            throw new IOException("скачанный jar повреждён: " + e.getMessage());
+        }
     }
 
     private void fetchAsset(Release release, Path tmp) throws Exception {
-
+        // ofByteArray + timeout на запросе: тело ответа читается целиком внутри запроса,
+        // поэтому 30-секундный таймаут ограничивает И заголовки, И скачивание.
+        // Старый вариант (ofInputStream) не имел ни одного ограничения на чтение тела —
+        // зависший сокет держал бы поток проверки вечно.
         HttpRequest request = api("/repos/" + repo + "/releases/assets/" + release.assetId())
                 .setHeader("Accept", "application/octet-stream")
+                // jar может качаться долго — общие 30 секунд api() слишком узки для тела
+                .timeout(Duration.ofMinutes(5))
                 .GET()
                 .build();
-        HttpResponse<InputStream> response = http.send(request,
-                HttpResponse.BodyHandlers.ofInputStream());
-
-        try (InputStream raw = openAssetStream(response)) {
-            Files.copy(raw, tmp, StandardCopyOption.REPLACE_EXISTING);
-        }
+        HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        Files.write(tmp, followAssetRedirect(response));
     }
 
-    private InputStream openAssetStream(HttpResponse<InputStream> response) throws Exception {
+    private byte[] followAssetRedirect(HttpResponse<byte[]> response) throws Exception {
         int code = response.statusCode();
-        if (code == 200) return response.body();
+        if (code == 200) {
+            return response.body();
+        }
         if (code / 100 == 3) {
-            response.body().close();
             String location = response.headers().firstValue("location")
                     .orElseThrow(() -> new IOException("редирект без заголовка Location"));
             if (!location.startsWith("https://")) {
@@ -470,14 +530,12 @@ public final class UpdaterService {
                     .header("User-Agent", "hahgps-updater")
                     .GET()
                     .build();
-            HttpResponse<InputStream> second = http.send(follow, HttpResponse.BodyHandlers.ofInputStream());
+            HttpResponse<byte[]> second = http.send(follow, HttpResponse.BodyHandlers.ofByteArray());
             if (second.statusCode() != 200) {
-                second.body().close();
                 throw new IOException("скачивание: HTTP " + second.statusCode());
             }
             return second.body();
         }
-        response.body().close();
         throw new IOException("скачивание: HTTP " + code);
     }
 
@@ -617,10 +675,12 @@ public final class UpdaterService {
                 if (!isNewer(version, current)) continue;
 
                 try {
+                    // до проверки токена: если OWN пуст, verify() — no-op, а битый архив отсеять всё равно нужно
+                    ensureJar(file);
                     BuildToken.verify(file);
                 } catch (IOException e) {
                     plugin.getLogger().warning("Обновление: файл " + file.getFileName()
-                            + " не прошёл проверку токена (" + e.getMessage() + ") — пропускаю.");
+                            + " не прошёл проверку (" + e.getMessage() + ") — пропускаю.");
                     continue;
                 }
                 if (best == null || isNewer(version, versionFromJarName(best))) best = file;
@@ -684,9 +744,11 @@ public final class UpdaterService {
 
     private void announce(String text) {
         runOnMain(() -> {
+            var messages = plugin.getMessages();
             for (var player : Bukkit.getOnlinePlayers()) {
                 if (player.hasPermission("gps.admin") || player.isOp()) {
-                    player.sendMessage("§b" + text);
+                    // тон палитры hahtojer вместо §b
+                    player.sendMessage(messages.getComponentRaw("<#8fc6ff>" + text));
                 }
             }
         });

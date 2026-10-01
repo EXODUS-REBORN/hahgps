@@ -1,18 +1,33 @@
 package ru.hahgps.gui;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.model.TransportType;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
+/**
+ * Выбор вида транспорта. Показываются только типы, включённые в config.yml
+ * (transport.foot / car / transit / air / water); по умолчанию — пешком и авто.
+ */
 public class TransportSelectGui extends GuiScreen {
 
+    /** Слоты ряда 9-17 под 1..5 кнопок — симметрично относительно центра. */
+    private static final int[][] LAYOUT = {
+            {13},
+            {11, 15},
+            {10, 13, 16},
+            {10, 12, 14, 16},
+            {9, 11, 13, 15, 17}
+    };
+
     private final Consumer<TransportType> callback;
+    private final Map<Integer, TransportType> slotToType = new HashMap<>();
 
     public TransportSelectGui(Player player, Consumer<TransportType> callback) {
         super(player);
@@ -29,39 +44,68 @@ public class TransportSelectGui extends GuiScreen {
         return 27;
     }
 
+    private List<TransportType> availableTypes() {
+        HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+        List<TransportType> list = new ArrayList<>();
+        for (TransportType type : TransportType.values()) {
+            if (plugin.getConfigManager().isTransportAvailable(type.getKey())) {
+                list.add(type);
+            }
+        }
+        if (list.isEmpty()) {
+            list.add(TransportType.FOOT);
+            list.add(TransportType.CAR);
+        }
+        return list;
+    }
+
+    private static Material iconFor(TransportType type) {
+        return switch (type) {
+            case FOOT -> Material.LEATHER_BOOTS;
+            case CAR -> Material.MINECART;
+            case TRANSIT -> Material.CLOCK;
+            case AIR -> Material.FEATHER;
+            case WATER -> Material.OAK_BOAT;
+        };
+    }
+
     @Override
     public void build() {
-        inventory.setItem(11, GuiUtil.item(Material.LEATHER_BOOTS,
-                HahGpsPlugin.getInstance().getMessages().getComponent("gui.transport-foot"),
-                List.of(Component.text("Маршрут по тропинкам и пешеходным переходам", NamedTextColor.AQUA))));
+        List<TransportType> types = availableTypes();
+        int[] slots = LAYOUT[Math.min(types.size(), LAYOUT.length) - 1];
+        slotToType.clear();
 
-        inventory.setItem(15, GuiUtil.item(Material.MINECART,
-                HahGpsPlugin.getInstance().getMessages().getComponent("gui.transport-car"),
-                List.of(Component.text("Маршрут по дорогам для авто", NamedTextColor.AQUA))));
+        for (int i = 0; i < types.size() && i < slots.length; i++) {
+            TransportType type = types.get(i);
+            slotToType.put(slots[i], type);
+            inventory.setItem(slots[i], GuiUtil.item(iconFor(type),
+                    comp("gui.transport-" + type.getKey()),
+                    lore("gui.lore-transport-" + type.getKey())));
+        }
 
-        inventory.setItem(22, GuiUtil.item(Material.ARROW,
-                HahGpsPlugin.getInstance().getMessages().getComponent("gui.back")));
+        inventory.setItem(22, GuiTheme.navBack(getMsg("gui.back")));
 
         for (int i = 0; i < size(); i++) {
             if (inventory.getItem(i) == null) {
                 inventory.setItem(i, GuiUtil.filler());
             }
         }
+        putBrand();
     }
 
     @Override
     public void onClick(int slot, ClickType clickType) {
-        HahGpsPlugin plugin = HahGpsPlugin.getInstance();
-        switch (slot) {
-            case 11 -> {
-                player.closeInventory();
-                callback.accept(TransportType.FOOT);
+        if (slot == 22) {
+            player.closeInventory();
+            return;
+        }
+        TransportType type = slotToType.get(slot);
+        if (type != null) {
+            GuiTheme.click(player);
+            player.closeInventory();
+            if (callback != null) {
+                callback.accept(type);
             }
-            case 15 -> {
-                player.closeInventory();
-                callback.accept(TransportType.CAR);
-            }
-            case 22 -> player.closeInventory();
         }
     }
 }

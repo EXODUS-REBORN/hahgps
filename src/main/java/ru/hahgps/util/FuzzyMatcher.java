@@ -1,15 +1,23 @@
 package ru.hahgps.util;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 public final class FuzzyMatcher {
     private FuzzyMatcher() {
     }
+
     public static int levenshtein(String a, String b) {
         if (a == null || b == null) {
             return Integer.MAX_VALUE;
         }
-        a = a.toLowerCase();
-        b = b.toLowerCase();
+        return levenshteinLower(a.toLowerCase(Locale.ROOT), b.toLowerCase(Locale.ROOT));
+    }
+
+    /** Левенштейн для уже нормализованных (lowercase) строк — без повторных аллокаций строк. */
+    private static int levenshteinLower(String a, String b) {
+        if (a.equals(b)) {
+            return 0;
+        }
         int[] prev = new int[b.length() + 1];
         int[] curr = new int[b.length() + 1];
         for (int j = 0; j <= b.length(); j++) {
@@ -28,28 +36,42 @@ public final class FuzzyMatcher {
         return prev[b.length()];
     }
 
+    /**
+     * Верхняя оценка похожести только по разнице длин: если она уже ниже порога,
+     * полный проход Левенштейна бессмысленен (используется в горячем поиске).
+     */
+    public static double upperBound(String a, String b) {
+        if (a == null || b == null) {
+            return 0.0;
+        }
+        int la = a.length();
+        int lb = b.length();
+        int maxLen = Math.max(la, lb);
+        if (maxLen == 0) {
+            return 1.0;
+        }
+        return 1.0 - (double) Math.abs(la - lb) / maxLen;
+    }
+
     public static double similarity(String a, String b) {
         if (a == null || b == null) {
             return 0.0;
         }
-        a = a.toLowerCase();
-        b = b.toLowerCase();
-        if (a.isEmpty() && b.isEmpty()) {
-            return 1.0;
-        }
+        a = a.toLowerCase(Locale.ROOT);
+        b = b.toLowerCase(Locale.ROOT);
         int maxLen = Math.max(a.length(), b.length());
         if (maxLen == 0) {
             return 1.0;
         }
-        return 1.0 - (double) levenshtein(a, b) / maxLen;
+        return 1.0 - (double) levenshteinLower(a, b) / maxLen;
     }
 
     public static boolean matches(String query, String target, double threshold) {
         if (query == null || target == null) {
             return false;
         }
-        String q = query.toLowerCase().trim();
-        String t = target.toLowerCase().trim();
+        String q = query.toLowerCase(Locale.ROOT).trim();
+        String t = target.toLowerCase(Locale.ROOT).trim();
         if (q.isEmpty()) {
             return true;
         }
@@ -60,16 +82,28 @@ public final class FuzzyMatcher {
     }
 
     public static List<Match> findBest(String query, List<String> targets, int limit, double threshold) {
+        if (query == null || targets == null || limit <= 0) {
+            return new ArrayList<>();
+        }
         List<Match> results = new ArrayList<>();
+        String queryLower = query.toLowerCase(Locale.ROOT);
         for (String target : targets) {
-            double sim = similarity(query, target);
+            if (target == null) {
+                continue;
+            }
+            // upperBound — максимально возможная похожесть для данной пары длин;
+            // если она ниже порога, полный Левенштейн бессмысленен
+            if (upperBound(query, target) < threshold) {
+                continue;
+            }
+            double sim = similarity(queryLower, target);
             if (sim >= threshold) {
                 results.add(new Match(target, sim));
             }
         }
         results.sort((a, b) -> Double.compare(b.similarity, a.similarity));
         if (results.size() > limit) {
-            return results.subList(0, limit);
+            return new ArrayList<>(results.subList(0, limit));
         }
         return results;
     }

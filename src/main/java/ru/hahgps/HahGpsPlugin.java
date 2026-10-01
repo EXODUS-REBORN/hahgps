@@ -27,7 +27,8 @@ public class HahGpsPlugin extends JavaPlugin {
 
     private ConfigManager configManager;
     private MessagesManager messagesManager;
-    private DataService dataService;
+    /** volatile: создаётся в async-потоке инициализации, читается главным потоком. */
+    private volatile DataService dataService;
     private StorageProvider storageProvider;
 
     private PoiService poiService;
@@ -55,7 +56,23 @@ public class HahGpsPlugin extends JavaPlugin {
         messagesManager = new MessagesManager(this);
         messagesManager.load(configManager.getLanguage());
 
+        // Команда доступна сразу: до готовности хранилища игрок получает
+        // «Загрузка данных...», а не usage от Bukkit или NPE внутри подкоманд.
+        registerPendingCommand();
+
         initStorage();
+    }
+
+    private void registerPendingCommand() {
+        var cmd = getCommand("gps");
+        if (cmd == null) {
+            return;
+        }
+        cmd.setExecutor((sender, command, label, args) -> {
+            sender.sendMessage(getMessages().getPrefixed("loading-data"));
+            return true;
+        });
+        cmd.setTabCompleter((sender, command, label, args) -> new java.util.ArrayList<>());
     }
 
     private void initStorage() {
@@ -76,53 +93,116 @@ public class HahGpsPlugin extends JavaPlugin {
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
                 storageProvider.init();
-                dataService = new DataService(this, storageProvider);
-                dataService.loadCache().thenRun(this::onStorageReady);
+                DataService service = new DataService(this, storageProvider);
+                dataService = service;
+                service.loadCache().whenComplete((v, error) -> {
+                    if (!isEnabled()) {
+                        return; // плагин выключили, пока читалась БД — это не ошибка
+                    }
+                    if (error != null) {
+                        getLogger().log(Level.SEVERE, "Failed to load HahGps data cache", error);
+                        failStartup();
+                        return;
+                    }
+                    try {
+                        // регистрации слушателей/команд — только на главном потоке
+                        Bukkit.getScheduler().runTask(this, this::onStorageReady);
+                    } catch (Throwable t) {
+                        getLogger().log(Level.SEVERE, "HahGps: failed to schedule startup", t);
+                    }
+                });
             } catch (Exception e) {
                 getLogger().log(Level.SEVERE, "Failed to initialize storage", e);
-                Bukkit.getScheduler().runTask(this, () -> {
-                    getLogger().severe("HahGps: storage initialization failed. Disabling.");
-                    getServer().getPluginManager().disablePlugin(this);
-                });
+                failStartup();
             }
         });
     }
 
-    private void onStorageReady() {
-
-        poiService = new PoiService(dataService);
-        categoryService = new CategoryService(dataService);
-        graphService = new GraphService(dataService);
-        graphService.loadGraph();
-        routeService = new RouteService(graphService);
-        navigationService = new NavigationService(this, configManager, messagesManager);
-        searchService = new SearchService(dataService,
-                configManager.getSearchMaxResults(), configManager.getSearchThreshold());
-        mapService = new MapService(this);
-        visualizationService = new VisualizationService(graphService);
-        hudService = new HudService();
-        commandManager = new CommandManager(this);
-
-        categoryService.seedDefaults(configManager.getDefaultCategories());
-
-        var cmd = getCommand("gps");
-        if (cmd != null) {
-            cmd.setExecutor(commandManager);
-            cmd.setTabCompleter(commandManager);
+    /** Ошибка инициализации хранилища: закрываем соединение, выключаем плагин на главном потоке. */
+    private void failStartup() {
+        if (dataService == null && storageProvider != null) {
+            // пул ещё не создан (упал сам init()) — соединение здесь никем не занято
+            try {
+                storageProvider.close();
+            } catch (Throwable ignored) {
+            }
         }
+        try {
+            // закрытие пула — только на главном потоке: внутри воркера оно ждало бы
+            // завершения собственной задачи (deadlock на awaitTermination)
+            Bukkit.getScheduler().runTask(this, () -> {
+                if (dataService != null) {
+                    try {
+                        dataService.shutdown();
+                    } catch (Throwable ignored) {
+                    }
+                    dataService = null;
+                }
+                getLogger().severe("HahGps: storage initialization failed. Disabling.");
+                if (isEnabled()) {
+                    getServer().getPluginManager().disablePlugin(this);
+                }
+            });
+        } catch (Throwable ignored) {
+            // плагин уже выгружен
+        }
+    }
 
-        Bukkit.getPluginManager().registerEvents(new GuiListener(), this);
-        Bukkit.getPluginManager().registerEvents(new ChatInputListener(), this);
-        Bukkit.getPluginManager().registerEvents(new PlayerQuitListener(), this);
+    /** Вызывается ТОЛЬКО на главном потоке после успешной загрузки хранилища. */
+    private void onStorageReady() {
+        if (!isEnabled()) {
+            return;
+        }
+        try {
+            poiService = new PoiService(dataService);
+            categoryService = new CategoryService(dataService);
+            graphService = new GraphService(dataService);
+            graphService.loadGraph().whenComplete((v, error) -> {
+                if (error != null) {
+                    getLogger().log(Level.SEVERE, "HahGps: road graph was not loaded", error);
+                }
+            });
+            routeService = new RouteService(graphService);
+            navigationService = new NavigationService(this, configManager, messagesManager);
+            searchService = new SearchService(dataService,
+                    configManager.getSearchMaxResults(), configManager.getSearchThreshold());
+            mapService = new MapService(this);
+            visualizationService = new VisualizationService(graphService);
+            hudService = new HudService();
+            commandManager = new CommandManager(this);
 
-        navigationService.start();
-        Bukkit.getScheduler().runTaskTimer(this, () -> visualizationService.tick(), 20L, 20L);
+            categoryService.seedDefaults(configManager.getDefaultCategories())
+                    .whenComplete((v, error) -> {
+                        if (error != null) {
+                            getLogger().log(Level.WARNING,
+                                    "HahGps: default categories were not seeded", error);
+                        }
+                    });
 
-        initUpdater();
+            var cmd = getCommand("gps");
+            if (cmd != null) {
+                cmd.setExecutor(commandManager);
+                cmd.setTabCompleter(commandManager);
+            }
 
-        ready = true;
-        ConsoleBanner.printBanner(getLogger(), getPluginMeta().getVersion());
-        getLogger().info("HahGps enabled. Storage: " + configManager.getStorageType());
+            Bukkit.getPluginManager().registerEvents(new GuiListener(), this);
+            Bukkit.getPluginManager().registerEvents(new ChatInputListener(), this);
+            Bukkit.getPluginManager().registerEvents(new PlayerQuitListener(), this);
+
+            navigationService.start();
+            Bukkit.getScheduler().runTaskTimer(this, () -> visualizationService.tick(), 20L, 20L);
+
+            initUpdater();
+
+            ready = true;
+            ConsoleBanner.printBanner(this, getPluginMeta().getVersion());
+            getLogger().info("HahGps enabled. Storage: " + configManager.getStorageType());
+        } catch (Throwable t) {
+            // иначе исключение «проглотится» планировщиком и плагин останется висеть в «загрузке»
+            getLogger().log(Level.SEVERE, "HahGps: startup failed", t);
+            ready = false;
+            failStartup();
+        }
     }
 
     private void initUpdater() {
@@ -137,36 +217,70 @@ public class HahGpsPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         ready = false;
-        if (navigationService != null) {
-            navigationService.stop();
-        }
-        if (mapService != null) {
-            mapService.stop();
-        }
-        if (visualizationService != null) {
-            for (var player : Bukkit.getOnlinePlayers()) {
-                visualizationService.disableAll(player);
-            }
-        }
-        GuiManager.getInstance().closeAll();
-        if (dataService != null) {
-            dataService.shutdown();
+
+        // 1. обновлятор: сначала глушим фоновую проверку, чтобы она не запланировала задачу в выгружаемый плагин
+        UpdaterService service = updater;
+        updater = null;
+        if (service != null) {
+            service.stop();
         }
 
-        if (updater != null) {
-            UpdaterService service = updater;
-            if (!hotSwapping) {
-                try {
-                    if (service.applyStaged()) {
-                        getLogger().info("Новая версия загрузится при следующем запуске сервера.");
-                    }
-                } catch (Exception e) {
-                    getLogger().log(Level.WARNING, "Не удалось применить обновление", e);
+        // 2. таски и визуализация (каждый шаг изолирован — упавший не должен мешать сбросу данных)
+        try {
+            if (navigationService != null) {
+                navigationService.stop();
+            }
+        } catch (Throwable t) {
+            getLogger().log(Level.WARNING, "HahGps: navigation stop failed", t);
+        }
+        try {
+            if (mapService != null) {
+                mapService.stop();
+            }
+        } catch (Throwable t) {
+            getLogger().log(Level.WARNING, "HahGps: map stop failed", t);
+        }
+        try {
+            if (visualizationService != null) {
+                for (var player : Bukkit.getOnlinePlayers()) {
+                    visualizationService.disableAll(player);
                 }
             }
-            updater.stop();
-            updater = null;
+        } catch (Throwable t) {
+            getLogger().log(Level.WARNING, "HahGps: visualization cleanup failed", t);
         }
+        try {
+            GuiManager.getInstance().closeAll();
+        } catch (Throwable t) {
+            getLogger().log(Level.WARNING, "HahGps: GUI cleanup failed", t);
+        }
+
+        // 3. хранилище — в конце: начатые записи должны дожиться до конца (дозапись), соединение закрывается последним
+        if (dataService != null) {
+            try {
+                dataService.shutdown();
+            } catch (Throwable t) {
+                getLogger().log(Level.WARNING, "HahGps: storage shutdown failed", t);
+            }
+            dataService = null;
+        } else if (storageProvider != null) {
+            try {
+                storageProvider.close();
+            } catch (Throwable ignored) {
+            }
+        }
+
+        // 4. применяем подготовленное обновление (кроме hot-swap — там jar уже подменён)
+        if (service != null && !hotSwapping) {
+            try {
+                if (service.applyStaged()) {
+                    getLogger().info("Новая версия загрузится при следующем запуске сервера.");
+                }
+            } catch (Exception e) {
+                getLogger().log(Level.WARNING, "Не удалось применить обновление", e);
+            }
+        }
+
         getLogger().info("HahGps disabled.");
     }
 

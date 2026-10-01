@@ -121,6 +121,15 @@ public final class HotSwap {
             reply(feedback, textMissing);
             return new Result(false, version, "файла нет");
         }
+        try {
+            // не даём скопировать в plugins/ обрезанный/битый jar
+            UpdaterService.ensureJar(staged);
+        } catch (IOException e) {
+            String reason = "повреждённый файл обновления: " + message(e);
+            reply(feedback, "Файл обновления повреждён: " + message(e)
+                    + " — скачай заново (/gps update install).");
+            return new Result(false, version, reason);
+        }
         Path pluginsDir = pluginsFolder(plugin);
         Path oldJar = currentJar(plugin, pluginsDir);
         Path target = pluginsDir == null ? null
@@ -284,9 +293,11 @@ public final class HotSwap {
     private static void announce(HahGpsPlugin plugin, String text) {
         if (text == null || text.isBlank()) return;
         plugin.getLogger().info(text);
+        var messages = plugin.getMessages();
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.hasPermission("gps.admin") || player.isOp()) {
-                player.sendMessage("§9" + text);
+                // тон палитры hahtojer вместо §9
+                player.sendMessage(messages.getComponentRaw("<#8fc6ff>" + text));
             }
         }
     }

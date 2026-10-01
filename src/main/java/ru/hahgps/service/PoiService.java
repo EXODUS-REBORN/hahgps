@@ -17,6 +17,13 @@ public class PoiService {
     }
 
     public CompletableFuture<Poi> createPoi(Player player, String name, String categoryName, String description) {
+        // Все обращения к игроку — здесь, на вызывающем (главном) потоке;
+        // дальше по цепочке мы работаем уже в асинхронном контексте.
+        Location loc = player.getLocation().clone();
+        String author = player.getName();
+        if (loc.getWorld() == null) {
+            return CompletableFuture.completedFuture(null);
+        }
         return dataService.getCategoryByName(categoryName).thenCompose(category -> {
             int categoryId;
             if (category != null) {
@@ -28,19 +35,19 @@ public class PoiService {
                         return CompletableFuture.completedFuture(null);
                     }
                     Category first = categories.get(0);
-                    return savePoi(player, name, first.getId(), description);
+                    return savePoi(name, first.getId(), description, loc, author);
                 });
             }
-            return savePoi(player, name, categoryId, description);
+            return savePoi(name, categoryId, description, loc, author);
         });
     }
 
-    private CompletableFuture<Poi> savePoi(Player player, String name, int categoryId, String description) {
-        Location loc = player.getLocation();
+    private CompletableFuture<Poi> savePoi(String name, int categoryId, String description,
+                                           Location loc, String author) {
         Poi poi = new Poi(0, name, categoryId, loc.getWorld().getName(),
                 loc.getX(), loc.getY(), loc.getZ(),
                 description != null ? description : "",
-                player.getName(), System.currentTimeMillis());
+                author, System.currentTimeMillis());
         return dataService.createPoi(poi);
     }
 
@@ -95,10 +102,16 @@ public class PoiService {
     }
 
     public double distanceTo(Player player, Poi poi) {
-        Location poiLoc = poi.getLocation();
+        Location poiLoc = poi != null ? poi.getLocation() : null;
         if (poiLoc == null) {
             return Double.MAX_VALUE;
         }
-        return player.getLocation().distance(poiLoc);
+        Location playerLoc = player.getLocation();
+        // Location.distance бросает исключение при разных мирах — проверяем заранее
+        if (poiLoc.getWorld() == null || playerLoc.getWorld() == null
+                || !poiLoc.getWorld().equals(playerLoc.getWorld())) {
+            return Double.MAX_VALUE;
+        }
+        return playerLoc.distance(poiLoc);
     }
 }

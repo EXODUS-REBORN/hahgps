@@ -28,7 +28,7 @@ public class NavigationService {
 
     private final Map<UUID, NavigationSession> sessions = new ConcurrentHashMap<>();
     private final Map<UUID, BossBar> bossBars = new ConcurrentHashMap<>();
-    private org.bukkit.scheduler.BukkitTask updateTask;
+    private volatile org.bukkit.scheduler.BukkitTask updateTask;
 
     public NavigationService(HahGpsPlugin plugin, ConfigManager config, MessagesManager messages) {
         this.plugin = plugin;
@@ -36,15 +36,28 @@ public class NavigationService {
         this.messages = messages;
     }
 
-    public void start() {
-        int interval = config.getUpdateInterval();
+    public synchronized void start() {
+        // повторный старт (reload/повторный onStorageReady) не должен оставлять «висячий» таск
+        if (updateTask != null) {
+            updateTask.cancel();
+            updateTask = null;
+        }
+        int interval = Math.max(1, config.getUpdateInterval());
         updateTask = Bukkit.getScheduler().runTaskTimer(plugin, this::updateAll, interval, interval);
     }
 
     public void stop() {
-        if (updateTask != null) {
-            updateTask.cancel();
-            updateTask = null;
+        org.bukkit.scheduler.BukkitTask task = updateTask;
+        updateTask = null;
+        if (task != null) {
+            task.cancel();
+        }
+        HudService hud = plugin.getHudService();
+        for (UUID id : sessions.keySet()) {
+            Player player = Bukkit.getPlayer(id);
+            if (player != null && player.isOnline() && hud != null) {
+                hud.clearHud(player);
+            }
         }
         for (BossBar bar : bossBars.values()) {
             bar.removeAll();
@@ -58,7 +71,7 @@ public class NavigationService {
                                 TransportType transport) {
         stopNavigation(player);
         NavigationSession session = new NavigationSession(player.getUniqueId(), targetName, target,
-                path, totalDistance, transport);
+                path, routeLengthOrDefault(path, totalDistance), transport);
         session.setLoggingEnabled(config.isLogHints());
         sessions.put(player.getUniqueId(), session);
 
@@ -70,6 +83,29 @@ public class NavigationService {
         bossBars.put(player.getUniqueId(), bar);
     }
 
+    /**
+     * Истинная длина маршрута в блоках. Раньше сюда мог прилететь «размер списка
+     * точек», из-за чего прогресс BossBar считался от бессмысленного числа.
+     */
+    private static double routeLengthOrDefault(java.util.List<Location> path, double fallback) {
+        if (path != null && path.size() >= 2) {
+            double length = 0.0;
+            Location prev = path.get(0);
+            for (int i = 1; i < path.size(); i++) {
+                Location curr = path.get(i);
+                double d = LocationUtil.distance(prev, curr);
+                if (d > 0 && d != Double.MAX_VALUE) {
+                    length += d;
+                }
+                prev = curr;
+            }
+            if (length > 0) {
+                return length;
+            }
+        }
+        return fallback > 0 && Double.isFinite(fallback) ? fallback : 0.0;
+    }
+
     public void stopNavigation(Player player) {
         sessions.remove(player.getUniqueId());
         BossBar bar = bossBars.remove(player.getUniqueId());
@@ -77,6 +113,10 @@ public class NavigationService {
             bar.removePlayer(player);
         }
         player.sendActionBar(Component.empty());
+        HudService hud = plugin.getHudService();
+        if (hud != null) {
+            hud.clearHud(player);
+        }
     }
 
     public boolean isNavigating(Player player) {
@@ -109,13 +149,39 @@ public class NavigationService {
                 it.remove();
                 continue;
             }
-            updateSession(player, entry.getValue());
+            try {
+                updateSession(player, entry.getValue());
+            } catch (Exception ex) {
+                // сбой одного игрока не должен останавливать обновления остальных
+                plugin.getLogger().log(java.util.logging.Level.WARNING,
+                        "HahGps: не удалось обновить навигацию для " + player.getName(), ex);
+            }
         }
     }
 
     private void updateSession(Player player, NavigationSession session) {
         Location target = session.getTarget();
         Location playerLoc = player.getLocation();
+        String transportIcon = getTransportIcon(session.getTransport());
+        String targetName = session.getTargetName() == null ? "?" : session.getTargetName();
+        // Имя точки — пользовательский текст: экранируем для MiniMessage,
+        // иначе название с «<» ломает разбор и роняет тик навигации.
+        // Сырой '>' в тексте безопасен, экранировать его нельзя.
+        String targetNameMm = targetName
+                .replace("\\", "\\\\")
+                .replace("<", "\\<");
+
+        // Цель в другом мире: расстояние/подсказки бессмысленны (раньше здесь
+        // показывалось «1.797…e308 м»), просто удерживаем имя цели до возврата.
+        if (target == null || target.getWorld() == null || playerLoc.getWorld() == null
+                || !playerLoc.getWorld().equals(target.getWorld())) {
+            BossBar crossWorldBar = bossBars.get(player.getUniqueId());
+            if (crossWorldBar != null) {
+                crossWorldBar.setTitle(transportIcon + " " + targetName);
+            }
+            player.sendActionBar(miniMessage.deserialize("<#66aaff>" + targetNameMm));
+            return;
+        }
 
         double distanceToTarget = LocationUtil.distance(playerLoc, target);
         if (distanceToTarget <= config.getArrivalRadius()) {
@@ -131,16 +197,13 @@ public class NavigationService {
         double delta = LocationUtil.normalizeAngle(angleToTarget - facing);
 
         String arrow = config.isShowArrow() ? DirectionUtil.getArrow(delta) : "";
-        String transportIcon = getTransportIcon(session.getTransport());
 
         BossBar bar = bossBars.get(player.getUniqueId());
         if (bar != null) {
-            Component title = miniMessage.deserialize(
-                    "<#8fc6ff>" + transportIcon + " <#e8f4ff>" + session.getTargetName()
-                            + " <#c8e4ff>" + arrow + " <#b8dcff>"
-                            + LocationUtil.formatDistance(distanceToTarget));
-            bar.setTitle(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
-                    .plainText().serialize(title));
+            // BossBar в Bukkit умеет только plain-text — никакого MiniMessage
+            // на каждом тике не нужно
+            bar.setTitle(transportIcon + " " + targetName + " " + arrow + " "
+                    + LocationUtil.formatDistance(distanceToTarget));
             float progress = session.getTotalDistance() > 0
                     ? (float) Math.max(0.0, Math.min(1.0, distanceToTarget / session.getTotalDistance()))
                     : 0.0f;
@@ -148,12 +211,17 @@ public class NavigationService {
         }
 
         Component hotbarText = miniMessage.deserialize(
-                "<#c8e4ff>" + transportIcon + " <#8fc6ff>" + session.getTargetName()
-                        + " <#b8dcff>| <#e8f4ff>"
+                "<#66aaff>" + transportIcon + " <#8fc6ff>" + targetNameMm
+                        + " <#8fe9f5>| <#8fe9f5>"
                         + LocationUtil.formatDistance(distanceToTarget)
-                        + " <#c8e4ff>| <#66aaff>"
+                        + " <#66aaff>| <#66aaff>"
                         + (int) distanceToTarget + " <#8fc6ff>m");
         player.sendActionBar(hotbarText);
+
+        HudService hud = plugin.getHudService();
+        if (hud != null) {
+            hud.updateHud(player, session.getTransport(), targetName, distanceToTarget);
+        }
 
         if (session.isLoggingEnabled()) {
             String hintKey = DirectionUtil.getHintKey(delta);
@@ -165,6 +233,9 @@ public class NavigationService {
     }
 
     private String getTransportIcon(TransportType type) {
+        if (type == null) {
+            return "";
+        }
         return switch (type) {
             case FOOT -> "👣";
             case CAR -> "🚗";
@@ -175,16 +246,22 @@ public class NavigationService {
     }
 
     private BarColor parseColor(String name) {
+        if (name == null) {
+            return BarColor.BLUE;
+        }
         try {
-            return BarColor.valueOf(name.toUpperCase());
+            return BarColor.valueOf(name.toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException e) {
             return BarColor.BLUE;
         }
     }
 
     private BarStyle parseStyle(String name) {
+        if (name == null) {
+            return BarStyle.SOLID;
+        }
         try {
-            return BarStyle.valueOf(name.toUpperCase());
+            return BarStyle.valueOf(name.toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException e) {
             return BarStyle.SOLID;
         }

@@ -1,35 +1,64 @@
 package ru.hahgps.service;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.Particle;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import ru.hahgps.model.GraphEdge;
 import ru.hahgps.model.GraphNode;
+import ru.hahgps.model.RoadGraph;
 import ru.hahgps.model.TransportType;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class VisualizationService {
 
+    /** Радиус отрисовки вокруг игрока, блоки. */
+    private static final double RADIUS = 64.0;
+    private static final double RADIUS_SQ = RADIUS * RADIUS;
+    /** Шаг между частицами вдоль ребра, блоки. */
+    private static final double PARTICLE_STEP = 2.0;
+    /** Бюджет частиц на один тип визуализации за тик (защита от лагов). */
+    private static final int PARTICLE_BUDGET = 600;
+
     private final GraphService graphService;
-    private final Map<UUID, Set<TransportType>> activeVisualizations = new HashMap<>();
+    private final Map<UUID, Set<TransportType>> activeVisualizations = new ConcurrentHashMap<>();
+
+    /** Кэш рёбер по типу транспорта: строится один раз и перестраивается только при смене ревизии графа. */
+    private final Map<TransportType, List<GraphEdge>> edgeCache = new EnumMap<>(TransportType.class);
+    private final Map<TransportType, Particle.DustOptions> dustCache = new EnumMap<>(TransportType.class);
+    private int cachedRevision = -1;
+
+    /** Буфер результата обрезки отрезка (тик выполняется только на главном потоке). */
+    private final double[] clipBuffer = new double[2];
+    /** Переиспользуемый список кандидатов — без аллокаций в тик-цикле. */
+    private final List<GraphEdge> candidates = new ArrayList<>();
 
     public VisualizationService(GraphService graphService) {
         this.graphService = graphService;
     }
 
     public void enableVisualization(Player player, TransportType type) {
-        activeVisualizations.computeIfAbsent(player.getUniqueId(), k -> EnumSet.noneOf(TransportType.class))
-                .add(type);
+        activeVisualizations.computeIfAbsent(player.getUniqueId(),
+                k -> EnumSet.noneOf(TransportType.class)).add(type);
     }
 
     public void disableVisualization(Player player, TransportType type) {
         Set<TransportType> types = activeVisualizations.get(player.getUniqueId());
         if (types != null) {
-            types.remove(type);
+            synchronized (types) {
+                types.remove(type);
+            }
             if (types.isEmpty()) {
-                activeVisualizations.remove(player.getUniqueId());
+                activeVisualizations.remove(player.getUniqueId(), types);
             }
         }
     }
@@ -40,55 +69,210 @@ public class VisualizationService {
 
     public boolean isVisualizing(Player player, TransportType type) {
         Set<TransportType> types = activeVisualizations.get(player.getUniqueId());
-        return types != null && types.contains(type);
+        if (types == null) {
+            return false;
+        }
+        synchronized (types) {
+            return types.contains(type);
+        }
     }
 
     public void tick() {
+        refreshCacheIfNeeded();
+        if (activeVisualizations.isEmpty()) {
+            return;
+        }
+
+        List<UUID> offline = null;
         for (Map.Entry<UUID, Set<TransportType>> entry : activeVisualizations.entrySet()) {
             Player player = Bukkit.getPlayer(entry.getKey());
             if (player == null || !player.isOnline()) {
+                // вычищаем сессии вышедших игроков — иначе запись живёт вечно
+                if (offline == null) {
+                    offline = new ArrayList<>(1);
+                }
+                offline.add(entry.getKey());
                 continue;
             }
-            for (TransportType type : entry.getValue()) {
-                renderForType(player, type);
+            Set<TransportType> types = entry.getValue();
+            synchronized (types) {
+                for (TransportType type : types) {
+                    renderForType(player, type);
+                }
             }
         }
+        if (offline != null) {
+            for (UUID id : offline) {
+                activeVisualizations.remove(id);
+            }
+        }
+    }
+
+    /**
+     * Перестройка кэша рёбер — один раз на изменение графа, а не на каждый тик.
+     * Ревизия читается до снятия копии: если граф заменили «между» — на следующем
+     * тике кэш просто перестроится повторно.
+     */
+    private void refreshCacheIfNeeded() {
+        int revision = graphService.getRevision();
+        if (revision == cachedRevision) {
+            return;
+        }
+        RoadGraph graph = graphService.getRoadGraph();
+        List<GraphNode> nodes = graph.getNodes();
+        for (TransportType type : TransportType.values()) {
+            List<GraphEdge> edges = new ArrayList<>();
+            for (GraphNode node : nodes) {
+                for (GraphEdge edge : graph.getEdges(node, type)) {
+                    // двустороннее ребро встречается дважды — оставляем одно
+                    if (edge.getFrom() != null && edge.getTo() != null
+                            && edge.getFrom().getId() < edge.getTo().getId()) {
+                        edges.add(edge);
+                    }
+                }
+            }
+            edgeCache.put(type, Collections.unmodifiableList(edges));
+        }
+        cachedRevision = revision;
     }
 
     private void renderForType(Player player, TransportType type) {
-        for (GraphNode node : graphService.getNodes()) {
-            Location loc = node.getLocation();
-            if (loc == null || loc.getWorld() == null || !loc.getWorld().equals(player.getWorld())) {
+        List<GraphEdge> edges = edgeCache.get(type);
+        if (edges == null || edges.isEmpty()) {
+            return;
+        }
+        Particle.DustOptions dust = dustCache.computeIfAbsent(type, VisualizationService::createDust);
+        World world = player.getWorld();
+        if (world == null) {
+            return;
+        }
+        org.bukkit.Location playerLoc = player.getLocation();
+        double px = playerLoc.getX();
+        double pz = playerLoc.getZ();
+        double py = playerLoc.getY();
+
+        // Сначала собираем рёбра того же мира, ближе к игроку — выше приоритет бюджета,
+        // иначе при нехватке частиц всегда рисовался бы один и тот же «хвост» списка.
+        candidates.clear();
+        for (GraphEdge edge : edges) {
+            org.bukkit.Location from = edge.getFrom().getLocation();
+            org.bukkit.Location to = edge.getTo().getLocation();
+            if (from == null || to == null || from.getWorld() == null || to.getWorld() == null) {
                 continue;
             }
-            if (loc.distance(player.getLocation()) > 64) {
+            if (!world.equals(from.getWorld()) || !world.equals(to.getWorld())) {
                 continue;
             }
-            for (GraphEdge edge : graphService.getRoadGraph().getEdges(node, type)) {
-                renderEdge(player, edge, type);
+            candidates.add(edge);
+        }
+        candidates.sort((e1, e2) -> Double.compare(
+                nearestDistSq(e1, px, pz), nearestDistSq(e2, px, pz)));
+
+        int budget = PARTICLE_BUDGET;
+        for (GraphEdge edge : candidates) {
+            if (budget <= 0) {
+                break;
+            }
+            org.bukkit.Location from = edge.getFrom().getLocation();
+            org.bukkit.Location to = edge.getTo().getLocation();
+            if (!clipSegment(from.getX(), from.getZ(), to.getX(), to.getZ(), px, pz)) {
+                continue;
+            }
+            double t0 = clipBuffer[0];
+            double t1 = clipBuffer[1];
+            double dx = to.getX() - from.getX();
+            double dz = to.getZ() - from.getZ();
+            double dy = to.getY() - from.getY();
+            double ax = from.getX() + t0 * dx;
+            double az = from.getZ() + t0 * dz;
+            double bx = from.getX() + t1 * dx;
+            double bz = from.getZ() + t1 * dz;
+
+            double length = Math.hypot(bx - ax, bz - az);
+            int steps = Math.max(1, (int) (length / PARTICLE_STEP));
+            if (steps > budget) {
+                // бюджет кончился: снижаем плотность, а не обрываем маршрут
+                steps = budget;
+            }
+            budget -= steps;
+
+            double startY = from.getY() + t0 * dy;
+            double endY = from.getY() + t1 * dy;
+            for (int i = 0; i <= steps; i++) {
+                double t = (double) i / steps;
+                double y = startY + (endY - startY) * t + 1.0;
+                if (Math.abs(y - py) > RADIUS) {
+                    continue;
+                }
+                player.spawnParticle(Particle.DUST,
+                        ax + (bx - ax) * t, y, az + (bz - az) * t, 1, dust);
             }
         }
     }
 
-    private void renderEdge(Player player, GraphEdge edge, TransportType type) {
-        Location from = edge.getFrom().getLocation();
-        Location to = edge.getTo().getLocation();
-        if (from == null || to == null || from.getWorld() == null || !from.getWorld().equals(to.getWorld())) {
-            return;
+    private static Particle.DustOptions createDust(TransportType type) {
+        int color = type.getParticleColor();
+        return new Particle.DustOptions(org.bukkit.Color.fromRGB(
+                (color >> 16) & 0xFF,
+                (color >> 8) & 0xFF,
+                color & 0xFF), 1.0f);
+    }
+
+    /** Квадрат расстояния от игрока до ближайшего конца ребра (без sqrt, для сортировки). */
+    private static double nearestDistSq(GraphEdge edge, double px, double pz) {
+        org.bukkit.Location from = edge.getFrom().getLocation();
+        org.bukkit.Location to = edge.getTo().getLocation();
+        double fx = from.getX() - px;
+        double fz = from.getZ() - pz;
+        double tx = to.getX() - px;
+        double tz = to.getZ() - pz;
+        return Math.min(fx * fx + fz * fz, tx * tx + tz * tz);
+    }
+
+    /**
+     * Обрезает отрезок A→B до его части внутри круга (cx,cz,R).
+     * Результат пишется в clipBuffer как параметры t∈[0,1]; false — ничего не видно.
+     */
+    private boolean clipSegment(double ax, double az, double bx, double bz,
+                                double cx, double cz) {
+        double dx = bx - ax;
+        double dz = bz - az;
+        double fx = ax - cx;
+        double fz = az - cz;
+        double a = dx * dx + dz * dz;
+        if (a < 1e-9) {
+            // вырожденный отрезок
+            if (fx * fx + fz * fz <= RADIUS_SQ) {
+                clipBuffer[0] = 0.0;
+                clipBuffer[1] = 1.0;
+                return true;
+            }
+            return false;
         }
-        double distance = from.distance(to);
-        int steps = Math.max(1, (int) (distance / 2));
-        for (int i = 0; i <= steps; i++) {
-            double t = (double) i / steps;
-            double x = from.getX() + (to.getX() - from.getX()) * t;
-            double y = from.getY() + (to.getY() - from.getY()) * t;
-            double z = from.getZ() + (to.getZ() - from.getZ()) * t;
-            Location particleLoc = new Location(from.getWorld(), x, y + 1, z);
-            player.spawnParticle(Particle.DUST, particleLoc, 1,
-                    new Particle.DustOptions(org.bukkit.Color.fromRGB(
-                            (type.getParticleColor() >> 16) & 0xFF,
-                            (type.getParticleColor() >> 8) & 0xFF,
-                            type.getParticleColor() & 0xFF), 1.0f));
+        double b = 2.0 * (fx * dx + fz * dz);
+        double c = fx * fx + fz * fz - RADIUS_SQ;
+        if (c <= 0.0) {
+            // начало внутри круга: обрезаемся по точке выхода
+            double disc = b * b - 4.0 * a * c;
+            double tExit = disc >= 0.0 ? (-b + Math.sqrt(disc)) / (2.0 * a) : 1.0;
+            clipBuffer[0] = 0.0;
+            clipBuffer[1] = Math.min(1.0, Math.max(0.0, tExit));
+            return clipBuffer[1] > 0.0;
         }
+        double disc = b * b - 4.0 * a * c;
+        if (disc < 0.0) {
+            return false; // отрезок не пересекает круг
+        }
+        double sqrt = Math.sqrt(disc);
+        double t1 = (-b - sqrt) / (2.0 * a);
+        double t2 = (-b + sqrt) / (2.0 * a);
+        double lo = Math.max(0.0, Math.min(t1, t2));
+        double hi = Math.min(1.0, Math.max(t1, t2));
+        if (hi <= lo) {
+            return false;
+        }
+        clipBuffer[0] = lo;
+        clipBuffer[1] = hi;
+        return true;
     }
 }

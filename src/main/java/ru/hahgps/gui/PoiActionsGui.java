@@ -1,14 +1,10 @@
 package ru.hahgps.gui;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.model.Category;
 import ru.hahgps.model.Poi;
-
-import java.util.List;
 
 public class PoiActionsGui extends GuiScreen {
 
@@ -32,29 +28,32 @@ public class PoiActionsGui extends GuiScreen {
     @Override
     public void build() {
         inventory.setItem(10, GuiUtil.item(Material.PAPER,
-                HahGpsPlugin.getInstance().getMessages().getComponent("gui.info"),
-                List.of(Component.text("Подробная информация", NamedTextColor.AQUA))));
+                comp("gui.info"),
+                lore("gui.lore-info")));
 
         inventory.setItem(12, GuiUtil.item(Material.COMPASS,
-                HahGpsPlugin.getInstance().getMessages().getComponent("gui.goto"),
-                List.of(Component.text("Построить маршрут", NamedTextColor.AQUA))));
+                comp("gui.goto"),
+                lore("gui.lore-goto")));
 
         inventory.setItem(14, GuiUtil.item(Material.NETHER_STAR,
-                HahGpsPlugin.getInstance().getMessages().getComponent("gui.rate"),
-                List.of(Component.text("Оценить (1-10)", NamedTextColor.AQUA))));
+                comp("gui.rate"),
+                lore("gui.lore-rate")));
 
-        inventory.setItem(16, GuiUtil.item(Material.LAVA_BUCKET,
-                HahGpsPlugin.getInstance().getMessages().getComponent("gui.delete"),
-                List.of(Component.text("Удалить точку", NamedTextColor.AQUA))));
+        // Удаление — только для тех, у кого есть право (как и в команде)
+        if (player.hasPermission("gps.point.delete")) {
+            inventory.setItem(16, GuiUtil.item(Material.LAVA_BUCKET,
+                    comp("gui.delete"),
+                    lore("gui.lore-delete")));
+        }
 
-        inventory.setItem(22, GuiUtil.item(Material.ARROW,
-                HahGpsPlugin.getInstance().getMessages().getComponent("gui.back")));
+        inventory.setItem(22, GuiTheme.navBack(getMsg("gui.back")));
 
         for (int i = 0; i < size(); i++) {
             if (inventory.getItem(i) == null) {
                 inventory.setItem(i, GuiUtil.filler());
             }
         }
+        putBrand();
     }
 
     @Override
@@ -62,9 +61,15 @@ public class PoiActionsGui extends GuiScreen {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
         switch (slot) {
             case 10 -> {
-
-                plugin.getPoiService().loadPoiWithRating(poi.getName()).thenAcceptAsync(loaded -> {
+                GuiTheme.click(player);
+                plugin.getPoiService().loadPoiWithRating(poi.getName()).whenComplete((loaded, error) -> {
+                    if (error != null) {
+                        reportError(error);
+                        return;
+                    }
                     if (loaded == null) {
+                        player.sendMessage(plugin.getMessages().getPrefixed("point-not-found",
+                                "name", poi.getName()));
                         return;
                     }
                     plugin.getDataService().runSync(() -> {
@@ -75,10 +80,16 @@ public class PoiActionsGui extends GuiScreen {
                 });
             }
             case 12 -> {
-
+                GuiTheme.click(player);
                 player.closeInventory();
-                plugin.getPoiService().loadPoiWithRating(poi.getName()).thenAcceptAsync(loaded -> {
+                plugin.getPoiService().loadPoiWithRating(poi.getName()).whenComplete((loaded, error) -> {
+                    if (error != null) {
+                        reportError(error);
+                        return;
+                    }
                     if (loaded == null) {
+                        player.sendMessage(plugin.getMessages().getPrefixed("point-not-found",
+                                "name", poi.getName()));
                         return;
                     }
                     plugin.getDataService().runSync(() -> {
@@ -90,10 +101,15 @@ public class PoiActionsGui extends GuiScreen {
                 });
             }
             case 14 -> {
-
+                if (!player.hasPermission("gps.point.rate")) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
+                    GuiTheme.deny(player);
+                    return;
+                }
+                GuiTheme.click(player);
                 player.closeInventory();
-                ru.hahgps.gui.InputManager.getInstance().request(player,
-                        plugin.getMessages().getPrefixed("gui.rate"),
+                InputManager.getInstance().request(player,
+                        plugin.getMessages().getPrefixed("input-rate"),
                         input -> {
                             try {
                                 int rating = Integer.parseInt(input.trim());
@@ -102,27 +118,44 @@ public class PoiActionsGui extends GuiScreen {
                                     return;
                                 }
                                 plugin.getPoiService().ratePoi(poi.getName(), player.getUniqueId(), rating)
-                                        .thenRun(() -> player.sendMessage(
-                                                plugin.getMessages().getPrefixed("point-rated",
-                                                        "name", poi.getName(), "rating", String.valueOf(rating))));
+                                        .whenComplete((v, error) -> plugin.getDataService().runSync(() -> {
+                                            if (!player.isOnline()) return;
+                                            if (error != null) {
+                                                reportError(error);
+                                            } else {
+                                                player.sendMessage(plugin.getMessages().getPrefixed("point-rated",
+                                                        "name", poi.getName(), "rating", String.valueOf(rating)));
+                                            }
+                                        }));
                             } catch (NumberFormatException e) {
                                 player.sendMessage(plugin.getMessages().getPrefixed("invalid-rating"));
                             }
                         });
             }
             case 16 -> {
-
+                if (!player.hasPermission("gps.point.delete")) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
+                    GuiTheme.deny(player);
+                    return;
+                }
+                GuiTheme.click(player);
                 player.closeInventory();
-                plugin.getPoiService().deletePoi(poi.getName()).thenRun(() -> {
-                    plugin.getDataService().runSync(() -> {
-                        if (player.isOnline()) {
+                plugin.getPoiService().deletePoi(poi.getName()).whenComplete((v, error) ->
+                        plugin.getDataService().runSync(() -> {
+                            if (!player.isOnline()) return;
+                            if (error != null) {
+                                reportError(error);
+                                return;
+                            }
                             player.sendMessage(plugin.getMessages().getPrefixed("point-deleted",
                                     "name", poi.getName()));
-                        }
-                    });
-                });
+                            new PointsListGui(player, null).open();
+                        }));
             }
-            case 22 -> new PointsListGui(player, null).open();
+            case 22 -> {
+                new PointsListGui(player, null).open();
+                GuiTheme.click(player);
+            }
         }
     }
 
@@ -134,11 +167,11 @@ public class PoiActionsGui extends GuiScreen {
         String raw = plugin.getMessages().get("point-info",
                 "name", poi.getName(),
                 "category", categoryName,
-                "x", String.format("%.1f", poi.getX()),
-                "y", String.format("%.1f", poi.getY()),
-                "z", String.format("%.1f", poi.getZ()),
+                "x", String.format(java.util.Locale.ROOT, "%.1f", poi.getX()),
+                "y", String.format(java.util.Locale.ROOT, "%.1f", poi.getY()),
+                "z", String.format(java.util.Locale.ROOT, "%.1f", poi.getZ()),
                 "world", poi.getWorld(),
-                "rating", String.format("%.1f", poi.getRating()),
+                "rating", String.format(java.util.Locale.ROOT, "%.1f", poi.getRating()),
                 "votes", String.valueOf(poi.getRatingCount()),
                 "author", poi.getAuthor(),
                 "date", poi.getFormattedDate(),

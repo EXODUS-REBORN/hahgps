@@ -12,23 +12,28 @@ import org.bukkit.map.MapView;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.model.Poi;
 import java.awt.image.BufferedImage;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 public class MapService {
     private final HahGpsPlugin plugin;
-    private final TerrainRenderer terrainRenderer = new TerrainRenderer();
+    private final TerrainRenderer terrainRenderer;
 
-    private final Map<UUID, MapView> playerMaps = new HashMap<>();
+    // Все карты живут между главным потоком и колбэками рендера — только потокобезопасные мапы
+    private final Map<UUID, MapView> playerMaps = new ConcurrentHashMap<>();
+    private final Map<UUID, BufferedImage> renderedImages = new ConcurrentHashMap<>();
+    private final Map<UUID, MapRenderer> renderers = new ConcurrentHashMap<>();
+    /** Поколение рендера: результат устаревшей (более ранней) задачи отбрасывается. */
+    private final Map<UUID, AtomicLong> renderTokens = new ConcurrentHashMap<>();
 
-    private final Map<UUID, BufferedImage> renderedImages = new HashMap<>();
-
-    private final Map<UUID, MapRenderer> renderers = new HashMap<>();
+    private static final BufferedImage BLANK_IMAGE = new BufferedImage(128, 128, BufferedImage.TYPE_INT_RGB);
 
     public MapService(HahGpsPlugin plugin) {
         this.plugin = plugin;
+        this.terrainRenderer = new TerrainRenderer(plugin);
     }
 
     public void openMap(Player player) {
@@ -92,53 +97,77 @@ public class MapService {
             @Override
             public void render(MapView mapView, MapCanvas canvas, Player p) {
                 BufferedImage image = renderedImages.get(player.getUniqueId());
-                if (image != null) {
-                    canvas.drawImage(0, 0, image);
-                } else {
-
-                    for (int x = 0; x < 128; x++) {
-                        for (int y = 0; y < 128; y++) {
-                            canvas.setPixel(x, y, (byte) 0);
-                        }
-                    }
-                }
+                canvas.drawImage(0, 0, image != null ? image : BLANK_IMAGE);
             }
         };
     }
 
     private void renderAsync(Player player, MapView view) {
         World world = view.getWorld();
-        if (world == null) {
+        if (world == null || !plugin.isEnabled()) {
             return;
         }
+        UUID id = player.getUniqueId();
+        // токен инкрементируем на главном потоке — устаревшие результаты отбрасываем
+        long token = renderTokens.computeIfAbsent(id, k -> new AtomicLong()).incrementAndGet();
         int centerX = view.getCenterX();
         int centerZ = view.getCenterZ();
         MapView.Scale scale = view.getScale();
+        // позиция игрока фиксируется здесь (главный поток), не в колбэке БД
+        Location playerLoc = player.getLocation().clone();
+        boolean showPois = plugin.getConfigManager().isMapShowPois();
 
         CompletableFuture<List<Poi>> poisFuture = plugin.getDataService().getPois();
-
         poisFuture.thenAccept(pois -> {
-            List<Poi> filtered = pois.stream()
-                    .filter(poi -> {
-                        Location loc = poi.getLocation();
-                        return loc != null && loc.getWorld() != null && loc.getWorld().equals(world);
-                    })
-                    .toList();
-
-            terrainRenderer.render(world, centerX, centerZ, scale, filtered, null, player.getLocation())
-                    .thenAccept(image -> {
-                        Bukkit.getScheduler().runTask(plugin, () -> {
-                            if (!player.isOnline()) {
-                                return;
-                            }
-                            renderedImages.put(player.getUniqueId(), image);
-                            player.sendMap(view);
-                        });
-                    });
+            if (pois == null) {
+                pois = List.of();
+            }
+            List<Poi> filtered = showPois
+                    ? pois.stream()
+                          .filter(poi -> poi != null && poi.getLocation() != null
+                                  && poi.getLocation().getWorld() != null
+                                  && poi.getLocation().getWorld().equals(world))
+                          .toList()
+                    : List.of();
+            // TerrainRenderer сам перенесёт работу на главный поток, если нужно
+            terrainRenderer.render(world, centerX, centerZ, scale, filtered, null, playerLoc)
+                    .thenAccept(image -> applyRenderedImage(id, token, view, player, image));
         });
     }
 
+    private void applyRenderedImage(UUID id, long token, MapView view, Player player, BufferedImage image) {
+        try {
+            if (!plugin.isEnabled()) {
+                return;
+            }
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (!plugin.isEnabled() || !player.isOnline()) {
+                    return;
+                }
+                AtomicLong current = renderTokens.get(id);
+                if (current == null || current.get() != token || playerMaps.get(id) != view) {
+                    return; // уже отрендерено более новой задачей
+                }
+                renderedImages.put(id, image);
+                player.sendMap(view);
+            });
+        } catch (Throwable ignored) {
+            // сервер выключается — результат просто отбрасывается
+        }
+    }
+
     private void giveMapItem(Player player, MapView view) {
+        // не выдаём дубликат карты при повторном /gps map
+        for (ItemStack item : player.getInventory().getStorageContents()) {
+            if (item == null || item.getType() != Material.FILLED_MAP || !item.hasItemMeta()) {
+                continue;
+            }
+            if (item.getItemMeta() instanceof MapMeta meta
+                    && meta.hasMapId() && meta.getMapId() == view.getId()) {
+                return;
+            }
+        }
+
         ItemStack map = new ItemStack(Material.FILLED_MAP);
         MapMeta meta = (MapMeta) map.getItemMeta();
         if (meta != null) {
@@ -154,14 +183,14 @@ public class MapService {
     }
 
     public void removePlayer(Player player) {
-        MapView view = playerMaps.remove(player.getUniqueId());
-        if (view != null) {
-            MapRenderer renderer = renderers.remove(player.getUniqueId());
-            if (renderer != null) {
-                view.removeRenderer(renderer);
-            }
+        UUID id = player.getUniqueId();
+        MapView view = playerMaps.remove(id);
+        MapRenderer renderer = renderers.remove(id);
+        if (view != null && renderer != null) {
+            view.removeRenderer(renderer);
         }
-        renderedImages.remove(player.getUniqueId());
+        renderedImages.remove(id);
+        renderTokens.remove(id);
     }
 
     public void stop() {
@@ -174,12 +203,14 @@ public class MapService {
         playerMaps.clear();
         renderers.clear();
         renderedImages.clear();
+        renderTokens.clear();
+        terrainRenderer.shutdown();
     }
 
     private static MapView.Scale parseZoom(String name) {
         try {
             return MapView.Scale.valueOf(name.toUpperCase());
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException | NullPointerException e) {
             return MapView.Scale.CLOSE;
         }
     }

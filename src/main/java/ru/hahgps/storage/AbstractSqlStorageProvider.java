@@ -24,9 +24,33 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     protected abstract void reconnect() throws SQLException;
 
     protected void ensureConnected() throws SQLException {
-        if (connection == null || connection.isClosed()) {
-            reconnect();
+        if (connection == null || connection.isClosed() || !isAlive()) {
+            forceReconnect();
         }
+    }
+
+    /**
+     * Проверка живости соединения: после рестарта MySQL/обрыва сети драйвер
+     * считает соединение открытым, а запросы падают вечно — плагин «лечится»
+     * только переподключением.
+     */
+    private boolean isAlive() {
+        try {
+            return connection.isValid(3);
+        } catch (SQLException e) {
+            return false;
+        }
+    }
+
+    protected void forceReconnect() throws SQLException {
+        if (connection != null) {
+            try {
+                connection.close();
+            } catch (SQLException ignored) {
+            }
+            connection = null;
+        }
+        reconnect();
     }
 
     protected String autoIncrement() {
@@ -79,6 +103,38 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                     "seq INTEGER NOT NULL, " +
                     "world VARCHAR(64) NOT NULL, " +
                     "x DOUBLE NOT NULL, y DOUBLE NOT NULL, z DOUBLE NOT NULL)");
+        }
+        createIndexes();
+    }
+
+    /**
+     * Индексы по внешним ключам: без них каждый getRatings/getPoisByCategory
+     * и чтение узлов маршрута — полное сканирование таблицы.
+     */
+    protected void createIndexes() {
+        createIndex("idx_route_nodes_route", "route_nodes", "route_id");
+        createIndex("idx_pois_category", "pois", "category_id");
+    }
+
+    private void createIndex(String name, String table, String columns) {
+        String sql = (mysql
+                ? "CREATE INDEX " + name + " ON " + table + " (" + columns + ")"
+                : "CREATE INDEX IF NOT EXISTS " + name + " ON " + table + " (" + columns + ")");
+        try (Statement st = connection.createStatement()) {
+            st.execute(sql);
+        } catch (SQLException e) {
+            // MySQL не умеет IF NOT EXISTS для индексов: 1061 = уже существует
+            if (mysql && e.getErrorCode() == 1061) {
+                return;
+            }
+            if (String.valueOf(e.getMessage()).toLowerCase().contains("already exists")) {
+                return;
+            }
+            // индекс — оптимизация, не повод ронять плагин
+            java.util.logging.Logger logger = Bukkit.getLogger();
+            if (logger != null) {
+                logger.warning("HahGps: не удалось создать индекс " + name + ": " + e.getMessage());
+            }
         }
     }
 
@@ -359,38 +415,58 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     @Override
     public synchronized Route createRoute(Route route) {
         String sql = "INSERT INTO routes (name, world, transport, created_by, created_at) VALUES (?, ?, ?, ?, ?)";
+        boolean previousAutoCommit = true;
         try {
             ensureConnected();
-            try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-                ps.setString(1, route.getName());
-                ps.setString(2, route.getWorld());
-                ps.setString(3, route.getTransport());
-                ps.setString(4, route.getCreatedBy());
-                ps.setLong(5, route.getCreatedAt());
-                ps.executeUpdate();
-                int routeId;
-                try (ResultSet rs = ps.getGeneratedKeys()) {
-                    if (!rs.next()) {
-                        throw new SQLException("No generated key for route");
+            previousAutoCommit = connection.getAutoCommit();
+            // маршрут и его узлы пишутся одной транзакцией: без неё сбой на середине
+            // оставлял бы запись в routes без route_nodes (битый маршрут в графе)
+            connection.setAutoCommit(false);
+            try {
+                try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                    ps.setString(1, route.getName());
+                    ps.setString(2, route.getWorld());
+                    ps.setString(3, route.getTransport());
+                    ps.setString(4, route.getCreatedBy());
+                    ps.setLong(5, route.getCreatedAt());
+                    ps.executeUpdate();
+                    int routeId;
+                    try (ResultSet rs = ps.getGeneratedKeys()) {
+                        if (!rs.next()) {
+                            throw new SQLException("No generated key for route");
+                        }
+                        routeId = rs.getInt(1);
                     }
-                    routeId = rs.getInt(1);
-                }
-                String nodeSql = "INSERT INTO route_nodes (route_id, seq, world, x, y, z) VALUES (?, ?, ?, ?, ?, ?)";
-                try (PreparedStatement nps = connection.prepareStatement(nodeSql)) {
-                    int seq = 0;
-                    for (Location loc : route.getNodes()) {
-                        nps.setInt(1, routeId);
-                        nps.setInt(2, seq++);
-                        nps.setString(3, loc.getWorld() != null ? loc.getWorld().getName() : route.getWorld());
-                        nps.setDouble(4, loc.getX());
-                        nps.setDouble(5, loc.getY());
-                        nps.setDouble(6, loc.getZ());
-                        nps.addBatch();
+                    String nodeSql = "INSERT INTO route_nodes (route_id, seq, world, x, y, z) VALUES (?, ?, ?, ?, ?, ?)";
+                    try (PreparedStatement nps = connection.prepareStatement(nodeSql)) {
+                        int seq = 0;
+                        for (Location loc : route.getNodes()) {
+                            nps.setInt(1, routeId);
+                            nps.setInt(2, seq++);
+                            nps.setString(3, loc.getWorld() != null ? loc.getWorld().getName() : route.getWorld());
+                            nps.setDouble(4, loc.getX());
+                            nps.setDouble(5, loc.getY());
+                            nps.setDouble(6, loc.getZ());
+                            nps.addBatch();
+                        }
+                        nps.executeBatch();
                     }
-                    nps.executeBatch();
+                    connection.commit();
+                    return new Route(routeId, route.getName(), route.getWorld(), route.getTransport(),
+                            route.getCreatedBy(), route.getCreatedAt(), route.getNodes());
                 }
-                return new Route(routeId, route.getName(), route.getWorld(), route.getTransport(),
-                        route.getCreatedBy(), route.getCreatedAt(), route.getNodes());
+            } catch (SQLException e) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackError) {
+                    e.addSuppressed(rollbackError);
+                }
+                throw e;
+            } finally {
+                try {
+                    connection.setAutoCommit(previousAutoCommit);
+                } catch (SQLException ignored) {
+                }
             }
         } catch (SQLException e) {
             throw new RuntimeException("Failed to create route: " + route.getName(), e);
@@ -399,12 +475,39 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
 
     @Override
     public synchronized boolean deleteRoute(int id) {
+        boolean previousAutoCommit = true;
         try {
             ensureConnected();
-            try (PreparedStatement ps = connection.prepareStatement("DELETE FROM routes WHERE id = ?")) {
-                ps.setInt(1, id);
-                return ps.executeUpdate() > 0;
+            previousAutoCommit = connection.getAutoCommit();
+            // узлы и маршрут удаляются одной транзакцией: иначе сбой между ними
+            // оставлял бы «осиротевшие» строки в route_nodes
+            connection.setAutoCommit(false);
+            boolean deleted = false;
+            try {
+                try (PreparedStatement nps = connection.prepareStatement(
+                        "DELETE FROM route_nodes WHERE route_id = ?")) {
+                    nps.setInt(1, id);
+                    nps.executeUpdate();
+                }
+                try (PreparedStatement ps = connection.prepareStatement("DELETE FROM routes WHERE id = ?")) {
+                    ps.setInt(1, id);
+                    deleted = ps.executeUpdate() > 0;
+                }
+                connection.commit();
+            } catch (SQLException e) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackError) {
+                    e.addSuppressed(rollbackError);
+                }
+                throw e;
+            } finally {
+                try {
+                    connection.setAutoCommit(previousAutoCommit);
+                } catch (SQLException ignored) {
+                }
             }
+            return deleted;
         } catch (SQLException e) {
             throw new RuntimeException("Failed to delete route: " + id, e);
         }
@@ -459,7 +562,13 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
             ps.setInt(1, id);
             try (ResultSet nrs = ps.executeQuery()) {
                 while (nrs.next()) {
-                    World w = Bukkit.getWorld(nrs.getString("world"));
+                    World w;
+                    try {
+                        // чтение идёт из async-потока: не даём исключению уронить всю загрузку маршрутов
+                        w = Bukkit.getWorld(nrs.getString("world"));
+                    } catch (Throwable ignored) {
+                        w = null;
+                    }
                     if (w != null) {
                         nodes.add(new Location(w, nrs.getDouble("x"), nrs.getDouble("y"), nrs.getDouble("z")));
                     }
@@ -469,8 +578,9 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         return new Route(id, name, world, transport, createdBy, createdAt, nodes);
     }
 
+    /** synchronized: закрытие не должно пересекаться с запросом из async-потока. */
     @Override
-    public void close() {
+    public synchronized void close() {
         try {
             if (connection != null && !connection.isClosed()) {
                 connection.close();

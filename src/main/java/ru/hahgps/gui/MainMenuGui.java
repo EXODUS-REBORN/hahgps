@@ -1,12 +1,8 @@
 package ru.hahgps.gui;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import ru.hahgps.HahGpsPlugin;
-
-import java.util.List;
 
 public class MainMenuGui extends GuiScreen {
 
@@ -28,30 +24,31 @@ public class MainMenuGui extends GuiScreen {
     public void build() {
 
         inventory.setItem(10, GuiUtil.item(Material.COMPASS,
-                msg("gui.my-points"),
-                List.of(Component.text("Просмотр и управление точками", NamedTextColor.AQUA))));
+                comp("gui.my-points"),
+                lore("gui.lore-my-points")));
 
         inventory.setItem(12, GuiUtil.item(Material.BOOK,
-                msg("gui.categories"),
-                List.of(Component.text("Управление категориями", NamedTextColor.AQUA))));
+                comp("gui.categories"),
+                lore("gui.lore-categories")));
 
         inventory.setItem(14, GuiUtil.item(Material.MAP,
-                msg("gui.map"),
-                List.of(Component.text("Открыть карту местности", NamedTextColor.AQUA))));
+                comp("gui.map"),
+                lore("gui.lore-map")));
 
         inventory.setItem(16, GuiUtil.item(Material.PAPER,
-                msg("gui.search"),
-                List.of(Component.text("Поиск точек", NamedTextColor.AQUA))));
+                comp("gui.search"),
+                lore("gui.lore-search")));
 
         inventory.setItem(22, GuiUtil.item(Material.REDSTONE,
-                msg("gui.settings"),
-                List.of(Component.text("Настройки плагина", NamedTextColor.AQUA))));
+                comp("gui.settings"),
+                lore("gui.lore-settings")));
 
         for (int i = 0; i < size(); i++) {
             if (inventory.getItem(i) == null) {
                 inventory.setItem(i, GuiUtil.filler());
             }
         }
+        putBrand();
     }
 
     @Override
@@ -66,9 +63,5 @@ public class MainMenuGui extends GuiScreen {
             case 16 -> new SearchGui(player).open();
             case 22 -> new SettingsGui(player).open();
         }
-    }
-
-    private Component msg(String key) {
-        return HahGpsPlugin.getInstance().getMessages().getComponent(key);
     }
 }

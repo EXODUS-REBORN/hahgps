@@ -16,7 +16,7 @@ public class RouteStartCommand implements SubCommand {
 
     @Override
     public String usage() {
-        return "/gps route start <точка> [foot|car]";
+        return "/gps route start <точка> [foot|car|transit|air|water]";
     }
 
     @Override
@@ -34,22 +34,28 @@ public class RouteStartCommand implements SubCommand {
         String name = args[0];
         TransportType transport = TransportType.FOOT;
         if (args.length >= 2) {
-            transport = TransportType.fromKey(args[1]);
-        }
-        final TransportType finalTransport = transport;
-        plugin.getPoiService().loadPoiWithRating(name).thenAcceptAsync(poi -> {
-            if (poi == null) {
-                plugin.getDataService().runSync(() -> {
-                    if (player.isOnline()) {
-                        player.sendMessage(plugin.getMessages().getPrefixed("point-not-found", "name", name));
-                    }
-                });
+            transport = ru.hahgps.command.SubCommand.parseTransport(args[1]);
+            if (transport == null) {
+                player.sendMessage(plugin.getMessages().getPrefixed("invalid-args",
+                        "usage", usage()));
                 return;
             }
+        }
+        final TransportType finalTransport = transport;
+        plugin.getPoiService().loadPoiWithRating(name).whenComplete((poi, error) -> {
             plugin.getDataService().runSync(() -> {
-                if (player.isOnline()) {
-                    plugin.getCommandManager().gotoPoi(player, poi, finalTransport);
+                if (!player.isOnline()) {
+                    return;
                 }
+                if (error != null) {
+                    ru.hahgps.command.SubCommand.sendError(player, error);
+                    return;
+                }
+                if (poi == null) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("point-not-found", "name", name));
+                    return;
+                }
+                plugin.getCommandManager().gotoPoi(player, poi, finalTransport);
             });
         });
     }
@@ -57,13 +63,18 @@ public class RouteStartCommand implements SubCommand {
     @Override
     public List<String> tabComplete(Player player, String[] args) {
         if (args.length == 1) {
-            return HahGpsPlugin.getInstance().getDataService().getPois().thenApply(pois ->
-                    pois.stream().map(Poi::getName)
-                            .filter(n -> n.toLowerCase().startsWith(args[0].toLowerCase()))
-                            .toList()).join();
+            String prefix = args[0].toLowerCase();
+            return HahGpsPlugin.getInstance().getDataService().getCachedPois().stream()
+                    .map(Poi::getName)
+                    .filter(n -> n.toLowerCase().startsWith(prefix))
+                    .toList();
         }
         if (args.length == 2) {
-            return List.of("foot", "car");
+            List<String> types = new java.util.ArrayList<>();
+            for (TransportType t : TransportType.values()) {
+                types.add(t.getKey());
+            }
+            return types;
         }
         return List.of();
     }

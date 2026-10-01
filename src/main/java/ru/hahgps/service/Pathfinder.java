@@ -7,6 +7,12 @@ import org.bukkit.Location;
 import java.util.*;
 public class Pathfinder {
 
+    /**
+     * Ограничение расширений A*: без него на разросшемся графе поиск мог
+     * крутиться неограниченно долго (в т.ч. на главном потоке).
+     */
+    private static final int MAX_EXPANSIONS = 100_000;
+
     public static List<GraphNode> findPath(RoadGraph graph, GraphNode from, GraphNode to, TransportType transport) {
         if (from == null || to == null) {
             return Collections.emptyList();
@@ -23,10 +29,15 @@ public class Pathfinder {
         Set<Integer> closed = new HashSet<>();
 
         gScore.put(from.getId(), 0.0);
-        fScore.put(from.getId(), heuristic(from, to));
+        fScore.put(from.getId(), heuristic(from, to, transport));
         open.add(from);
 
+        int expansions = 0;
         while (!open.isEmpty()) {
+            if (++expansions > MAX_EXPANSIONS) {
+                // потолок достигнут — отдаём пустой путь (вызывающий пойдёт по прямой)
+                return Collections.emptyList();
+            }
             GraphNode current = open.poll();
             if (current.getId() == to.getId()) {
                 return reconstructPath(cameFrom, current);
@@ -38,15 +49,16 @@ public class Pathfinder {
 
             for (GraphEdge edge : graph.getEdges(current, transport)) {
                 GraphNode neighbor = edge.getTo();
-                if (closed.contains(neighbor.getId())) {
+                if (neighbor == null || closed.contains(neighbor.getId())) {
                     continue;
                 }
-                double cost = edge.getWeight() / transport.getSpeed();
+                double speed = transport != null && transport.getSpeed() > 0 ? transport.getSpeed() : 1.0;
+                double cost = edge.getWeight() / speed;
                 double tentativeG = gScore.getOrDefault(current.getId(), Double.MAX_VALUE) + cost;
                 if (tentativeG < gScore.getOrDefault(neighbor.getId(), Double.MAX_VALUE)) {
                     cameFrom.put(neighbor.getId(), current);
                     gScore.put(neighbor.getId(), tentativeG);
-                    fScore.put(neighbor.getId(), tentativeG + heuristic(neighbor, to));
+                    fScore.put(neighbor.getId(), tentativeG + heuristic(neighbor, to, transport));
                     open.add(neighbor);
                 }
             }
@@ -54,8 +66,17 @@ public class Pathfinder {
         return Collections.emptyList();
     }
 
-    private static double heuristic(GraphNode a, GraphNode b) {
-        return a.distanceTo(b);
+    /**
+     * Эвристика должна быть не выше реальной стоимости (иначе A* даёт
+     * субоптимальный маршрут): масштабируем расстояние на скорость транспорта.
+     */
+    private static double heuristic(GraphNode a, GraphNode b, TransportType transport) {
+        double distance = a.distanceTo(b);
+        if (distance == Double.MAX_VALUE) {
+            return 0.0;
+        }
+        double speed = transport != null && transport.getSpeed() > 0 ? transport.getSpeed() : 1.0;
+        return distance / speed;
     }
 
     private static List<GraphNode> reconstructPath(Map<Integer, GraphNode> cameFrom, GraphNode current) {

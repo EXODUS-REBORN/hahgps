@@ -23,24 +23,34 @@ public class VisualCommand implements SubCommand {
 
     @Override
     public String permission() {
-        return "gps.admin";
+        // plugin.yml объявляет gps.visual — раньше стоял gps.admin
+        return "gps.visual";
     }
 
     @Override
     public void execute(Player player, String[] args) {
-        VisualizationService viz = HahGpsPlugin.getInstance().getVisualizationService();
-        if (args.length == 0) {
-            viz.disableAll(player);
-            player.sendMessage(HahGpsPlugin.getInstance().getMessages().getPrefixed("visual-disabled"));
+        HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+        VisualizationService viz = plugin.getVisualizationService();
+        if (viz == null) {
+            player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
             return;
         }
-        TransportType type = TransportType.fromKey(args[0]);
+        if (args.length == 0) {
+            viz.disableAll(player);
+            player.sendMessage(plugin.getMessages().getPrefixed("visual-disabled"));
+            return;
+        }
+        TransportType type = ru.hahgps.command.SubCommand.parseTransport(args[0]);
+        if (type == null) {
+            player.sendMessage(plugin.getMessages().getPrefixed("invalid-args", "usage", usage()));
+            return;
+        }
         if (viz.isVisualizing(player, type)) {
             viz.disableVisualization(player, type);
-            player.sendMessage(HahGpsPlugin.getInstance().getMessages().getPrefixed("visual-disabled"));
+            player.sendMessage(plugin.getMessages().getPrefixed("visual-disabled"));
         } else {
             viz.enableVisualization(player, type);
-            player.sendMessage(HahGpsPlugin.getInstance().getMessages().getPrefixed("visual-enabled",
+            player.sendMessage(plugin.getMessages().getPrefixed("visual-enabled",
                     "type", type.getKey()));
         }
     }

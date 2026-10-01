@@ -1,13 +1,26 @@
 package ru.hahgps.service;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import ru.hahgps.model.TransportType;
+import ru.hahgps.util.LocationUtil;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+/**
+ * Поиск пути непосредственно по блокам мира (сетка CELL×CELL).
+ * ВАЖНО: весь доступ к миру (getHighestBlockYAt/getBlockAt) разрешён только с
+ * главного потока, поэтому с другого потока findPath безопасно откатывается к
+ * прямой линии, а не читает мир из фонового потока.
+ */
 public class WorldGraph {
     private static final int CELL = 4;
     private static final int MARGIN = 24;
     private static final int MAX_DISTANCE = 512;
+    /** Радиус поиска ближайшего узла сетки, в клетках (2 = старое значение). */
+    private static final int NEAREST_SEARCH_RADIUS = 10;
+    private static final AtomicBoolean WARNED_OFF_THREAD = new AtomicBoolean();
+
     public static class PathResult {
         public final List<Location> path;
         public final double distance;
@@ -34,13 +47,22 @@ public class WorldGraph {
     }
 
     public PathResult findPath(World world, Location start, Location end, TransportType transport) {
-        if (start == null || end == null || world == null
+        if (start == null || end == null
                 || start.getWorld() == null || end.getWorld() == null) {
             return straightLine(start, end);
         }
         if (!start.getWorld().equals(end.getWorld())) {
             return straightLine(start, end);
         }
+        // межпоточный доступ к блокам недопустим — не читаем мир вне главного потока
+        if (!Bukkit.isPrimaryThread()) {
+            if (WARNED_OFF_THREAD.compareAndSet(false, true)) {
+                Bukkit.getLogger().warning(
+                        "HahGps: WorldGraph.findPath вызван не с главного потока — возвращается прямая линия.");
+            }
+            return straightLine(start, end);
+        }
+        World w = start.getWorld();
         if (start.distance(end) > MAX_DISTANCE) {
             return straightLine(start, end);
         }
@@ -60,7 +82,7 @@ public class WorldGraph {
             for (int gz = minGZ; gz <= maxGZ; gz++) {
                 int wx = gx * CELL + CELL / 2;
                 int wz = gz * CELL + CELL / 2;
-                Node node = buildNode(world, gx, gz, wx, wz);
+                Node node = buildNode(w, gx, gz, wx, wz);
                 if (node != null) {
                     nodes.put(key(gx, gz), node);
                 }
@@ -76,7 +98,6 @@ public class WorldGraph {
 
         List<Node> pathNodes = astar(nodes, startNode, endNode, transport);
         if (pathNodes == null) {
-
             return straightLine(start, end);
         }
 
@@ -91,24 +112,36 @@ public class WorldGraph {
 
         double distance = 0;
         for (int i = 1; i < path.size(); i++) {
-            distance += path.get(i - 1).distance(path.get(i));
+            distance += LocationUtil.distance(path.get(i - 1), path.get(i));
+        }
+        if (!Double.isFinite(distance) || distance == Double.MAX_VALUE) {
+            distance = 0;
         }
         return new PathResult(path, distance, true);
     }
 
     private Node buildNode(World world, int gx, int gz, int wx, int wz) {
+        // не генерируем чанки ради построения маршрута
+        if (!world.isChunkLoaded(wx >> 4, wz >> 4)) {
+            return null;
+        }
         int y = world.getHighestBlockYAt(wx, wz);
         int minY = world.getMinHeight();
-        if (y - 1 < minY) {
+        // нормализуем: y может быть как верхним блоком, так и первым свободным над ним
+        Material feetMaterial = world.getBlockAt(wx, y, wz).getType();
+        if (!feetMaterial.isAir()) {
+            y++;
+            feetMaterial = world.getBlockAt(wx, y, wz).getType();
+        }
+        if (y - 1 < minY || !feetMaterial.isAir()) {
             return null;
         }
         Material ground = world.getBlockAt(wx, y - 1, wz).getType();
-        Material feet = world.getBlockAt(wx, y, wz).getType();
         Material head = world.getBlockAt(wx, y + 1, wz).getType();
 
         boolean walkable = ground.isSolid()
-                && !feet.isSolid() && !head.isSolid()
-                && feet != Material.WATER && feet != Material.LAVA
+                && !head.isSolid()
+                && feetMaterial != Material.WATER && feetMaterial != Material.LAVA
                 && head != Material.WATER && head != Material.LAVA;
 
         if (!walkable) {
@@ -136,13 +169,14 @@ public class WorldGraph {
 
         Node best = null;
         double bestDist = Double.MAX_VALUE;
-        for (int dx = -2; dx <= 2; dx++) {
-            for (int dz = -2; dz <= 2; dz++) {
+        // расширенный поиск: старый радиус 2 клетки часто не находил узел рядом с игроком
+        for (int dx = -NEAREST_SEARCH_RADIUS; dx <= NEAREST_SEARCH_RADIUS; dx++) {
+            for (int dz = -NEAREST_SEARCH_RADIUS; dz <= NEAREST_SEARCH_RADIUS; dz++) {
                 Node node = nodes.get(key(gx + dx, gz + dz));
                 if (node == null) {
                     continue;
                 }
-                double d = node.location.distance(loc);
+                double d = LocationUtil.distance(node.location, loc);
                 if (d < bestDist) {
                     bestDist = d;
                     best = node;
@@ -160,10 +194,17 @@ public class WorldGraph {
         PriorityQueue<Node> open = new PriorityQueue<>(Comparator.comparingDouble(n -> fScore.getOrDefault(n, Double.MAX_VALUE)));
 
         gScore.put(start, 0.0);
-        fScore.put(start, heuristic(start, end));
+        fScore.put(start, heuristic(start, end, transport));
         open.add(start);
 
+        // ограничение: сетка 512 блоков даёт до ~20k узлов; каждый узел имеет ≤8
+        // соседей, поэтому ≤8V опросов очереди — потолок с запасом и без ложных срабатываний
+        int expansions = 0;
+        final int maxExpansions = 8 * (nodes.size() + 1) + 1000;
         while (!open.isEmpty()) {
+            if (++expansions > maxExpansions) {
+                return null;
+            }
             Node current = open.poll();
             if (current == end) {
                 return reconstruct(cameFrom, current);
@@ -191,7 +232,7 @@ public class WorldGraph {
                     if (tentativeG < gScore.getOrDefault(neighbor, Double.MAX_VALUE)) {
                         cameFrom.put(neighbor, current);
                         gScore.put(neighbor, tentativeG);
-                        fScore.put(neighbor, tentativeG + heuristic(neighbor, end));
+                        fScore.put(neighbor, tentativeG + heuristic(neighbor, end, transport));
                         open.add(neighbor);
                     }
                 }
@@ -208,7 +249,10 @@ public class WorldGraph {
     }
 
     private double edgeCost(Node a, Node b, TransportType transport) {
-        double dist = a.location.distance(b.location);
+        double dist = LocationUtil.distance(a.location, b.location);
+        if (dist == Double.MAX_VALUE) {
+            return Double.MAX_VALUE;
+        }
         if (transport == TransportType.CAR) {
             return dist;
         }
@@ -223,8 +267,16 @@ public class WorldGraph {
         return dist * 1.0;
     }
 
-    private double heuristic(Node a, Node b) {
-        return a.location.distance(b.location);
+    /**
+     * Адекватная (не завышенная) эвристика: минимальный коэффициент стоимости
+     * ребра — 0.8 (для CAR — ровно dist), иначе A* возвращал субоптимальный путь.
+     */
+    private double heuristic(Node a, Node b, TransportType transport) {
+        double distance = LocationUtil.distance(a.location, b.location);
+        if (distance == Double.MAX_VALUE) {
+            return 0.0;
+        }
+        return distance * (transport == TransportType.CAR ? 1.0 : 0.8);
     }
 
     private List<Node> reconstruct(Map<Node, Node> cameFrom, Node current) {
@@ -277,7 +329,12 @@ public class WorldGraph {
         if (end != null) {
             path.add(end);
         }
-        double distance = (start != null && end != null) ? start.distance(end) : 0;
+        // раньше здесь было start.distance(end), которое бросало исключение
+        // при разных мирах/отсутствии мира
+        double distance = (start != null && end != null) ? LocationUtil.distance(start, end) : 0;
+        if (!Double.isFinite(distance) || distance == Double.MAX_VALUE) {
+            distance = 0;
+        }
         return new PathResult(path, distance, false);
     }
 

@@ -1,6 +1,4 @@
 package ru.hahgps.gui;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
@@ -48,7 +46,7 @@ public class MapGui extends GuiScreen {
             inventory.setItem(13, mapItem);
         } else {
             inventory.setItem(13, GuiUtil.item(Material.MAP,
-                    Component.text("Карта не открыта", NamedTextColor.BLUE)));
+                    comp("gui.lore-map-closed")));
         }
 
         inventory.setItem(20, GuiUtil.item(Material.GOLD_NUGGET,
@@ -59,18 +57,24 @@ public class MapGui extends GuiScreen {
         inventory.setItem(31, GuiUtil.item(Material.COMPASS,
                 plugin.getMessages().getComponent("gui.recenter")));
 
-        inventory.setItem(49, GuiUtil.item(Material.ARROW,
-                plugin.getMessages().getComponent("gui.back")));
+        inventory.setItem(49, GuiTheme.navBack(getMsg("gui.back")));
+        inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));
 
         slotToPoi.clear();
-        plugin.getPoiService().loadAllPoisWithRatings().thenAcceptAsync(pois -> {
+        plugin.getPoiService().loadAllPoisWithRatings().whenComplete((pois, error) -> {
+            if (error != null) {
+                reportError(error);
+                return;
+            }
             plugin.getDataService().runSync(() -> {
-                if (!player.isOnline()) {
+                if (!player.isOnline() || inventory == null
+                        || GuiManager.getInstance().get(player) != this) {
                     return;
                 }
-                int[] slots = {1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 17, 19, 21, 22, 23, 25, 26, 28, 29, 30, 32, 33, 34, 35, 37, 38, 39, 40, 41, 42, 43, 44};
+                // 44 зарезервирован под бренд, 13 — сама карта
+                int[] slots = {1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 17, 19, 21, 22, 23, 25, 26, 28, 29, 30, 32, 33, 34, 35, 37, 38, 39, 40, 41, 42, 43};
                 int idx = 0;
-                for (Poi poi : pois) {
+                for (Poi poi : pois == null ? List.<Poi>of() : pois) {
                     if (idx >= slots.length) {
                         break;
                     }
@@ -81,7 +85,7 @@ public class MapGui extends GuiScreen {
                     double distance = LocationUtil.distance(player.getLocation(), loc);
                     inventory.setItem(slots[idx], GuiUtil.item(Material.COMPASS,
                             GuiUtil.tonedName(9, poi.getName()),
-                            List.of(Component.text(LocationUtil.formatDistance(distance), NamedTextColor.AQUA))));
+                            lore("gui.lore-distance", "distance", LocationUtil.formatDistance(distance))));
                     slotToPoi.put(slots[idx], poi);
                     idx++;
                 }
@@ -93,6 +97,7 @@ public class MapGui extends GuiScreen {
                 inventory.setItem(i, GuiUtil.filler());
             }
         }
+        putBrand();
     }
 
     @Override
@@ -121,9 +126,11 @@ public class MapGui extends GuiScreen {
             }
             case 31 -> plugin.getMapService().recenter(player);
             case 49 -> new MainMenuGui(player).open();
+            case 52 -> player.closeInventory();
             default -> {
                 Poi poi = slotToPoi.get(slot);
                 if (poi != null) {
+                    GuiTheme.click(player);
                     player.closeInventory();
                     plugin.getPoiService().loadPoiWithRating(poi.getName()).thenAcceptAsync(loaded -> {
                         if (loaded == null) {

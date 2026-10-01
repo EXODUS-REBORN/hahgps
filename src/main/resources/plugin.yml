@@ -4,7 +4,7 @@ main: ru.hahgps.HahGpsPlugin
 api-version: '1.21'
 author: hah
 description: GPS navigation plugin for PaperMC
-website: https://example.com
+website: https://github.com/EXODUS-REBORN/hahgps
 
 commands:
   gps:
@@ -12,6 +12,14 @@ commands:
     usage: /gps <subcommand>
     aliases: [navigation, nav]
 
+# Права ниже соответствуют подкомандам /gps (см. ru.hahgps.command):
+#   gps.use            — point info|list, category list, goto, route start|stop, log, menu, help
+#   gps.point.*        — point create|delete|rate
+#   gps.category.*     — category create|delete
+#   gps.search / gps.map / gps.reload — одноимённые подкоманды
+#   gps.edge / gps.visual / gps.admin — edge, visual, update (gps.admin также для объявлений обновлений)
+#   gps.route.record, gps.route.save, gps.transport — зарезервированы под ещё
+#   не реализованные подкоманды (пока кодом не проверяются)
 permissions:
   gps.use:
     description: Basic GPS usage

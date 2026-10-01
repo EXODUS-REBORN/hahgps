@@ -34,17 +34,36 @@ public class SearchService {
         if (query == null || query.trim().isEmpty()) {
             return CompletableFuture.completedFuture(new ArrayList<>());
         }
+        final String qLower = query.toLowerCase(java.util.Locale.ROOT);
+        final int limit = Math.max(0, maxResults);
+        final double minSimilarity = threshold;
         return dataService.getPois().thenApply(pois -> {
             List<SearchResult> results = new ArrayList<>();
             for (Poi poi : pois) {
-                double sim = FuzzyMatcher.similarity(query, poi.getName());
-                if (sim >= threshold || poi.getName().toLowerCase().contains(query.toLowerCase())) {
-                    results.add(new SearchResult(poi.getName(), sim, poi));
+                if (poi == null || poi.getName() == null || poi.getName().isEmpty()) {
+                    continue;
                 }
+                String name = poi.getName();
+                String nameLower = name.toLowerCase(java.util.Locale.ROOT);
+                boolean contains = nameLower.contains(qLower);
+                double sim;
+                if (contains) {
+                    sim = FuzzyMatcher.similarity(qLower, nameLower);
+                } else {
+                    // быстрый отсев: по разнице длин похожесть заведомо не дотянет до порога
+                    if (FuzzyMatcher.upperBound(qLower, nameLower) < minSimilarity) {
+                        continue;
+                    }
+                    sim = FuzzyMatcher.similarity(qLower, nameLower);
+                    if (sim < minSimilarity) {
+                        continue;
+                    }
+                }
+                results.add(new SearchResult(name, sim, poi));
             }
             results.sort((a, b) -> Double.compare(b.similarity, a.similarity));
-            if (results.size() > maxResults) {
-                return results.subList(0, maxResults);
+            if (results.size() > limit) {
+                return new ArrayList<>(results.subList(0, limit));
             }
             return results;
         });

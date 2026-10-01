@@ -34,11 +34,23 @@ public class CategoryService {
                 return CompletableFuture.completedFuture(null);
             }
             CompletableFuture<Void> future = CompletableFuture.completedFuture(null);
+            if (names == null) {
+                return future;
+            }
             for (String name : names) {
                 future = future.thenCompose(v -> dataService.createCategory(name, true)
                         .thenApply(c -> null));
             }
             return future;
+        }).exceptionally(error -> {
+            // CompletableFuture молча проглатывает исключения — логируем иначе
+            // сбой посева стандартных категорий не виден никому
+            ru.hahgps.HahGpsPlugin plugin = ru.hahgps.HahGpsPlugin.getInstance();
+            if (plugin != null) {
+                plugin.getLogger().log(java.util.logging.Level.WARNING,
+                        "HahGps: не удалось создать стандартные категории", error);
+            }
+            return null;
         });
     }
 }

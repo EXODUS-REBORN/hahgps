@@ -30,18 +30,33 @@ public class CategoryCreateCommand implements SubCommand {
             return;
         }
         String name = args[0];
-        plugin.getCategoryService().createCategory(name).thenRun(() ->
-                plugin.getDataService().runSync(() -> {
-                    if (player.isOnline()) {
-                        player.sendMessage(plugin.getMessages().getPrefixed("category-created", "name", name));
+        plugin.getCategoryService().createCategory(name)
+                .whenComplete((created, error) -> plugin.getDataService().runSync(() -> {
+                    if (!player.isOnline()) {
+                        return;
                     }
+                    if (error != null) {
+                        if (ru.hahgps.command.SubCommand.isDuplicate(error)) {
+                            player.sendMessage(plugin.getMessages().getPrefixed("category-exists"));
+                        } else {
+                            ru.hahgps.command.SubCommand.sendError(player, error);
+                        }
+                        return;
+                    }
+                    if (created == null) {
+                        // нарушение UNIQUE (категория уже есть) или отказ БД
+                        player.sendMessage(plugin.getMessages().getPrefixed("category-exists"));
+                        return;
+                    }
+                    player.sendMessage(plugin.getMessages().getPrefixed("category-created", "name", name));
                 }));
     }
 
     @Override
     public List<String> tabComplete(Player player, String[] args) {
         if (args.length == 1) {
-            return List.of("<имя>");
+            // плейсхолдер только пока префикс пуст — иначе Tab вставлял бы подсказку в команду
+            return args[0].isEmpty() ? List.of("<имя>") : List.of();
         }
         return List.of();
     }

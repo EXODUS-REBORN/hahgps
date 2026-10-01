@@ -1,6 +1,9 @@
 package ru.hahgps.util;
 import org.bukkit.Location;
 import org.bukkit.World;
+import ru.hahgps.HahGpsPlugin;
+import ru.hahgps.config.MessagesManager;
+import java.util.Locale;
 public final class LocationUtil {
     private LocationUtil() {
     }
@@ -27,10 +30,47 @@ public final class LocationUtil {
     }
 
     public static String formatDistance(double distance) {
-        if (distance >= 1000) {
-            return String.format("%.1f км", distance / 1000.0);
+        if (!Double.isFinite(distance) || distance >= Double.MAX_VALUE) {
+            // защита от «1.797…e308 м» при межмирных/некорректных дистанциях
+            return "—";
         }
-        return String.format("%.0f м", distance);
+        if (distance < 0) {
+            distance = 0;
+        }
+        if (distance >= 1000) {
+            String value = String.format(Locale.ROOT, "%.1f", distance / 1000.0);
+            String localized = localized("distance-format-km", value);
+            return localized != null
+                    ? localized
+                    : String.format(Locale.ROOT, "%.1f км", distance / 1000.0);
+        }
+        String value = String.format(Locale.ROOT, "%.0f", distance);
+        String localized = localized("distance-format", value);
+        return localized != null
+                ? localized
+                : String.format(Locale.ROOT, "%.0f м", distance);
+    }
+
+    /**
+     * Единицы измерения берутся из messages (ru/en), а не хардкодятся.
+     * Возвращает null, если менеджер сообщений ещё не создан или ключ недоступен —
+     * тогда вызывающий использует прежнюю русскую строку.
+     */
+    private static String localized(String key, String value) {
+        try {
+            HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+            MessagesManager messages = plugin != null ? plugin.getMessages() : null;
+            if (messages == null) {
+                return null;
+            }
+            String result = messages.get(key, "value", value);
+            if (result == null || result.startsWith("<red>Missing:")) {
+                return null;
+            }
+            return result;
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     public static double angleTo(Location from, Location to) {

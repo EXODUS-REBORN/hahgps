@@ -1,21 +1,56 @@
 package ru.hahgps.service;
+import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.map.MapView;
+import org.bukkit.scheduler.BukkitTask;
+import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.model.Poi;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 public class TerrainRenderer {
 
     private static final int MAP_SIZE = 128;
+    private static final int TOTAL_SAMPLES = MAP_SIZE * MAP_SIZE;
+
+    /**
+     * Потолок подгружаемых чанков за один рендер (32×32). Без него масштаб
+     * FARTHEST требовал бы ~16 000 чанков, включая генерацию неизведанной местности.
+     */
+    private static final int MAX_CHUNK_REQUESTS = 1024;
+
+    /** Сколько пикселей выбораем на главном потоке за тик (квота на блокировку тика). */
+    private static final int SAMPLES_PER_TICK = 2048;
+
+    /** «Нет данных» — незагруженный чанк или ошибка чтения. */
+    private static final int NO_DATA = 0x202020;
+
+    private final HahGpsPlugin plugin;
+    private final ExecutorService drawExecutor;
+
+    public TerrainRenderer(HahGpsPlugin plugin) {
+        this.plugin = plugin;
+        this.drawExecutor = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "HahGps-MapRender");
+            t.setDaemon(true);
+            return t;
+        });
+    }
+
+    /** Останавливает фоновый поток отрисовки (вызывается из MapService.stop()). */
+    public void shutdown() {
+        drawExecutor.shutdownNow();
+    }
 
     public static double blocksPerPixel(MapView.Scale scale) {
         return switch (scale) {
@@ -27,48 +62,186 @@ public class TerrainRenderer {
         };
     }
 
+    /**
+     * Рендер карты. Потокобезопасно: обращения к миру выполняются только на главном
+     * потоке порционно (по квоте на тик), сама отрисовка картинки — в фоновом потоке.
+     */
     public CompletableFuture<BufferedImage> render(World world, int centerX, int centerZ,
                                                    MapView.Scale scale, List<Poi> pois,
                                                    List<Location> route, Location playerLoc) {
+        if (world == null) {
+            return CompletableFuture.completedFuture(blankImage());
+        }
+        if (!Bukkit.isPrimaryThread()) {
+            CompletableFuture<BufferedImage> out = new CompletableFuture<>();
+            try {
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    try {
+                        render(world, centerX, centerZ, scale, pois, route, playerLoc)
+                                .whenComplete((image, error) -> {
+                                    if (error != null) {
+                                        out.completeExceptionally(error);
+                                    } else {
+                                        out.complete(image);
+                                    }
+                                });
+                    } catch (Throwable t) {
+                        out.completeExceptionally(t);
+                    }
+                });
+            } catch (Throwable t) {
+                out.completeExceptionally(t);
+            }
+            return out;
+        }
+        return renderOnMain(world, centerX, centerZ, scale, pois, route, playerLoc);
+    }
+
+    private CompletableFuture<BufferedImage> renderOnMain(World world, int centerX, int centerZ,
+                                                          MapView.Scale scale, List<Poi> pois,
+                                                          List<Location> route, Location playerLoc) {
         double bpp = blocksPerPixel(scale);
         int radius = (int) (MAP_SIZE / 2 * bpp);
 
-        Set<Long> chunkKeys = new HashSet<>();
-        List<CompletableFuture<Chunk>> futures = new ArrayList<>();
         int minChunkX = (centerX - radius) >> 4;
         int maxChunkX = (centerX + radius) >> 4;
         int minChunkZ = (centerZ - radius) >> 4;
         int maxChunkZ = (centerZ + radius) >> 4;
+        int centerChunkX = centerX >> 4;
+        int centerChunkZ = centerZ >> 4;
+
+        // Какие чанки нужны для выборки (чистая арифметика, без доступа к миру)
+        List<int[]> chunks = new ArrayList<>();
         for (int cx = minChunkX; cx <= maxChunkX; cx++) {
             for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
-                long key = (((long) cx) << 32) | (cz & 0xffffffffL);
-                if (chunkKeys.add(key)) {
-                    futures.add(world.getChunkAtAsync(cx, cz));
-                }
+                chunks.add(new int[]{cx, cz});
+            }
+        }
+        if (chunks.size() > MAX_CHUNK_REQUESTS) {
+            // ближе к центру — приоритет; остальную местность покажем, если она уже загружена
+            chunks.sort(Comparator.comparingInt(c -> {
+                int dx = c[0] - centerChunkX;
+                int dz = c[1] - centerChunkZ;
+                return dx * dx + dz * dz;
+            }));
+            chunks = new ArrayList<>(chunks.subList(0, MAX_CHUNK_REQUESTS));
+        }
+
+        // Подгрузка без генерации новых чанков — асинхронно; несгенерированные
+        // чанки отклоняются самим Paper (generate=false), ошибку гасим handle()
+        List<CompletableFuture<?>> loads = new ArrayList<>(chunks.size());
+        for (int[] c : chunks) {
+            try {
+                CompletableFuture<Chunk> load = world.getChunkAtAsync(c[0], c[1], false);
+                loads.add(load.handle((chunk, error) -> null));
+            } catch (Throwable ignored) {
+                // мир выгружается/сервер останавливается — просто пропускаем чанк
             }
         }
 
-        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                .thenApply(v -> drawImage(world, centerX, centerZ, bpp, pois, route, playerLoc));
+        CompletableFuture<Void> all = loads.isEmpty()
+                ? CompletableFuture.completedFuture(null)
+                : CompletableFuture.allOf(loads.toArray(new CompletableFuture[0]));
+
+        CompletableFuture<int[]> sampled = new CompletableFuture<>();
+        all.whenComplete((v, error) -> {
+            if (error != null) {
+                sampled.completeExceptionally(error);
+                return;
+            }
+            startSampling(world, centerX, centerZ, bpp, sampled);
+        });
+
+        return sampled.thenApplyAsync(
+                colors -> drawImage(colors, centerX, centerZ, bpp, pois, route, playerLoc, world),
+                drawExecutor);
     }
 
-    private BufferedImage drawImage(World world, int centerX, int centerZ, double bpp,
-                                    List<Poi> pois, List<Location> route, Location playerLoc) {
+    /**
+     * Порционная выборка блоков: только на главном потоке и только по квоте SAMPLES_PER_TICK
+     * на тик, исключительно из уже загруженных чанков — без синхронной генерации.
+     */
+    private void startSampling(World world, int centerX, int centerZ, double bpp,
+                               CompletableFuture<int[]> out) {
+        int[] colors = new int[TOTAL_SAMPLES];
+        Arrays.fill(colors, NO_DATA);
+        int[] cursor = {0};
+        BukkitTask[] holder = new BukkitTask[1];
+        try {
+            holder[0] = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+                int budget = SAMPLES_PER_TICK;
+                while (budget-- > 0 && cursor[0] < TOTAL_SAMPLES) {
+                    int index = cursor[0]++;
+                    int px = index % MAP_SIZE;
+                    int pz = index / MAP_SIZE;
+                    int worldX = centerX + (int) ((px - MAP_SIZE / 2) * bpp);
+                    int worldZ = centerZ + (int) ((pz - MAP_SIZE / 2) * bpp);
+                    colors[index] = sampleBlock(world, worldX, worldZ);
+                }
+                if (cursor[0] >= TOTAL_SAMPLES) {
+                    // теоретическая гонка назначения таска — complete() идемпотентен,
+                    // а на следующем тике задача гарантированно отменится
+                    BukkitTask task = holder[0];
+                    if (task != null) {
+                        task.cancel();
+                    }
+                    out.complete(colors);
+                }
+            }, 0L, 1L);
+        } catch (Throwable t) {
+            // плагин выключается — задача не нужна
+            out.completeExceptionally(t);
+        }
+    }
+
+    private int sampleBlock(World world, int x, int z) {
+        try {
+            if (!world.isChunkLoaded(x >> 4, z >> 4)) {
+                return NO_DATA; // не грузим чанк ради карты
+            }
+            int y = world.getHighestBlockYAt(x, z);
+            Material material = world.getBlockAt(x, y, z).getType();
+            if (material.isAir()) {
+                // getHighestBlockYAt может отдать как первый свободный блок над землёй,
+                // так и сам верхний блок — нормализуем к фактической поверхности
+                int below = y - 1;
+                if (below < world.getMinHeight()) {
+                    return NO_DATA;
+                }
+                material = world.getBlockAt(x, below, z).getType();
+                if (material.isAir()) {
+                    return NO_DATA;
+                }
+                y = below;
+            }
+
+            double shade = Math.max(0.4, Math.min(1.0, 0.6 + (y / 256.0) * 0.4));
+            int base = getMaterialColor(material);
+            int r = (int) (((base >> 16) & 0xFF) * shade);
+            int g = (int) (((base >> 8) & 0xFF) * shade);
+            int b = (int) ((base & 0xFF) * shade);
+            return (r << 16) | (g << 8) | b;
+        } catch (Exception e) {
+            return NO_DATA;
+        }
+    }
+
+    private static BufferedImage blankImage() {
+        return new BufferedImage(MAP_SIZE, MAP_SIZE, BufferedImage.TYPE_INT_RGB);
+    }
+
+    /** Чистая отрисовка по уже собранной выборке — мира не касается, можно в фоне. */
+    private BufferedImage drawImage(int[] colors, int centerX, int centerZ, double bpp,
+                                    List<Poi> pois, List<Location> route, Location playerLoc,
+                                    World world) {
         BufferedImage image = new BufferedImage(MAP_SIZE, MAP_SIZE, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = image.createGraphics();
-
-        g.setColor(new Color(30, 60, 120));
-        g.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
-
-        for (int px = 0; px < MAP_SIZE; px++) {
-            for (int pz = 0; pz < MAP_SIZE; pz++) {
-                int worldX = centerX + (int) ((px - MAP_SIZE / 2) * bpp);
-                int worldZ = centerZ + (int) ((pz - MAP_SIZE / 2) * bpp);
-                int color = sampleBlockColor(world, worldX, worldZ);
-                g.setColor(new Color(color));
-                g.fillRect(px, pz, 1, 1);
+        for (int pz = 0; pz < MAP_SIZE; pz++) {
+            int row = pz * MAP_SIZE;
+            for (int px = 0; px < MAP_SIZE; px++) {
+                image.setRGB(px, pz, colors[row + px]);
             }
         }
+        Graphics2D g = image.createGraphics();
 
         if (route != null && route.size() >= 2) {
             g.setColor(new Color(102, 170, 255));
@@ -88,6 +261,9 @@ public class TerrainRenderer {
 
         if (pois != null) {
             for (Poi poi : pois) {
+                if (poi == null) {
+                    continue;
+                }
                 Location loc = poi.getLocation();
                 if (loc == null || loc.getWorld() == null || !loc.getWorld().equals(world)) {
                     continue;
@@ -110,22 +286,6 @@ public class TerrainRenderer {
 
         g.dispose();
         return image;
-    }
-
-    private int sampleBlockColor(World world, int x, int z) {
-        try {
-            int y = world.getHighestBlockYAt(x, z);
-            Material material = world.getBlockAt(x, y, z).getType();
-            int base = getMaterialColor(material);
-
-            double shade = Math.max(0.4, Math.min(1.0, 0.6 + (y / 256.0) * 0.4));
-            int r = (int) (((base >> 16) & 0xFF) * shade);
-            int g = (int) (((base >> 8) & 0xFF) * shade);
-            int b = (int) ((base & 0xFF) * shade);
-            return (r << 16) | (g << 8) | b;
-        } catch (Exception e) {
-            return 0x202020;
-        }
     }
 
     private int getMaterialColor(Material material) {

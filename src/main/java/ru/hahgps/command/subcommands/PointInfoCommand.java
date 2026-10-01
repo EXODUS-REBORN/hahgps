@@ -32,17 +32,17 @@ public class PointInfoCommand implements SubCommand {
             return;
         }
         String name = args[0];
-        plugin.getPoiService().loadPoiWithRating(name).thenAcceptAsync(poi -> {
-            if (poi == null) {
-                plugin.getDataService().runSync(() -> {
-                    if (player.isOnline()) {
-                        player.sendMessage(plugin.getMessages().getPrefixed("point-not-found", "name", name));
-                    }
-                });
-                return;
-            }
+        plugin.getPoiService().loadPoiWithRating(name).whenComplete((poi, error) -> {
             plugin.getDataService().runSync(() -> {
                 if (!player.isOnline()) {
+                    return;
+                }
+                if (error != null) {
+                    ru.hahgps.command.SubCommand.sendError(player, error);
+                    return;
+                }
+                if (poi == null) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("point-not-found", "name", name));
                     return;
                 }
                 Category category = plugin.getDataService().getCachedCategory(poi.getCategoryId());
@@ -69,10 +69,11 @@ public class PointInfoCommand implements SubCommand {
     @Override
     public List<String> tabComplete(Player player, String[] args) {
         if (args.length == 1) {
-            return HahGpsPlugin.getInstance().getDataService().getPois().thenApply(pois ->
-                    pois.stream().map(Poi::getName)
-                            .filter(n -> n.toLowerCase().startsWith(args[0].toLowerCase()))
-                            .toList()).join();
+            String prefix = args[0].toLowerCase();
+            return HahGpsPlugin.getInstance().getDataService().getCachedPois().stream()
+                    .map(Poi::getName)
+                    .filter(n -> n.toLowerCase().startsWith(prefix))
+                    .toList();
         }
         return List.of();
     }

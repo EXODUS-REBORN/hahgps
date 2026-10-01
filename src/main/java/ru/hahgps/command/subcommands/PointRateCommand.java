@@ -42,22 +42,46 @@ public class PointRateCommand implements SubCommand {
             player.sendMessage(plugin.getMessages().getPrefixed("invalid-rating"));
             return;
         }
-        plugin.getPoiService().ratePoi(name, player.getUniqueId(), rating).thenRun(() ->
+        final int finalRating = rating;
+        // сначала проверяем существование точки: ratePoi молча возвращает null
+        // и для несуществующей точки «успех» выглядел бы так же, как для настоящей
+        plugin.getPoiService().loadPoiWithRating(name).whenComplete((poi, error) -> {
+            if (error != null) {
+                ru.hahgps.command.SubCommand.sendError(player, error);
+                return;
+            }
+            if (poi == null) {
                 plugin.getDataService().runSync(() -> {
                     if (player.isOnline()) {
-                        player.sendMessage(plugin.getMessages().getPrefixed("point-rated",
-                                "name", name, "rating", String.valueOf(rating)));
+                        player.sendMessage(plugin.getMessages().getPrefixed("point-not-found",
+                                "name", name));
                     }
-                }));
+                });
+                return;
+            }
+            plugin.getPoiService().ratePoi(name, player.getUniqueId(), finalRating)
+                    .whenComplete((v, rateError) -> plugin.getDataService().runSync(() -> {
+                        if (!player.isOnline()) {
+                            return;
+                        }
+                        if (rateError != null) {
+                            ru.hahgps.command.SubCommand.sendError(player, rateError);
+                            return;
+                        }
+                        player.sendMessage(plugin.getMessages().getPrefixed("point-rated",
+                                "name", name, "rating", String.valueOf(finalRating)));
+                    }));
+        });
     }
 
     @Override
     public List<String> tabComplete(Player player, String[] args) {
         if (args.length == 1) {
-            return HahGpsPlugin.getInstance().getDataService().getPois().thenApply(pois ->
-                    pois.stream().map(Poi::getName)
-                            .filter(n -> n.toLowerCase().startsWith(args[0].toLowerCase()))
-                            .toList()).join();
+            String prefix = args[0].toLowerCase();
+            return HahGpsPlugin.getInstance().getDataService().getCachedPois().stream()
+                    .map(Poi::getName)
+                    .filter(n -> n.toLowerCase().startsWith(prefix))
+                    .toList();
         }
         if (args.length == 2) {
             return List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10");

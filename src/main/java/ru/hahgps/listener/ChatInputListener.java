@@ -1,14 +1,21 @@
 package ru.hahgps.listener;
+import io.papermc.paper.event.player.AsyncChatEvent;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
 import ru.hahgps.gui.InputManager;
 
+/**
+ * Перехват ввода в чате (создание точки, поиск, оценка).
+ * Paper-событие AsyncChatEvent вместо устаревшего AsyncPlayerChatEvent.
+ */
 public class ChatInputListener implements Listener {
 
-    @EventHandler
-    public void onChat(AsyncPlayerChatEvent event) {
-        if (InputManager.getInstance().handleChat(event.getPlayer(), event.getMessage())) {
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onChat(AsyncChatEvent event) {
+        String text = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+                .plainText().serialize(event.message());
+        if (InputManager.getInstance().handleChat(event.getPlayer(), text)) {
             event.setCancelled(true);
         }
     }

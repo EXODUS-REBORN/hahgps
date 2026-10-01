@@ -2,11 +2,13 @@ package ru.hahgps.model;
 
 public enum TransportType {
 
+    // Цвета лучей — только тона палитры hahtojer (см. docs/gui.md):
+    // 0xAAAAAA — нейтральный серый, остальные — сине-голубые тоны TONES.
     FOOT("foot", 1.0, 0xAAAAAA),
-    CAR("car", 2.0, 0xFFFF00),
-    TRANSIT("transit", 1.5, 0x0000FF),
-    AIR("air", 4.0, 0xAA00FF),
-    WATER("water", 1.2, 0x00FFFF);
+    CAR("car", 2.0, 0x3F86FF),
+    TRANSIT("transit", 1.5, 0x8FC6FF),
+    AIR("air", 4.0, 0x4FD1E0),
+    WATER("water", 1.2, 0x66AAFF);
 
     private final String key;
     private final double speed;

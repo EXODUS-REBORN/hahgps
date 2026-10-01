@@ -1,20 +1,22 @@
 package ru.hahgps.gui;
 import org.bukkit.entity.Player;
-import java.util.HashMap;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class GuiManager {
 
-    private static GuiManager instance;
+    // Инициализация при загрузке класса: ленивый double-check здесь гонялся
+    // между главным потоком и асинхронными колбэками
+    private static final GuiManager INSTANCE = new GuiManager();
 
-    private final Map<UUID, GuiScreen> openGuis = new HashMap<>();
+    private final Map<UUID, GuiScreen> openGuis = new ConcurrentHashMap<>();
 
     public static GuiManager getInstance() {
-        if (instance == null) {
-            instance = new GuiManager();
-        }
-        return instance;
+        return INSTANCE;
     }
 
     public void register(Player player, GuiScreen gui) {
@@ -34,9 +36,19 @@ public class GuiManager {
     }
 
     public void closeAll() {
-        for (GuiScreen gui : openGuis.values()) {
-            gui.getPlayer().closeInventory();
-        }
+        // Снимаем с регистрации ДО закрытия: InventoryCloseEvent вызовет
+        // unregister, и итерация по живой карте дала бы ConcurrentModificationException
+        List<GuiScreen> screens = new ArrayList<>(openGuis.values());
         openGuis.clear();
+        for (GuiScreen gui : screens) {
+            try {
+                Player p = gui.getPlayer();
+                if (p != null && p.isOnline()) {
+                    p.closeInventory();
+                }
+            } catch (Throwable ignored) {
+                // игрок мог отключиться в этот момент
+            }
+        }
     }
 }

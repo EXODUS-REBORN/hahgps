@@ -30,9 +30,14 @@ public class HelpCommand implements SubCommand {
         player.sendMessage(messages.getPrefixed("help-header"));
         for (SubCommand cmd : plugin.getCommandManager().getSubcommands().values()) {
             if (cmd.permission().isEmpty() || player.hasPermission(cmd.permission())) {
+                String description = messages.get("help-" + cmd.name(), "description", "");
+                if (description.contains("Missing:")) {
+                    // ключ help-<имя> ещё не добавлен в messages_*.yml — не показываем игроку служебный текст
+                    description = cmd.usage();
+                }
                 player.sendMessage(messages.getPrefixed("help-entry",
                         "usage", cmd.usage(),
-                        "description", messages.get("help-" + cmd.name(), "description", "")));
+                        "description", description));
             }
         }
     }

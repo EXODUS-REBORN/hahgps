@@ -10,9 +10,22 @@ public class PlayerQuitListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        var plugin = HahGpsPlugin.getInstance();
-        plugin.getNavigationService().stopNavigation(event.getPlayer());
-        plugin.getMapService().removePlayer(event.getPlayer());
+        // Сервисы поднимаются асинхронно после загрузки хранилища —
+        // до этого момента они ещё null, выход игрока не должен падать
+        HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+        if (plugin == null) {
+            return;
+        }
+        try {
+            if (plugin.getNavigationService() != null) {
+                plugin.getNavigationService().stopNavigation(event.getPlayer());
+            }
+            if (plugin.getMapService() != null) {
+                plugin.getMapService().removePlayer(event.getPlayer());
+            }
+        } catch (Throwable ignored) {
+            // очистка не должна ломать выход игрока
+        }
         GuiManager.getInstance().unregister(event.getPlayer());
         InputManager.getInstance().remove(event.getPlayer());
     }

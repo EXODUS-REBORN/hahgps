@@ -8,9 +8,8 @@ import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.subcommands.*;
 import ru.hahgps.model.Poi;
 import ru.hahgps.model.TransportType;
-import ru.hahgps.service.GraphService;
-import ru.hahgps.service.RouteService;
-import ru.hahgps.service.VisualizationService;
+import ru.hahgps.service.Pathfinder;
+import ru.hahgps.util.LocationUtil;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -59,26 +58,35 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         }
 
         if (args[0].equalsIgnoreCase("off")) {
+            if (!plugin.getNavigationService().isNavigating(player)) {
+                player.sendMessage(plugin.getMessages().getPrefixed("no-active-route"));
+                return true;
+            }
             plugin.getNavigationService().stopNavigation(player);
             player.sendMessage(plugin.getMessages().getPrefixed("route-stopped"));
             return true;
         }
-
-        SubCommand node = null;
-        int i = 0;
 
         SubCommand current = roots.get(args[0].toLowerCase());
         if (current == null) {
             tryGoto(player, args);
             return true;
         }
-        node = current;
-        i = 1;
+        if (!hasPermission(player, current)) {
+            player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
+            return true;
+        }
 
+        SubCommand node = current;
+        int i = 1;
         while (i < args.length && !node.isLeaf()) {
             SubCommand child = findChild(node, args[i].toLowerCase());
             if (child == null) {
                 break;
+            }
+            if (!hasPermission(player, child)) {
+                player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
+                return true;
             }
             node = child;
             i++;
@@ -87,42 +95,48 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         String[] remaining = new String[args.length - i];
         System.arraycopy(args, i, remaining, 0, remaining.length);
 
-        if (!node.isLeaf()) {
+        // Permission проверяется и для узлов-родителей (usage-ветка),
+        // и для листа — иначе gps.use/gps.edge не применялись бы вовсе.
+        if (!node.isLeaf() || hasPermission(player, node)) {
             node.execute(player, remaining);
-            return true;
-        }
-
-        if (!node.permission().isEmpty() && !player.hasPermission(node.permission())) {
+        } else {
             player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
-            return true;
         }
-
-        node.execute(player, remaining);
         return true;
+    }
+
+    private boolean hasPermission(Player player, SubCommand cmd) {
+        return cmd.permission().isEmpty() || player.hasPermission(cmd.permission());
     }
 
     private void tryGoto(Player player, String[] args) {
         String pointName = args[0];
         TransportType transport = TransportType.FOOT;
         if (args.length >= 2) {
-            transport = TransportType.fromKey(args[1]);
-        }
-        final TransportType finalTransport = transport;
-        plugin.getPoiService().loadPoiWithRating(pointName).thenAcceptAsync(poi -> {
-            if (poi == null) {
-                plugin.getDataService().runSync(() -> {
-                    if (player.isOnline()) {
-                        player.sendMessage(plugin.getMessages().getPrefixed("point-not-found", "name", pointName));
-                    }
-                });
+            transport = SubCommand.parseTransport(args[1]);
+            if (transport == null) {
+                player.sendMessage(plugin.getMessages().getPrefixed("invalid-args",
+                        "usage", new GotoCommand().usage()));
                 return;
             }
-            plugin.getDataService().runSync(() -> {
-                if (player.isOnline()) {
+        }
+        final TransportType finalTransport = transport;
+        plugin.getPoiService().loadPoiWithRating(pointName).whenComplete((poi, error) ->
+                plugin.getDataService().runSync(() -> {
+                    if (!player.isOnline()) {
+                        return;
+                    }
+                    if (error != null) {
+                        SubCommand.sendError(player, error);
+                        return;
+                    }
+                    if (poi == null) {
+                        player.sendMessage(plugin.getMessages().getPrefixed("point-not-found",
+                                "name", pointName));
+                        return;
+                    }
                     gotoPoi(player, poi, finalTransport);
-                }
-            });
-        });
+                }));
     }
 
     private SubCommand findChild(SubCommand parent, String name) {
@@ -161,7 +175,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         if (node == null) {
             List<String> names = new ArrayList<>();
             for (SubCommand cmd : roots.values()) {
-                if (cmd.permission().isEmpty() || player.hasPermission(cmd.permission())) {
+                if (hasPermission(player, cmd)) {
                     names.add(cmd.name());
                 }
             }
@@ -170,14 +184,22 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         }
 
         if (node.isLeaf()) {
+            if (!hasPermission(player, node)) {
+                return new ArrayList<>();
+            }
             String[] remaining = new String[args.length - i];
             System.arraycopy(args, i, remaining, 0, remaining.length);
-            return node.tabComplete(player, remaining);
+            try {
+                return node.tabComplete(player, remaining);
+            } catch (Throwable t) {
+                plugin.getLogger().warning("HahGps: tab-complete failed for " + node.name() + ": " + t);
+                return new ArrayList<>();
+            }
         }
 
         List<String> names = new ArrayList<>();
         for (SubCommand child : node.children()) {
-            if (child.permission().isEmpty() || player.hasPermission(child.permission())) {
+            if (hasPermission(player, child)) {
                 names.add(child.name());
             }
         }
@@ -201,20 +223,38 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 
         var loc = poi.getLocation();
         if (loc == null) {
-            player.sendMessage(messages.getPrefixed("point-not-found", "name", poi.getName()));
+            // getLocation()==null означает, что мира точки нет на сервере
+            player.sendMessage(messages.getPrefixed("world-not-found", "world",
+                    poi.getWorld() == null ? "?" : poi.getWorld()));
             return;
         }
 
-        routeService.buildMultiModalAsync(player, loc, transport).thenAcceptAsync(result -> {
-            plugin.getDataService().runSync(() -> {
-                if (!player.isOnline()) {
-                    return;
-                }
-                navService.startNavigation(player, poi.getName(), loc, result, result.size(), transport);
-                player.sendMessage(messages.getPrefixed("route-started",
-                        "name", poi.getName(),
-                        "distance", String.format("%.0f", result.size())));
-            });
-        });
+        routeService.buildMultiModalAsync(player, loc, transport).whenComplete((path, error) ->
+                plugin.getDataService().runSync(() -> {
+                    if (!player.isOnline()) {
+                        return;
+                    }
+                    if (error != null) {
+                        SubCommand.sendError(player, error);
+                        return;
+                    }
+                    List<org.bukkit.Location> result = path != null
+                            ? path
+                            : List.<org.bukkit.Location>of();
+                    // Длина маршрута в метрах: раньше сюда попадало число точек маршрута,
+                    // а String.format("%.0f", int) бросал IllegalFormatConversionException
+                    // и игрок не получал сообщение о старте навигации.
+                    double distance = Pathfinder.routeLength(result);
+                    if (distance <= 0 && loc.getWorld() != null) {
+                        distance = LocationUtil.distance(player.getLocation(), loc);
+                    }
+                    if (Double.isInfinite(distance) || Double.isNaN(distance) || distance == Double.MAX_VALUE) {
+                        distance = 0;
+                    }
+                    navService.startNavigation(player, poi.getName(), loc, result, distance, transport);
+                    player.sendMessage(messages.getPrefixed("route-started",
+                            "name", poi.getName(),
+                            "distance", String.format("%.0f", distance)));
+                }));
     }
 }

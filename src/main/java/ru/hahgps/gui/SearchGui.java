@@ -1,20 +1,31 @@
 package ru.hahgps.gui;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.service.SearchService;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class SearchGui extends GuiScreen {
 
-    private List<SearchService.SearchResult> results = new java.util.ArrayList<>();
+    private List<SearchService.SearchResult> results = new ArrayList<>();
+    private String query = "";
+    private boolean showingResults;
+
+    /** Результаты, которые нужно показать сразу после открытия (поиск из чата). */
+    private final String initialQuery;
+    private final List<SearchService.SearchResult> initialResults;
 
     public SearchGui(Player player) {
+        this(player, null, null);
+    }
+
+    public SearchGui(Player player, String query, List<SearchService.SearchResult> results) {
         super(player);
+        this.initialQuery = query;
+        this.initialResults = results;
     }
 
     @Override
@@ -28,77 +39,121 @@ public class SearchGui extends GuiScreen {
     }
 
     @Override
-    public void build() {
-        HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+    public void open() {
+        super.open();
+        // После закрытия меню ради ввода в чат экран уже переоткрыт —
+        // результаты просто отрисовываем поверх
+        if (initialResults != null) {
+            showResults(initialQuery, initialResults);
+        }
+    }
 
+    @Override
+    public void build() {
         inventory.setItem(11, GuiUtil.item(Material.PAPER,
-                GuiUtil.tonedName(9, "Введите запрос в чат"),
-                List.of(Component.text("Нажмите, чтобы начать поиск", NamedTextColor.AQUA))));
+                comp("gui.search-input"),
+                lore("gui.lore-search-start")));
 
         inventory.setItem(15, GuiUtil.item(Material.COMPASS,
-                GuiUtil.tonedName(9, "Быстрый поиск"),
-                List.of(Component.text("По названию точки", NamedTextColor.AQUA))));
+                comp("gui.search-quick"),
+                lore("gui.lore-search-name")));
 
-        inventory.setItem(22, GuiUtil.item(Material.ARROW,
-                plugin.getMessages().getComponent("gui.back")));
+        inventory.setItem(22, GuiTheme.navBack(getMsg("gui.back")));
+        inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));
 
         for (int i = 0; i < size(); i++) {
             if (inventory.getItem(i) == null) {
                 inventory.setItem(i, GuiUtil.filler());
             }
         }
+        putBrand();
     }
 
     @Override
     public void onClick(int slot, ClickType clickType) {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
-        if (slot == 22) {
-            new MainMenuGui(player).open();
+        if (slot == 52) {
+            player.closeInventory();
             return;
         }
-        if (slot == 11 || slot == 15) {
-
+        if (slot == 22 || slot == 53) {
+            if (showingResults) {
+                results = new ArrayList<>();
+                query = "";
+                showingResults = false;
+                refresh();
+            } else {
+                new MainMenuGui(player).open();
+            }
+            GuiTheme.click(player);
+            return;
+        }
+        // В режиме результатов слоты 11/15 заняты найденными точками
+        if (!showingResults && (slot == 11 || slot == 15)) {
             player.closeInventory();
             InputManager.getInstance().request(player,
-                    plugin.getMessages().getPrefixed("gui.search-hint"),
-                    input -> {
-                        plugin.getSearchService().search(input).thenAcceptAsync(found -> {
-                            plugin.getDataService().runSync(() -> {
-                                if (player.isOnline()) {
-                                    showResults(found);
-                                }
-                            });
+                    plugin.getMessages().getPrefixed("input-search"),
+                    input -> plugin.getSearchService().search(input).whenComplete((found, error) -> {
+                        if (error != null) {
+                            reportError(error);
+                            return;
+                        }
+                        plugin.getDataService().runSync(() -> {
+                            if (player.isOnline()) {
+                                // Открываем новый экран: старый закрыт чатом
+                                new SearchGui(player, input, found).open();
+                            }
                         });
-                    });
+                    }));
+            return;
+        }
+        // Клик по результату поиска — сразу строим маршрут
+        if (slot >= 0 && slot < Math.min(44, results.size())) {
+            SearchService.SearchResult result = results.get(slot);
+            GuiTheme.click(player);
+            player.closeInventory();
+            if (result.poi == null) {
+                player.sendMessage(plugin.getMessages().getPrefixed(
+                        "point-not-found", "name", result.name));
+                return;
+            }
+            new TransportSelectGui(player, transport ->
+                    plugin.getCommandManager().gotoPoi(player, result.poi, transport)).open();
         }
     }
 
-    private void showResults(List<SearchService.SearchResult> found) {
-        this.results = found;
+    private void showResults(String query, List<SearchService.SearchResult> found) {
+        this.query = query == null ? "" : query.trim();
+        this.results = found == null ? new ArrayList<>() : found;
+        this.showingResults = true;
         inventory.clear();
-        if (found.isEmpty()) {
+        if (this.results.isEmpty()) {
             inventory.setItem(13, GuiUtil.item(Material.BARRIER,
-                    HahGpsPlugin.getInstance().getMessages().getComponent("search-no-results",
-                            "query", "")));
+                    comp("search-no-results", "query", this.query)));
         } else {
             int slot = 0;
-            for (SearchService.SearchResult result : found) {
-                if (slot >= 45) {
+            for (SearchService.SearchResult result : this.results) {
+                if (slot >= 44) {
                     break;
                 }
+                java.util.List<net.kyori.adventure.text.Component> lines = new java.util.ArrayList<>();
+                lines.add(comp("gui.search-result-type"));
+                lines.addAll(lore("gui.lore-search-result",
+                        "percent", String.valueOf((int) (result.similarity * 100))));
                 inventory.setItem(slot++, GuiUtil.item(Material.COMPASS,
                         GuiUtil.tonedName(9, result.name),
-                        List.of(
-                                Component.text("Точка", NamedTextColor.AQUA),
-                                Component.text("Совпадение: " + (int) (result.similarity * 100) + "%", NamedTextColor.AQUA))));
+                        lines));
             }
+            inventory.setItem(48, GuiUtil.item(Material.PAPER,
+                    comp("search-header", "count", String.valueOf(this.results.size()))));
         }
-        inventory.setItem(53, GuiUtil.item(Material.ARROW,
-                HahGpsPlugin.getInstance().getMessages().getComponent("gui.back")));
+        inventory.setItem(53, GuiTheme.navBack(getMsg("gui.back")));
+        inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));
         for (int i = 0; i < size(); i++) {
             if (inventory.getItem(i) == null) {
                 inventory.setItem(i, GuiUtil.filler());
             }
         }
+        putBrand();
     }
 }

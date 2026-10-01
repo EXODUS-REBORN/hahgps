@@ -25,7 +25,9 @@ public class EdgeCommand implements SubCommand {
 
     @Override
     public String permission() {
-        return "gps.admin";
+        // plugin.yml объявляет gps.edge — раньше здесь стоял gps.admin и разрешение
+        // из plugin.yml не применялось вовсе
+        return "gps.edge";
     }
 
     @Override
@@ -56,13 +58,14 @@ public class EdgeCommand implements SubCommand {
 
         @Override
         public String permission() {
-            return "gps.admin";
+            return "gps.edge";
         }
 
         @Override
         public void execute(Player player, String[] args) {
+            HahGpsPlugin plugin = HahGpsPlugin.getInstance();
             if (args.length < 2) {
-                player.sendMessage(HahGpsPlugin.getInstance().getMessages().getPrefixed("usage", "usage", usage()));
+                player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
                 return;
             }
             try {
@@ -70,20 +73,37 @@ public class EdgeCommand implements SubCommand {
                 int id2 = Integer.parseInt(args[1]);
                 Set<TransportType> types = EnumSet.of(TransportType.FOOT, TransportType.CAR);
                 if (args.length >= 3) {
-                    types = EnumSet.noneOf(TransportType.class);
+                    Set<TransportType> parsed = EnumSet.noneOf(TransportType.class);
                     for (String t : args[2].split(",")) {
-                        types.add(TransportType.fromKey(t.trim()));
+                        TransportType type = SubCommand.parseTransport(t);
+                        if (type == null) {
+                            // раньше неизвестный тип молча становился FOOT
+                            player.sendMessage(plugin.getMessages().getPrefixed("invalid-args",
+                                    "usage", usage()));
+                            return;
+                        }
+                        parsed.add(type);
                     }
+                    if (parsed.isEmpty()) {
+                        player.sendMessage(plugin.getMessages().getPrefixed("invalid-args",
+                                "usage", usage()));
+                        return;
+                    }
+                    types = parsed;
                 }
-                GraphService graphService = HahGpsPlugin.getInstance().getGraphService();
+                GraphService graphService = plugin.getGraphService();
+                if (graphService == null) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
+                    return;
+                }
                 if (graphService.connectNodes(id1, id2, types)) {
-                    player.sendMessage(HahGpsPlugin.getInstance().getMessages().getPrefixed("edge-connected",
+                    player.sendMessage(plugin.getMessages().getPrefixed("edge-connected",
                             "id1", String.valueOf(id1), "id2", String.valueOf(id2)));
                 } else {
-                    player.sendMessage(HahGpsPlugin.getInstance().getMessages().getPrefixed("edge-not-found"));
+                    player.sendMessage(plugin.getMessages().getPrefixed("edge-not-found"));
                 }
             } catch (NumberFormatException e) {
-                player.sendMessage(HahGpsPlugin.getInstance().getMessages().getPrefixed("usage", "usage", usage()));
+                player.sendMessage(plugin.getMessages().getPrefixed("invalid-args", "usage", usage()));
             }
         }
 
@@ -91,8 +111,11 @@ public class EdgeCommand implements SubCommand {
         public List<String> tabComplete(Player player, String[] args) {
             if (args.length == 1 || args.length == 2) {
                 List<String> ids = new ArrayList<>();
-                for (var node : HahGpsPlugin.getInstance().getGraphService().getNodes()) {
-                    ids.add(String.valueOf(node.getId()));
+                var graphService = HahGpsPlugin.getInstance().getGraphService();
+                if (graphService != null) {
+                    for (var node : graphService.getNodes()) {
+                        ids.add(String.valueOf(node.getId()));
+                    }
                 }
                 return ids;
             }
@@ -116,34 +139,41 @@ public class EdgeCommand implements SubCommand {
 
         @Override
         public String permission() {
-            return "gps.admin";
+            return "gps.edge";
         }
 
         @Override
         public void execute(Player player, String[] args) {
+            HahGpsPlugin plugin = HahGpsPlugin.getInstance();
             if (args.length < 4) {
-                player.sendMessage(HahGpsPlugin.getInstance().getMessages().getPrefixed("usage", "usage", usage()));
+                player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
                 return;
             }
             try {
                 int id1 = Integer.parseInt(args[0]);
                 int id2 = Integer.parseInt(args[1]);
                 String action = args[2].toLowerCase();
-                TransportType type = TransportType.fromKey(args[3]);
-                GraphService graphService = HahGpsPlugin.getInstance().getGraphService();
-                boolean success;
-                if (action.equals("add")) {
-                    success = graphService.addTransportToEdge(id1, id2, type);
-                } else {
-                    success = graphService.removeTransportFromEdge(id1, id2, type);
+                TransportType type = SubCommand.parseTransport(args[3]);
+                if (type == null || (!action.equals("add") && !action.equals("remove"))) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("invalid-args",
+                            "usage", usage()));
+                    return;
                 }
+                GraphService graphService = plugin.getGraphService();
+                if (graphService == null) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
+                    return;
+                }
+                boolean success = action.equals("add")
+                        ? graphService.addTransportToEdge(id1, id2, type)
+                        : graphService.removeTransportFromEdge(id1, id2, type);
                 if (success) {
-                    player.sendMessage(HahGpsPlugin.getInstance().getMessages().getPrefixed("edge-updated"));
+                    player.sendMessage(plugin.getMessages().getPrefixed("edge-updated"));
                 } else {
-                    player.sendMessage(HahGpsPlugin.getInstance().getMessages().getPrefixed("edge-not-found"));
+                    player.sendMessage(plugin.getMessages().getPrefixed("edge-not-found"));
                 }
             } catch (NumberFormatException e) {
-                player.sendMessage(HahGpsPlugin.getInstance().getMessages().getPrefixed("usage", "usage", usage()));
+                player.sendMessage(plugin.getMessages().getPrefixed("invalid-args", "usage", usage()));
             }
         }
 

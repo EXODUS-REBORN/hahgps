@@ -32,21 +32,33 @@ public class PointDeleteCommand implements SubCommand {
             return;
         }
         String name = args[0];
-        plugin.getPoiService().deletePoi(name).thenRun(() ->
-                plugin.getDataService().runSync(() -> {
-                    if (player.isOnline()) {
-                        player.sendMessage(plugin.getMessages().getPrefixed("point-deleted", "name", name));
+        plugin.getPoiService().deletePoi(name)
+                .whenComplete((deleted, error) -> plugin.getDataService().runSync(() -> {
+                    if (!player.isOnline()) {
+                        return;
                     }
+                    if (error != null) {
+                        ru.hahgps.command.SubCommand.sendError(player, error);
+                        return;
+                    }
+                    if (!Boolean.TRUE.equals(deleted)) {
+                        // раньше всегда писало «удалена», даже если точки не было
+                        player.sendMessage(plugin.getMessages().getPrefixed("point-not-found",
+                                "name", name));
+                        return;
+                    }
+                    player.sendMessage(plugin.getMessages().getPrefixed("point-deleted", "name", name));
                 }));
     }
 
     @Override
     public List<String> tabComplete(Player player, String[] args) {
         if (args.length == 1) {
-            return HahGpsPlugin.getInstance().getDataService().getPois().thenApply(pois ->
-                    pois.stream().map(Poi::getName)
-                            .filter(n -> n.toLowerCase().startsWith(args[0].toLowerCase()))
-                            .toList()).join();
+            String prefix = args[0].toLowerCase();
+            return HahGpsPlugin.getInstance().getDataService().getCachedPois().stream()
+                    .map(Poi::getName)
+                    .filter(n -> n.toLowerCase().startsWith(prefix))
+                    .toList();
         }
         return List.of();
     }

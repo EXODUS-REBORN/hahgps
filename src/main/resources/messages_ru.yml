@@ -1,58 +1,67 @@
 # ============================================================
 #  HahGps — сообщения (Русский)
+#
+#  Палитра основного плагина hahtojer (GuiTheme.TONES):
+#  #08122b #0e2450 #14397e #1d51a8 #2464c8 #3f86ff #66aaff
+#  #8fc6ff #4fd1e0 #8fe9f5
+#  Нейтральные: <white> — значения, <gray> — пояснения,
+#  <dark_gray> — разделители, <red> — только ошибки.
 # ============================================================
 
-prefix: "<#8fc6ff>[GPS]<reset> "
+prefix: "<gray>[</gray><gradient:#2464c8:#8fe9f5>GPS</gradient><gray>]</gray> "
 
-no-permission: "<#3f86ff>У вас нет прав для выполнения этой команды."
-player-only: "<#3f86ff>Эта команда доступна только игрокам."
-usage: "<#3f86ff>Использование: <#b8dcff>{usage}"
-invalid-args: "<#3f86ff>Неверные аргументы. <#b8dcff>{usage}"
+# Версия схемы палитры: при несовпадении файл заменяется эталоном (старый — в .bak)
+palette-version: 2
+
+no-permission: "<red>У вас нет прав для выполнения этой команды."
+player-only: "<red>Эта команда доступна только игрокам."
+usage: "<red>Использование: <white>{usage}"
+invalid-args: "<red>Неверные аргументы. <white>{usage}"
 
 # --- Точки ---
-point-created: "<#8fc6ff>Точка <#b8dcff>{name}</#b8dcff> успешно создана."
-point-deleted: "<#8fc6ff>Точка <#b8dcff>{name}</#b8dcff> удалена."
-point-not-found: "<#3f86ff>Точка <#b8dcff>{name}</#b8dcff> не найдена."
-point-exists: "<#3f86ff>Точка с именем <#b8dcff>{name}</#b8dcff> уже существует."
+point-created: "<#8fc6ff>Точка <white>{name}</white> успешно создана."
+point-deleted: "<#8fc6ff>Точка <white>{name}</white> удалена."
+point-not-found: "<red>Точка <white>{name}</white> не найдена."
+point-exists: "<red>Точка с именем <white>{name}</white> уже существует."
 point-info: |
   <#8fc6ff>══════════ Точка ══════════</#8fc6ff>
-  <#c8e4ff>Название:</#c8e4ff> <white>{name}</white>
-  <#c8e4ff>Категория:</#c8e4ff> {category}
-  <#c8e4ff>Координаты:</#c8e4ff> <white>{x}, {y}, {z}</white>
-  <#c8e4ff>Мир:</#c8e4ff> {world}
-  <#c8e4ff>Рейтинг:</#c8e4ff> <#b8dcff>{rating}/10</#b8dcff> <#c8e4ff>(голосов: {votes})</#c8e4ff>
-  <#c8e4ff>Автор:</#c8e4ff> {author}
-  <#c8e4ff>Создана:</#c8e4ff> {date}
-  <#c8e4ff>Описание:</#c8e4ff> {description}
-point-rated: "<#8fc6ff>Вы оценили точку <#b8dcff>{name}</#b8dcff> на <#b8dcff>{rating}</#b8dcff>."
-invalid-rating: "<#3f86ff>Рейтинг должен быть от 1 до 10."
+  <gray>Название:</gray> <white>{name}</white>
+  <gray>Категория:</gray> <white>{category}</white>
+  <gray>Координаты:</gray> <white>{x}, {y}, {z}</white>
+  <gray>Мир:</gray> <white>{world}</white>
+  <gray>Рейтинг:</gray> <#8fe9f5>{rating}/10</#8fe9f5> <dark_gray>(голосов: {votes})</dark_gray>
+  <gray>Автор:</gray> <white>{author}</white>
+  <gray>Создана:</gray> <white>{date}</white>
+  <gray>Описание:</gray> <white>{description}</white>
+point-rated: "<#8fc6ff>Вы оценили точку <white>{name}</white> на <#8fe9f5>{rating}</#8fe9f5>."
+invalid-rating: "<red>Рейтинг должен быть от 1 до 10."
 point-list-header: "<#8fc6ff>═══ Все точки ({count}) ═══</#8fc6ff>"
-point-list-entry: "<#b8dcff>•</#b8dcff> {name} <#c8e4ff>|</#c8e4ff> {category} <#c8e4ff>|</#c8e4ff> ★{rating} <#c8e4ff>|</#c8e4ff> {distance}м"
+point-list-entry: "<gray>•</gray> <white>{name}</white> <dark_gray>|</dark_gray> <gray>{category}</gray> <dark_gray>|</dark_gray> <#8fe9f5>★{rating}</#8fe9f5> <dark_gray>|</dark_gray> <gray>{distance}м</gray>"
 
 # --- Категории ---
-category-created: "<#8fc6ff>Категория <#b8dcff>{name}</#b8dcff> создана."
-category-deleted: "<#8fc6ff>Категория <#b8dcff>{name}</#b8dcff> удалена."
-category-not-found: "<#3f86ff>Категория <#b8dcff>{name}</#b8dcff> не найдена."
-category-exists: "<#3f86ff>Категория с таким именем уже существует."
-cannot-delete-default: "<#3f86ff>Нельзя удалить стандартную категорию."
+category-created: "<#8fc6ff>Категория <white>{name}</white> создана."
+category-deleted: "<#8fc6ff>Категория <white>{name}</white> удалена."
+category-not-found: "<red>Категория <white>{name}</white> не найдена."
+category-exists: "<red>Категория с таким именем уже существует."
+cannot-delete-default: "<red>Нельзя удалить стандартную категорию."
 category-list-header: "<#8fc6ff>═══ Категории ({count}) ═══</#8fc6ff>"
-category-list-entry: "<#b8dcff>•</#b8dcff> {name} <#c8e4ff>({count} точек)</#c8e4ff>"
+category-list-entry: "<gray>•</gray> <white>{name}</white> <dark_gray>(</dark_gray><gray>{count} точек</gray><dark_gray>)</dark_gray>"
 
 # --- Маршруты и навигация ---
-route-started: "<#8fc6ff>Навигация к <#b8dcff>{name}</#b8dcff> начата. Расстояние: <#b8dcff>{distance} м</#b8dcff>."
+route-started: "<#8fc6ff>Навигация к <white>{name}</white> начата. Расстояние: <#8fe9f5>{distance} м</#8fe9f5>."
 route-stopped: "<#8fc6ff>Навигация остановлена."
-no-active-route: "<#3f86ff>У вас нет активной навигации."
-arrival: "<#8fc6ff>✔ Цель достигнута!"
+no-active-route: "<red>У вас нет активной навигации."
+arrival: "<#8fe9f5>✔ Цель достигнута!"
 
 # --- Подсказки ---
-hint-straight: "<#c8e4ff>↑ Идите прямо</#c8e4ff>"
-hint-slight-right: "<#b8dcff>↗ Направо</#b8dcff>"
-hint-right: "<#b8dcff>→ Поверните направо</#b8dcff>"
-hint-sharp-right: "<#b8dcff>↘ Резко направо</#b8dcff>"
+hint-straight: "<#66aaff>↑ Идите прямо</#66aaff>"
+hint-slight-right: "<#8fc6ff>↗ Направо</#8fc6ff>"
+hint-right: "<#8fc6ff>→ Поверните направо</#8fc6ff>"
+hint-sharp-right: "<#8fe9f5>↘ Резко направо</#8fe9f5>"
 hint-back: "<#3f86ff>↩ Развернитесь</#3f86ff>"
-hint-sharp-left: "<#b8dcff>↙ Резко налево</#b8dcff>"
-hint-left: "<#b8dcff>← Поверните налево</#b8dcff>"
-hint-slight-left: "<#b8dcff>↖ Налево</#b8dcff>"
+hint-sharp-left: "<#8fe9f5>↙ Резко налево</#8fe9f5>"
+hint-left: "<#8fc6ff>← Поверните налево</#8fc6ff>"
+hint-slight-left: "<#8fc6ff>↖ Налево</#8fc6ff>"
 
 # --- Журналирование ---
 log-enabled: "<#8fc6ff>Журнализация маршрута включена."
@@ -60,19 +69,20 @@ log-disabled: "<#8fc6ff>Журнализация маршрута выключе
 
 # --- Поиск ---
 search-header: "<#8fc6ff>═══ Результаты поиска ({count}) ═══</#8fc6ff>"
-search-no-results: "<#3f86ff>По запросу <#b8dcff>{query}</#b8dcff> ничего не найдено."
-search-entry: "<#b8dcff>•</#b8dcff> {name} <#c8e4ff>|</#c8e4ff> {match}%"
+search-no-results: "<red>По запросу <white>{query}</white> ничего не найдено."
+search-entry: "<gray>•</gray> <white>{name}</white> <dark_gray>|</dark_gray> <#8fe9f5>{match}%</#8fe9f5>"
 
 # --- Прочее ---
 reloaded: "<#8fc6ff>Конфигурация HahGps перезагружена."
-loading-data: "<#c8e4ff>Загрузка данных...</#c8e4ff>"
-error-occurred: "<#3f86ff>Произошла ошибка: {error}"
-world-not-found: "<#3f86ff>Мир <#b8dcff>{world}</#b8dcff> не найден."
+loading-data: "<gray>Загрузка данных...</gray>"
+error-occurred: "<red>Произошла ошибка: <white>{error}</white>"
+world-not-found: "<red>Мир <white>{world}</white> не найден."
 distance-format: "{value} м"
+distance-format-km: "{value} км"
 
 # --- Помощь ---
 help-header: "<#8fc6ff>═══ Команды GPS ═══</#8fc6ff>"
-help-entry: "<#b8dcff>{usage}</#b8dcff> <#c8e4ff>— {description}</#c8e4ff>"
+help-entry: "<#8fc6ff>{usage}</#8fc6ff> <gray>— {description}</gray>"
 help-menu: "Открыть главное меню"
 help-point: "Управление точками"
 help-category: "Управление категориями"
@@ -80,14 +90,25 @@ help-route: "Управление маршрутами"
 help-goto: "Построить маршрут к точке"
 help-search: "Поиск точек"
 help-map: "Открыть карту"
-help-start: "Начать навигацию"
-help-stop: "Остановить навигацию"
-help-record: "Запись маршрута (админ)"
-help-save: "Сохранить маршрут"
-help-list: "Список маршрутов"
 help-log: "Переключить подсказки"
 help-reload: "Перезагрузить конфиг"
 help-help: "Показать эту справку"
+help-update: "Проверка и установка обновлений"
+help-edge: "Управление рёбрами графа дорог"
+help-visual: "Визуализация графа дорог"
+
+# --- Обновления (/gps update) ---
+update-checking: "<#8fc6ff>Проверяю релизы…"
+update-downloading: "<#8fc6ff>Проверяю и скачиваю новую версию…"
+update-nothing-to-apply: "<#8fc6ff>Применять нечего: подготовленного обновления нет (сначала &f/gps update install<#8fc6ff>)."
+update-hotswap-failed: "<red>Горячая подмена не удалась: <white>{reason}</white>"
+update-reloaded: "<#8fc6ff>Настройки обновления перечитаны."
+
+# --- Ввод в чате ---
+input-category-create: "<#8fc6ff>Напиши название новой категории в чат:</#8fc6ff>"
+input-category-delete: "<#8fc6ff>Напиши название категории, которую нужно удалить, в чат:</#8fc6ff>"
+input-rate: "<#8fc6ff>Оцени точку от 1 до 10 — напиши число в чате:</#8fc6ff>"
+input-search: "<#8fc6ff>Напиши поисковый запрос в чат:</#8fc6ff>"
 
 # --- GUI ---
 gui:
@@ -96,13 +117,12 @@ gui:
   categories: "<#8fc6ff>Категории</#8fc6ff>"
   map: "<#8fc6ff>Карта</#8fc6ff>"
   search: "<#8fc6ff>Поиск</#8fc6ff>"
-  transport: "<#8fc6ff>Транспорт</#8fc6ff>"
   settings: "<#8fc6ff>Настройки</#8fc6ff>"
   back: "<#3f86ff>← Назад</#3f86ff>"
   close: "<#3f86ff>✖ Закрыть</#3f86ff>"
   next-page: "<#8fc6ff>→ Следующая страница</#8fc6ff>"
   prev-page: "<#8fc6ff>← Предыдущая страница</#8fc6ff>"
-  page-info: "<#c8e4ff>Страница {page}/{pages}</#c8e4ff>"
+  page-info: "<gray>Страница {page}/{pages}</gray>"
   points-title: "<#8fc6ff>Мои точки</#8fc6ff>"
   categories-title: "<#8fc6ff>Категории</#8fc6ff>"
   search-title: "<#8fc6ff>Поиск</#8fc6ff>"
@@ -118,10 +138,9 @@ gui:
   zoom-in: "<#8fc6ff>Приблизить</#8fc6ff>"
   zoom-out: "<#8fc6ff>Отдалить</#8fc6ff>"
   recenter: "<#8fc6ff>Центрировать на себе</#8fc6ff>"
-  rating-stars: "<#b8dcff>{stars}</#b8dcff><#c8e4ff>{empty}</#c8e4ff>"
-  distance: "<#c8e4ff>{distance} м</#c8e4ff>"
-  category: "<#c8e4ff>{category}</#c8e4ff>"
-  search-hint: "<#c8e4ff>Нажмите, чтобы ввести запрос в чат</#c8e4ff>"
+  rating-stars: "<#8fe9f5>{stars}</#8fe9f5><dark_gray>{empty}</dark_gray>"
+  distance: "<gray>{distance} м</gray>"
+  category: "<gray>{category}</gray>"
   language: "<#8fc6ff>Язык: {language}</#8fc6ff>"
   logging: "<#8fc6ff>Подсказки в чате: {state}</#8fc6ff>"
   transport-foot: "<#8fc6ff>Пешком</#8fc6ff>"
@@ -129,9 +148,40 @@ gui:
   transport-transit: "<#8fc6ff>Общественный</#8fc6ff>"
   transport-air: "<#8fc6ff>Авиа</#8fc6ff>"
   transport-water: "<#8fc6ff>Водный</#8fc6ff>"
+  search-input: "<#8fc6ff>Введите запрос в чат</#8fc6ff>"
+  search-quick: "<#8fc6ff>Быстрый поиск</#8fc6ff>"
+  search-result-type: "<gray>Точка</gray>"
+  map-scale: "<#8fc6ff>Масштаб карты</#8fc6ff>"
+  state-on: "Вкл"
+  state-off: "Выкл"
 
-edge-connected: "<#8fc6ff>Ребро <#b8dcff>{id1} → {id2}</#b8dcff> создано."
-edge-not-found: "<#3f86ff>Ребро не найдено."
+  # Пояснения под кнопками (lore)
+  lore-my-points: "<gray>Просмотр и управление точками</gray>"
+  lore-categories: "<gray>Управление категориями</gray>"
+  lore-map: "<gray>Открыть карту местности</gray>"
+  lore-search: "<gray>Поиск точек</gray>"
+  lore-settings: "<gray>Настройки плагина</gray>"
+  lore-category-count: "<gray>Точек: <white>{count}</white></gray>"
+  lore-map-closed: "<red>Карта не открыта</red>"
+  lore-distance: "<gray>{distance}</gray>"
+  lore-search-start: "<gray>Нажмите, чтобы начать поиск</gray>"
+  lore-search-name: "<gray>По названию точки</gray>"
+  lore-search-result: "<gray>Совпадение: <white>{percent}%</white></gray>"
+  lore-info: "<gray>Подробная информация</gray>"
+  lore-goto: "<gray>Построить маршрут</gray>"
+  lore-rate: "<gray>Оценить (1-10)</gray>"
+  lore-delete: "<gray>Удалить точку</gray>"
+  lore-language: "<gray>Нажмите, чтобы переключить RU/EN</gray>"
+  lore-logging: "<gray>Подсказки в чате при навигации</gray>"
+  lore-toggle: "<gray>Нажмите, чтобы изменить</gray>"
+  lore-transport-foot: "<gray>Маршрут по тропинкам и пешеходным переходам</gray>"
+  lore-transport-car: "<gray>Маршрут по дорогам для авто</gray>"
+  lore-transport-transit: "<gray>Маршрут общественного транспорта по рельсам и остановкам</gray>"
+  lore-transport-air: "<gray>Прямой перелёт по прямой — быстро, но далеко</gray>"
+  lore-transport-water: "<gray>Маршрут по рекам и другой воде</gray>"
+
+edge-connected: "<#8fc6ff>Ребро <white>{id1} → {id2}</white> создано."
+edge-not-found: "<red>Ребро не найдено."
 edge-updated: "<#8fc6ff>Ребро обновлено."
-visual-enabled: "<#8fc6ff>Визуализация <#b8dcff>{type}</#b8dcff> включена."
+visual-enabled: "<#8fc6ff>Визуализация <white>{type}</white> включена."
 visual-disabled: "<#8fc6ff>Визуализация выключена."

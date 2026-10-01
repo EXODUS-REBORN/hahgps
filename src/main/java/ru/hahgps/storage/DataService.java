@@ -6,7 +6,6 @@ import ru.hahgps.model.RoadGraph;
 import ru.hahgps.model.Route;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.plugin.java.JavaPlugin;
 import ru.hahgps.HahGpsPlugin;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +26,9 @@ public class DataService {
     private final Map<Integer, Category> categoryCache = new ConcurrentHashMap<>();
     private final Map<String, Category> categoryByName = new ConcurrentHashMap<>();
 
+    /** Снимок точек для tab-complete: чтение имён не должно блокировать главный поток. */
+    private final Map<Integer, Poi> poiCache = new ConcurrentHashMap<>();
+
     private final List<Route> routeCache = new ArrayList<>();
     private volatile RoadGraph roadGraph = new RoadGraph();
 
@@ -41,40 +43,47 @@ public class DataService {
     }
 
     public CompletableFuture<Void> loadCache() {
+        // Исключения НЕ проглатываются: сбой чтения БД должен быть замечен вызывающей
+        // стороной (HahGpsPlugin выключит плагин), иначе сервер молча стартует «пустым».
         return CompletableFuture.runAsync(() -> {
-            try {
+            List<Category> categories = provider.getCategories();
+            categoryCache.clear();
+            categoryByName.clear();
+            for (Category c : categories) {
+                categoryCache.put(c.getId(), c);
+                categoryByName.put(c.getName().toLowerCase(), c);
+            }
 
-                List<Category> categories = provider.getCategories();
-                categoryCache.clear();
-                categoryByName.clear();
-                for (Category c : categories) {
-                    categoryCache.put(c.getId(), c);
-                    categoryByName.put(c.getName().toLowerCase(), c);
-                }
+            List<Poi> pois = provider.getPois();
+            poiCache.clear();
+            for (Poi p : pois) {
+                poiCache.put(p.getId(), p);
+            }
 
-                List<Route> routes = provider.getRoutes();
+            List<Route> routes = provider.getRoutes();
+            synchronized (routeCache) {
                 routeCache.clear();
                 routeCache.addAll(routes);
-                rebuildGraph();
-            } catch (Exception e) {
-                plugin.getLogger().log(Level.SEVERE, "Failed to load data cache", e);
             }
+            rebuildGraph();
         }, executor);
     }
 
     public synchronized void rebuildGraph() {
         RoadGraph graph = new RoadGraph();
         int nodeId = 1;
-        for (Route route : routeCache) {
-            GraphNode prev = null;
-            for (Location loc : route.getNodes()) {
-                GraphNode node = new GraphNode(nodeId++, loc);
-                graph.addNode(node);
-                if (prev != null) {
-                    graph.addEdge(prev, node, java.util.EnumSet.of(
-                            ru.hahgps.model.TransportType.FOOT, ru.hahgps.model.TransportType.CAR));
+        synchronized (routeCache) {
+            for (Route route : routeCache) {
+                GraphNode prev = null;
+                for (Location loc : route.getNodes()) {
+                    GraphNode node = new GraphNode(nodeId++, loc);
+                    graph.addNode(node);
+                    if (prev != null) {
+                        graph.addEdge(prev, node, java.util.EnumSet.of(
+                                ru.hahgps.model.TransportType.FOOT, ru.hahgps.model.TransportType.CAR));
+                    }
+                    prev = node;
                 }
-                prev = node;
             }
         }
         this.roadGraph = graph;
@@ -94,6 +103,17 @@ public class DataService {
 
     public List<Category> getCachedCategories() {
         return new ArrayList<>(categoryCache.values());
+    }
+
+    /**
+     * Снимок точек из памяти (сортировка как в БД — по имени).
+     * Используется в tab-complete: запрос к БД там нельзя выполнять
+     * синхронно — он выполняется на главном потоке и подвешивает сервер.
+     */
+    public List<Poi> getCachedPois() {
+        List<Poi> out = new ArrayList<>(poiCache.values());
+        out.sort(java.util.Comparator.comparing(Poi::getName, String.CASE_INSENSITIVE_ORDER));
+        return out;
     }
 
     private <T> CompletableFuture<T> async(Supplier<T> action) {
@@ -153,11 +173,23 @@ public class DataService {
     }
 
     public CompletableFuture<Poi> createPoi(Poi poi) {
-        return async(() -> provider.createPoi(poi));
+        return async(() -> {
+            Poi created = provider.createPoi(poi);
+            if (created != null) {
+                poiCache.put(created.getId(), created);
+            }
+            return created;
+        });
     }
 
     public CompletableFuture<Boolean> deletePoi(int id) {
-        return async(() -> provider.deletePoi(id));
+        return async(() -> {
+            boolean result = provider.deletePoi(id);
+            if (result) {
+                poiCache.remove(id);
+            }
+            return result;
+        });
     }
 
     public CompletableFuture<Poi> getPoiByName(String name) {
@@ -177,7 +209,13 @@ public class DataService {
     }
 
     public CompletableFuture<Boolean> updatePoi(Poi poi) {
-        return async(() -> provider.updatePoi(poi));
+        return async(() -> {
+            boolean result = provider.updatePoi(poi);
+            if (result) {
+                poiCache.put(poi.getId(), poi);
+            }
+            return result;
+        });
     }
 
     public CompletableFuture<Void> setRating(int poiId, UUID playerId, int rating) {
@@ -221,12 +259,38 @@ public class DataService {
     }
 
     public void runSync(Runnable runnable) {
-        Bukkit.getScheduler().runTask(plugin, runnable);
+        if (!plugin.isEnabled()) {
+            // плагин выключается/выгружается (hot-swap) — планировщик бросил бы исключение
+            return;
+        }
+        try {
+            Bukkit.getScheduler().runTask(plugin, runnable);
+        } catch (Throwable t) {
+            plugin.getLogger().log(Level.FINE, "HahGps: не удалось выйти на главный поток", t);
+        }
     }
 
+    /**
+     * Останавливаем БД-пул мягко: ждём завершения начатых записей,
+     * и только потом закрываем соединение (иначе close() мог бы оборвать
+     * идущую транзакцию и данные терялись бы при выключении).
+     */
     public void shutdown() {
-        executor.shutdownNow();
-        provider.close();
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+                executor.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS);
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        try {
+            provider.close();
+        } catch (Throwable t) {
+            plugin.getLogger().log(Level.WARNING, "HahGps: не удалось закрыть хранилище", t);
+        }
     }
 
     @FunctionalInterface

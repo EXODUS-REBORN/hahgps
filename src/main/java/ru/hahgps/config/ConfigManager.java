@@ -87,16 +87,8 @@ public class ConfigManager {
         return config.getBoolean("navigation.show-arrow", true);
     }
 
-    public int getMapRadius() {
-        return config.getInt("map.radius", 64);
-    }
-
     public String getMapZoom() {
         return config.getString("map.zoom", "CLOSE");
-    }
-
-    public boolean isMapRenderAsync() {
-        return config.getBoolean("map.render-async", true);
     }
 
     public boolean isMapShowPois() {
@@ -109,10 +101,6 @@ public class ConfigManager {
 
     public boolean isTransportAvailable(String key) {
         return config.getBoolean("transport." + key, false);
-    }
-
-    public List<String> getTransportPoints(String key) {
-        return config.getStringList("transport." + key);
     }
 
     public int getSearchMaxResults() {
