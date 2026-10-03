@@ -114,6 +114,14 @@ update-nothing-to-apply: "<red>✖ Применять нечего: подгот
 update-hotswap-failed: "<red>✖ Горячая подмена не удалась: <white>{reason}</white>"
 update-reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>Настройки обновления перечитаны.</gray>"
 
+# --- Оповещения об обновлении (группам из обновление.группы-оповещения) ---
+update-available: "<gray>Доступно новое обновление:</gray> <font:minecraft:uniform><white>{version}</white></font> <dark_gray>·</dark_gray> <gray>вышло:</gray> <font:minecraft:uniform><white>{date}</white></font>"
+update-whats-new: "<gray>Что нового:</gray> <white>{notes}</white>"
+update-downloading-now: "<gray>Скачиваю обновление…</gray>"
+update-staged: "<#8fe9f5>✔</#8fe9f5> <gray>Обновление</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>скачано и проверено — готово к установке.</gray>"
+update-installed: "<#8fe9f5>✔</#8fe9f5> <gray>Обновление</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>успешно установлено — сервер не перезапускался.</gray>"
+update-failed: "<red>✖ Обновление не удалось: <white>{error}</white></red>"
+
 # --- Ввод в чате ---
 input-category-create: "<gray>→ Напиши название новой категории в чат:</gray>"
 input-category-delete: "<gray>→ Напиши название категории, которую нужно удалить, в чат:</gray>"

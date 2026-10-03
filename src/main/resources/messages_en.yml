@@ -114,6 +114,14 @@ update-nothing-to-apply: "<red>✖ Nothing to apply: no staged update <dark_gray
 update-hotswap-failed: "<red>✖ Hot swap failed: <white>{reason}</white>"
 update-reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>Update settings reloaded.</gray>"
 
+# --- Update announcements (to groups from обновление.группы-оповещения) ---
+update-available: "<gray>New update available:</gray> <font:minecraft:uniform><white>{version}</white></font> <dark_gray>·</dark_gray> <gray>released:</gray> <font:minecraft:uniform><white>{date}</white></font>"
+update-whats-new: "<gray>What's new:</gray> <white>{notes}</white>"
+update-downloading-now: "<gray>Downloading update…</gray>"
+update-staged: "<#8fe9f5>✔</#8fe9f5> <gray>Update</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>downloaded and verified — ready to install.</gray>"
+update-installed: "<#8fe9f5>✔</#8fe9f5> <gray>Update</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>installed successfully — server was not restarted.</gray>"
+update-failed: "<red>✖ Update failed: <white>{error}</white></red>"
+
 # --- Chat input ---
 input-category-create: "<gray>→ Type the new category name in chat:</gray>"
 input-category-delete: "<gray>→ Type the category name to delete in chat:</gray>"

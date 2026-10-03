@@ -211,7 +211,7 @@ public class HahGpsPlugin extends JavaPlugin {
         updater = new UpdaterService(this);
         updater.start();
 
-        HotSwap.announceLastResult(this);
+        HotSwap.announceLastResult(this, updater.announcer());
     }
 
     @Override

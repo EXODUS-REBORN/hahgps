@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 public final class UpdaterService {
     public record Release(String tag, String version, String assetName, long assetId,
-                          boolean prerelease) {
+                          boolean prerelease, String publishedAt, String body) {
     }
     private static final String API = "https://api.github.com";
     private static final String TOKEN_TEMPLATE = "github-token.example.txt";
@@ -30,6 +30,7 @@ public final class UpdaterService {
     private static final String MAIN_PLUGIN_FOLDER = "hahtojer";
     static final String JAR_PREFIX = "hahgps";
     private final HahGpsPlugin plugin;
+    private final UpdateAnnouncer announcer;
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .followRedirects(HttpClient.Redirect.NEVER)
@@ -58,6 +59,7 @@ public final class UpdaterService {
     private volatile boolean remindedPlaceholder;
     public UpdaterService(HahGpsPlugin plugin) {
         this.plugin = plugin;
+        this.announcer = new UpdateAnnouncer(plugin);
     }
 
     public void reload() {
@@ -69,6 +71,8 @@ public final class UpdaterService {
         tokenFile = String.valueOf(cfg.getString("обновление.файл-ключа", "github-token.txt")).trim();
         autoDownload = cfg.getBoolean("обновление.авто-скачивание", true);
         hotApply = cfg.getBoolean("обновление.горячее-обновление", true);
+        // Кому приходят оповещения об обновлении: группы LuckPerms (не OP и не gps.admin)
+        announcer.setGroups(cfg.getStringList("обновление.группы-оповещения"));
         String custom = String.valueOf(cfg.getString("обновление.адрес-api", API)).trim();
         api = custom.isEmpty() ? API : custom.replaceAll("/+$", "");
         token = readToken();
@@ -216,6 +220,10 @@ public final class UpdaterService {
         return repo;
     }
 
+    public UpdateAnnouncer announcer() {
+        return announcer;
+    }
+
     public synchronized void start() {
         reload();
         HotSwap.reset();
@@ -330,11 +338,37 @@ public final class UpdaterService {
 
                 if (!release.version().equals(announcedVersion)) {
                     announcedVersion = release.version();
-                    announce("Доступна новая версия " + release.version() + ".");
+                    // оповещение — только группам из обновление.группы-оповещения (не OP, не gps.admin)
+                    announcer.announce("update-available",
+                            "version", release.version(), "date", formatReleaseDate(release.publishedAt()));
+                    if (!release.body().isBlank()) {
+                        announcer.announce("update-whats-new", "notes", shortNotes(release.body()));
+                    }
                 }
                 if (!installIfNewer) return;
 
-                Path jar = download(release);
+                announcer.announce("update-downloading-now");
+                Path jar;
+                try {
+                    jar = download(release);
+                } catch (Exception e) {
+                    lastError = e.getMessage() == null ? e.toString() : e.getMessage();
+                    if (!lastError.equals(loggedError)) {
+                        loggedError = lastError;
+                        plugin.getLogger().warning("Обновление: " + lastError);
+                    }
+                    reply(feedback, "Не удалось проверить обновление: " + lastError);
+                    announcer.announce("update-failed", "error", lastError);
+                    if (!hasToken() && isAccessError(lastError)) {
+                        plugin.getLogger().warning("Обновление: автопроверка остановлена — нужен токен "
+                                + "(plugins/" + plugin.getDataFolder().getName() + "/" + tokenFile
+                                + ", plugins/" + MAIN_PLUGIN_FOLDER + "/" + tokenFile
+                                + " или переменная HAHTOJER_GITHUB_TOKEN), fine-grained, "
+                                + "право Contents: Read. Настройки: секция «обновление» в config.yml.");
+                        stop();
+                    }
+                    return;
+                }
                 stagedJar = jar;
                 stagedVersion = release.version();
                 reply(feedback, "Скачано и проверено: " + jar.getFileName());
@@ -347,11 +381,12 @@ public final class UpdaterService {
                         lastError = t.getMessage() == null ? t.toString() : t.getMessage();
                         plugin.getLogger().warning("Обновление: горячую подмену запустить не удалось ("
                                 + lastError + ") — версия применится при рестарте сервера.");
-                        announce("Версия " + release.version() + " скачана и готова к установке.");
+                        announcer.announce("update-failed", "error", lastError);
+                        announcer.announce("update-staged", "version", release.version());
                     }
                     return;
                 }
-                announce("Версия " + release.version() + " скачана и готова к установке.");
+                announcer.announce("update-staged", "version", release.version());
             } catch (Exception e) {
                 lastError = e.getMessage() == null ? e.toString() : e.getMessage();
 
@@ -423,7 +458,8 @@ public final class UpdaterService {
                 }
                 long id = (long) toDouble(asset.get("id"));
                 if (id <= 0) continue;
-                return new Release(tag, version, name, id, pre);
+                return new Release(tag, version, name, id, pre,
+                        str(release.get("published_at")), str(release.get("body")));
             }
         }
         return null;
@@ -635,6 +671,29 @@ public final class UpdaterService {
         return out;
     }
 
+    /** Дата релиза из GitHub (ISO 8601) → dd.MM.yyyy для чата; не разобралось — как есть. */
+    static String formatReleaseDate(String iso) {
+        if (iso == null || iso.isBlank()) return "";
+        String raw = iso.trim();
+        try {
+            return java.time.OffsetDateTime.parse(raw)
+                    .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy"));
+        } catch (Exception e) {
+            int t = raw.indexOf('T');
+            return t > 0 ? raw.substring(0, t) : raw;
+        }
+    }
+
+    /** Заметки релиза для чата: слишком длинные обрезаем, чтобы не забить чат. */
+    static String shortNotes(String body) {
+        if (body == null) return "";
+        String notes = body.strip();
+        if (notes.length() > 500) {
+            notes = notes.substring(0, 500).strip() + "…";
+        }
+        return notes;
+    }
+
     static boolean isNewer(String candidate, String current) {
         int[] a = versionParts(candidate);
         int[] b = versionParts(current);
@@ -742,19 +801,6 @@ public final class UpdaterService {
         }
     }
 
-    private void announce(String text) {
-        runOnMain(() -> {
-            var messages = plugin.getMessages();
-            for (var player : Bukkit.getOnlinePlayers()) {
-                if (player.hasPermission("gps.admin") || player.isOp()) {
-                    // тон палитры hahtojer вместо §b
-                    player.sendMessage(messages.getComponentRaw("<#8fc6ff>" + text));
-                }
-            }
-        });
-        plugin.getLogger().info(text);
-    }
-
     private static String str(Object value) {
         return value == null ? "" : String.valueOf(value);
     }
@@ -779,6 +825,8 @@ public final class UpdaterService {
         out.add("Горячее обновление: " + (hotApply ? "включено" : "выключено")
                 + ", последняя попытка: " + (HotSwap.lastResult().isEmpty()
                         ? "не было" : HotSwap.lastResult()));
+        out.add("Оповещение об обновлении: группы " + String.join(", ", announcer.groups())
+                + " (обновление.группы-оповещения)");
         out.add(hasToken()
                 ? "Токен доступа: есть (" + tokenSource + ")"
                 : "Токен доступа: нет");

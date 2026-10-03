@@ -255,7 +255,7 @@ public final class HotSwap {
         return new Result(false, version, reason);
     }
 
-    public static void announceLastResult(HahGpsPlugin plugin) {
+    public static void announceLastResult(HahGpsPlugin plugin, UpdateAnnouncer announcer) {
         if (plugin == null) return;
         Path state = plugin.getDataFolder().toPath().resolve("update").resolve(STATE);
         if (!Files.isRegularFile(state)) return;
@@ -280,26 +280,13 @@ public final class HotSwap {
 
             if (!fresh || (!version.isBlank() && !version.equals(current))) return;
             lastResult = "применено на ходу: " + (version.isBlank() ? current : version);
-            announce(plugin, "Горячее обновление готово: версия " + (version.isBlank() ? current : version)
-                    + " работает — сервер не перезапускался.");
+            // оповещение — только группам из обновление.группы-оповещения (не OP, не gps.admin)
+            announcer.announce("update-installed", "version", version.isBlank() ? current : version);
             return;
         }
         String reason = values.getOrDefault("reason", "");
         lastResult = "не удалось: " + reason;
-        announce(plugin, "Горячее обновление " + (version.isBlank() ? current : version)
-                + " не удалось: " + reason);
-    }
-
-    private static void announce(HahGpsPlugin plugin, String text) {
-        if (text == null || text.isBlank()) return;
-        plugin.getLogger().info(text);
-        var messages = plugin.getMessages();
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.hasPermission("gps.admin") || player.isOp()) {
-                // тон палитры hahtojer вместо §9
-                player.sendMessage(messages.getComponentRaw("<#8fc6ff>" + text));
-            }
-        }
+        announcer.announce("update-failed", "error", reason);
     }
 
     private static void closeOwnGuis(HahGpsPlugin plugin) {

@@ -17,7 +17,8 @@ commands:
 #   gps.point.*        — point create|delete|rate
 #   gps.category.*     — category create|delete
 #   gps.search / gps.map / gps.reload — одноимённые подкоманды
-#   gps.edge / gps.visual / gps.admin — edge, visual, update (gps.admin также для объявлений обновлений)
+#   gps.edge / gps.visual / gps.admin — edge, visual, update (объявления об
+#   обновлении — не по gps.admin, а группам LuckPerms из обновление.группы-оповещения)
 #   gps.route.record, gps.route.save, gps.transport — зарезервированы под ещё
 #   не реализованные подкоманды (пока кодом не проверяются)
 permissions:
