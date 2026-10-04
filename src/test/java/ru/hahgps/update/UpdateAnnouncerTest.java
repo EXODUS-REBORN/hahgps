@@ -6,10 +6,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/**
- * Список групп оповещения: значения по умолчанию (41, 42, 103, 555),
- * чистка при чтении конфига и откат к значениям по умолчанию на пустом списке.
- */
+
 class UpdateAnnouncerTest {
 
     @Test

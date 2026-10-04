@@ -16,12 +16,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Оформление меню в стиле основного плагина hahtojer.
- * Палитра — те же 10 тонов GuiTheme.TONES, что и у hahtojer,
- * нейтральные: white — значения, gray — пояснения, dark_gray — разделители,
- * red — только ошибки.
- */
+
 public final class GuiTheme {
 
     private GuiTheme() {
@@ -34,94 +29,207 @@ public final class GuiTheme {
     public static final String ACCENT_COLOR = "\u00a79";
     public static final String VALUE_COLOR = "\u00a7f";
 
-    /** Палитра: тона синего → голубого от почти чёрно-синего (0) к светло-бирюзовому (9). */
+
     public static final String[] TONES = {
-            "#08122b", // 0 — ночной
-            "#0e2450", // 1 — глубокий
-            "#14397e", // 2 — тёмно-синий
-            "#1d51a8", // 3 — синий
-            "#2464c8", // 4 — синий ярче
-            "#3f86ff", // 5 — ярко-синий
-            "#66aaff", // 6 — голубой
-            "#8fc6ff", // 7 — светло-голубой
-            "#4fd1e0", // 8 — бирюзовый
-            "#8fe9f5"  // 9 — светло-бирюзовый
+            "#08122b",
+            "#0e2450",
+            "#14397e",
+            "#1d51a8",
+            "#2464c8",
+            "#3f86ff",
+            "#66aaff",
+            "#8fc6ff",
+            "#4fd1e0",
+            "#8fe9f5"
     };
+
+
+    public static final String GREEN = "#4ade80";
+    public static final String GREEN_DEEP = "#22c55e";
+    public static final String LIME = "#a3e635";
+    public static final String RED = "#f87171";
+    public static final String RED_DEEP = "#ef4444";
+    public static final String ORANGE = "#fb923c";
+    public static final String ORANGE_DEEP = "#f97316";
+    public static final String AMBER = "#fbbf24";
+    public static final String GOLD = "#fcd34d";
+    public static final String PURPLE = "#c084fc";
+    public static final String VIOLET = "#a855f7";
+    public static final String PINK = "#f472b6";
+    public static final String TEAL = "#2dd4bf";
+    public static final String SKY = "#38bdf8";
+    public static final String INDIGO = "#818cf8";
+    public static final String CYAN = "#22d3ee";
+    public static final String BLUE = "#3b82f6";
+
+
+    public static final String[] ACCENTS = {
+            GREEN, GREEN_DEEP, LIME,
+            RED, RED_DEEP,
+            ORANGE, ORANGE_DEEP, AMBER, GOLD,
+            PURPLE, VIOLET, PINK,
+            TEAL, SKY, INDIGO, CYAN, BLUE
+    };
+
+
+    public static final String[] PALETTE = concat(TONES, ACCENTS);
+
+
+    public static final String OK_MARK = "<" + GREEN + ">✔</" + GREEN + ">";
+    public static final String ERR_MARK = "<" + RED + ">✖</" + RED + ">";
+    public static final String PROMPT_MARK = "<" + PURPLE + ">→</" + PURPLE + ">";
+
+    private static String[] concat(String[] a, String[] b) {
+        String[] out = new String[a.length + b.length];
+        System.arraycopy(a, 0, out, 0, a.length);
+        System.arraycopy(b, 0, out, a.length, b.length);
+        return out;
+    }
 
     public static final String GRADIENT_START = TONES[1];
     public static final String GRADIENT_MID = TONES[4];
     public static final String GRADIENT_TAIL = TONES[9];
 
-    /**
-     * Ванильные шрифты (ресурспак не нужен). uniform — пиксельный моноширинный
-     * с полным покрытием (кириллица, цифры, символы): шапки, заголовки, числа.
-     * alt — руны столов зачарований, ТОЛЬКО латиница A-Z/a-z: декоративные
-     * акценты (бренд), цифры и кириллица в нём не отрисуются.
-     */
-    public static final String FONT_UNIFORM = "minecraft:uniform";
-    public static final String FONT_ALT = "minecraft:alt";
 
-    /** Текст в заданном ванильном шрифте (готовая MiniMessage-разметка внутри). */
+    public static final String FONT_UNIFORM = "minecraft:uniform";
+
+
     public static String font(String fontKey, String mini) {
         return "<font:" + fontKey + ">" + mini + "</font>";
+    }
+
+
+    public static String micro(String mini) {
+        return font(FONT_UNIFORM, mini);
     }
 
     public static Component mm(String mini) {
         return safe(mini);
     }
 
-    /** Тон палитры по индексу (индекс не ограничен — считается по кольцу). */
+
     public static String tone(int index) {
         return TONES[Math.floorMod(index, TONES.length)];
     }
 
-    /** Тон как MiniMessage-тег: {@code <color:#…>}. */
+
     public static String toneTag(int index) {
         return "<color:" + tone(index) + ">";
     }
 
-    /** Цвет палитры как {@link TextColor} для Component API. */
+
     public static TextColor toneColor(int index) {
         return TextColor.fromHexString(tone(index));
     }
 
-    /** Текст в заданном тоне палитры (MiniMessage). */
+
     public static String toned(int index, String text) {
         return toneTag(index) + escapeForMini(text) + "</color>";
     }
 
-    /** Градиент между двумя тонами палитры. */
+
     public static String gradient(String text, int from, int to) {
         return "<gradient:" + tone(from) + ":" + tone(to) + ">" + escapeForMini(text) + "</gradient>";
     }
 
-    /** Фирменный градиент тёмно-синий → голубой → бирюзовый. */
+
     public static String gradient(String text) {
         return "<gradient:" + GRADIENT_START + ":" + GRADIENT_MID + ":" + GRADIENT_TAIL + ">"
                 + escapeForMini(text) + "</gradient>";
     }
 
-    /** Заголовок меню: градиент + жирный + моноширинный шрифт uniform. */
+
     public static Component gradientTitle(String text) {
-        return safe(font(FONT_UNIFORM,
-                "<gradient:" + GRADIENT_START + ":" + GRADIENT_MID + ":" + GRADIENT_TAIL
-                        + "><bold>" + escapeForMini(text) + "</bold></gradient>"));
+        String plain = text == null ? "" : text.trim();
+        return safe("<bold><gradient:" + GRADIENT_START + ":" + GRADIENT_MID + ":" + GRADIENT_TAIL + ">"
+                + escapeForMini(clipPlain(plain, TITLE_MAX)) + "</gradient></bold>");
     }
 
     public static Component gradientTitle(String text, String tail) {
         Component head = gradientTitle(text);
         if (tail == null || tail.isBlank()) return head;
-        return head.append(safe(font(FONT_UNIFORM, " <dark_gray>\u2022</dark_gray> " + toned(6, tail))));
+        return head.append(safe(" <dark_gray>\u2022</dark_gray> "
+                + toned(6, clipPlain(tail.trim(), TAIL_MAX))));
     }
+
+    public static final int TITLE_MAX = 28;
+    public static final int TAIL_MAX = 12;
+    public static final int NAME_MAX = 30;
+    public static final int LORE_MAX = 40;
+
+
+    public static String clipPlain(String text, int max) {
+        if (text == null) return "";
+        String s = text.trim();
+        if (max <= 0 || s.isEmpty()) return s;
+        int count = s.codePointCount(0, s.length());
+        if (count <= max) return s;
+        int cut = s.offsetByCodePoints(0, Math.max(1, max - 1));
+        return s.substring(0, cut) + "\u2026";
+    }
+
+
+    static String clipMini(String mini, int max) {
+        if (mini == null) return "";
+        if (max <= 0) return mini;
+        java.util.ArrayDeque<String> open = new java.util.ArrayDeque<>();
+        StringBuilder out = new StringBuilder(mini.length());
+        int visible = 0;
+        int i = 0;
+        int n = mini.length();
+        boolean cut = false;
+        while (i < n) {
+            char c = mini.charAt(i);
+            if (c == '\\' && i + 1 < n && mini.charAt(i + 1) == '<') {
+                if (visible >= max) {
+                    cut = true;
+                    break;
+                }
+                out.append("\\<");
+                visible++;
+                i += 2;
+                continue;
+            }
+            if (c == '<') {
+                int end = mini.indexOf('>', i);
+                if (end < 0) break;
+                String tag = mini.substring(i, end + 1);
+                out.append(tag);
+                if (tag.startsWith("</")) {
+                    if (!open.isEmpty()) open.pop();
+                } else {
+                    String name = tag.substring(1, tag.length() - 1);
+                    int colon = name.indexOf(':');
+                    String closeName = colon < 0 ? name : name.substring(0, colon);
+                    open.push("</" + closeName + ">");
+                }
+                i = end + 1;
+                continue;
+            }
+            if (visible >= max) {
+                cut = true;
+                break;
+            }
+            out.append(c);
+            visible++;
+            i++;
+        }
+        if (cut) {
+            out.append('\u2026');
+            while (!open.isEmpty()) out.append(open.pop());
+        }
+        return out.toString();
+    }
+
 
     static String escapeForMini(String s) {
         if (s == null) return "";
-        // Важно: MiniMessage понимает только "\<" (буквальный «<»).
-        // Символ ">" экранировать нельзя — "\\>" остаётся в тексте слэшем.
+
+
         return s.replace("\\", "\\\\").replace("<", "\\<");
     }
 
-    /** Разбор с защитой: некорректная разметка не должна ронять команду/GUI. */
+
     public static Component safe(String mini) {
         if (mini == null || mini.isEmpty()) return Component.empty();
         String normalized = normalizeHex(mini);
@@ -137,11 +245,7 @@ public final class GuiTheme {
         }
     }
 
-    /**
-     * Приводит hex-теги к согласованному виду: закрывающий тег обязан совпадать
-     * с последним открытым, иначе MiniMessage выведет «</#3f86ff>» прямо в чат.
-     * Без единого несовпадения строка возвращается как есть.
-     */
+
     static String normalizeHex(String mini) {
         if (mini.indexOf("</#") < 0) return mini;
         java.util.regex.Matcher m = HEX_TAG.matcher(mini);
@@ -167,7 +271,7 @@ public final class GuiTheme {
                     changed = true;
                 }
             } else {
-                changed = true; // лишнее закрытие просто убираем
+                changed = true;
             }
             pos = m.end();
         }
@@ -182,10 +286,12 @@ public final class GuiTheme {
         ItemStack it = new ItemStack(mat);
         ItemMeta m = it.getItemMeta();
         if (m != null) {
-            if (name != null) m.displayName(text(name));
+            if (name != null) m.displayName(text(clipMini(name, NAME_MAX)));
             if (lore != null && !lore.isEmpty()) {
                 List<Component> out = new ArrayList<>(lore.size());
-                for (String s : lore) out.add(s == null ? Component.empty() : text(s));
+                for (String s : lore) {
+                    out.add(s == null ? Component.empty() : text(clipMini(s, LORE_MAX)));
+                }
                 m.lore(out);
             }
             it.setItemMeta(m);
@@ -201,11 +307,7 @@ public final class GuiTheme {
         return safe(legacyToMini(s));
     }
 
-    /**
-     * Переводит §-коды в теги MiniMessage. Все коды закрыты — иначе остаток
-     * «§9» и подобные вызывают исключение MiniMessage (legacy-коды запрещены).
-     * Уже готовые MiniMessage-теги не трогаем: они собраны выше по стеку.
-     */
+
     static String legacyToMini(String s) {
         if (s == null) return "";
         StringBuilder sb = new StringBuilder(s.length());
@@ -216,19 +318,19 @@ public final class GuiTheme {
                 String tag = switch (code) {
                     case '0' -> "black";
                     case '1' -> "dark_blue";
-                    case '2' -> TONES[5];   // запрещённый тёмно-зелёный → ярко-синий
+                    case '2' -> TONES[5];
                     case '3' -> "dark_aqua";
-                    case '4' -> "red";      // запрещённый тёмно-красный → красный (ошибки)
-                    case '5' -> TONES[4];   // запрещённый фиолетовый → синий
-                    case '6' -> TONES[8];   // запрещённый золотой → бирюзовый
+                    case '4' -> "red";
+                    case '5' -> TONES[4];
+                    case '6' -> TONES[8];
                     case '7' -> "gray";
                     case '8' -> "dark_gray";
                     case '9' -> "blue";
-                    case 'a' -> TONES[7];   // запрещённый зелёный → светло-голубой
+                    case 'a' -> TONES[7];
                     case 'b' -> "aqua";
                     case 'c' -> "red";
-                    case 'd' -> TONES[6];   // запрещённый розовый → голубой
-                    case 'e' -> TONES[9];   // запрещённый жёлтый → светло-бирюзовый
+                    case 'd' -> TONES[6];
+                    case 'e' -> TONES[9];
                     case 'f' -> "white";
                     case 'k' -> "obfuscated";
                     case 'l' -> "bold";
@@ -244,13 +346,13 @@ public final class GuiTheme {
                     continue;
                 }
                 if (code == 'x' && i + 13 < s.length()) {
-                    // Legacy-гекс: §x§R§R§G§G§B§B — каждая цифра после своего §
+
                     StringBuilder hex = new StringBuilder(7);
                     hex.append('#');
                     boolean ok = s.charAt(i + 1) == 'x';
                     for (int k = 0; ok && k < 6; k++) {
-                        int sep = i + 2 + k * 2;      // §
-                        int dig = i + 3 + k * 2;      // цифра
+                        int sep = i + 2 + k * 2;
+                        int dig = i + 3 + k * 2;
                         if (s.charAt(sep) != '\u00a7' || !isHex(s.charAt(dig))) {
                             ok = false;
                             break;
@@ -263,7 +365,7 @@ public final class GuiTheme {
                         continue;
                     }
                 }
-                // Неизвестный код — просто убираем символ §, букву оставляем текстом
+
                 continue;
             }
             sb.append(c);
@@ -307,7 +409,7 @@ public final class GuiTheme {
         }
     }
 
-    /** Текст без разметки — чтобы градиент не съел цвета из сообщения. */
+
     public static String plainOf(String mini) {
         if (mini == null || mini.isEmpty()) return "";
         try {
@@ -318,14 +420,14 @@ public final class GuiTheme {
         }
     }
 
-    /** Кнопка «Назад» в стиле hahtojer: спектральная стрелка с фирменным градиентом. */
+
     public static ItemStack navBack(String miniLabel) {
         String text = stripArrow(plainOf(miniLabel));
         if (text.isEmpty()) text = "Назад";
         return glow(named(Material.SPECTRAL_ARROW, gradient("\u25c0 " + text, 3, 8)));
     }
 
-    /** Кнопка «Вперёд» в стиле hahtojer. */
+
     public static ItemStack navForward(String miniLabel) {
         String text = stripArrow(plainOf(miniLabel));
         if (text.isEmpty()) text = "Вперёд";
@@ -345,18 +447,18 @@ public final class GuiTheme {
         return named(Material.LIME_DYE, gradient("Инфо", 4, 9), lore);
     }
 
-    /** Кнопка закрытия (барьер) в стиле hahtojer. */
+
     public static ItemStack navClose(String miniLabel) {
         String text = plainOf(miniLabel);
         if (text.isEmpty()) text = "\u2716 Закрыть";
         return named(Material.BARRIER, toned(5, text));
     }
 
-    /** Бренд-предмет: имя в фирменном градиенте, пояснения приходят из messages_*.yml. */
+
     public static ItemStack brand(List<String> loreLines) {
         List<String> lore = loreLines == null ? List.of() : loreLines;
         return named(Material.PAPER,
-                font(FONT_ALT, gradient("HahGPS")), lore);
+                "<bold>" + gradient("HahGPS") + "</bold>", lore);
     }
 
     public static void click(Player p) {
@@ -374,14 +476,14 @@ public final class GuiTheme {
         p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.6f, 0.7f);
     }
 
-    /** Версия плагина: из реестра, иначе из plugin.yml внутри jar (фильтруется Maven'ом). */
+
     public static String version() {
         try {
             var plugin = Bukkit.getPluginManager().getPlugin("HahGps");
             if (plugin == null) plugin = Bukkit.getPluginManager().getPlugin("hahgps");
             if (plugin != null) return plugin.getPluginMeta().getVersion();
         } catch (Throwable ignored) {
-            // Bukkit ещё не поднят — берём версию из ресурса
+
         }
         try (var in = GuiTheme.class.getClassLoader().getResourceAsStream("plugin.yml")) {
             if (in != null) {
@@ -394,7 +496,7 @@ public final class GuiTheme {
                 }
             }
         } catch (Throwable ignored) {
-            // ресурс недоступен
+
         }
         return "?";
     }

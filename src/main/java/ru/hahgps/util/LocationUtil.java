@@ -31,7 +31,7 @@ public final class LocationUtil {
 
     public static String formatDistance(double distance) {
         if (!Double.isFinite(distance) || distance >= Double.MAX_VALUE) {
-            // защита от «1.797…e308 м» при межмирных/некорректных дистанциях
+
             return "—";
         }
         if (distance < 0) {
@@ -51,11 +51,7 @@ public final class LocationUtil {
                 : String.format(Locale.ROOT, "%.0f м", distance);
     }
 
-    /**
-     * Единицы измерения берутся из messages (ru/en), а не хардкодятся.
-     * Возвращает null, если менеджер сообщений ещё не создан или ключ недоступен —
-     * тогда вызывающий использует прежнюю русскую строку.
-     */
+
     private static String localized(String key, String value) {
         try {
             HahGpsPlugin plugin = HahGpsPlugin.getInstance();

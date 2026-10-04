@@ -29,11 +29,7 @@ public interface SubCommand {
 
     List<String> tabComplete(Player player, String[] args);
 
-    /**
-     * Разбор значения транспорта из аргумента команды.
-     * Возвращает null, если значение не соответствует ни одному типу —
-     * вызывающая сторона должна показать usage, а не молча строить маршрут «пешком».
-     */
+
     static TransportType parseTransport(String key) {
         if (key == null || key.isBlank()) {
             return null;
@@ -46,11 +42,7 @@ public interface SubCommand {
         return null;
     }
 
-    /**
-     * Единая обработка ошибок асинхронных операций: полный стек — в лог,
-     * игроку — сообщение из ключа {@code error-occurred} на главном потоке.
-     * Без этого игрока команда «висит» без всякого ответа.
-     */
+
     static void sendError(Player player, Throwable error) {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
         if (plugin == null || error == null) {
@@ -66,7 +58,7 @@ public interface SubCommand {
             text = cause.getClass().getSimpleName();
         }
         plugin.getLogger().log(Level.WARNING, "HahGps: операция не выполнена", cause);
-        final String message = text; // effectively final — нужен для лямбды
+        final String message = text;
         runSync(plugin, () -> {
             if (player.isOnline()) {
                 player.sendMessage(plugin.getMessages().getPrefixed("error-occurred", "error", message));
@@ -74,7 +66,7 @@ public interface SubCommand {
         });
     }
 
-    /** Нарушение UNIQUE — дубликат имени (SQLite и MySQL сообщают об этом по-разному). */
+
     static boolean isDuplicate(Throwable err) {
         Throwable t = err;
         while (t != null) {
@@ -90,7 +82,7 @@ public interface SubCommand {
         return false;
     }
 
-    /** Запуск на главном потоке с защитой от выключенного/выгружаемого плагина. */
+
     static void runSync(HahGpsPlugin plugin, Runnable task) {
         if (plugin == null || task == null || !plugin.isEnabled()) {
             return;
@@ -102,7 +94,7 @@ public interface SubCommand {
                 Bukkit.getScheduler().runTask(plugin, task);
             }
         } catch (Throwable ignored) {
-            // плагин выключили между вызовами — ответ игроку уже не нужен
+
         }
     }
 }

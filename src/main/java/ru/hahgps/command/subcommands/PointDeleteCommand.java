@@ -42,7 +42,7 @@ public class PointDeleteCommand implements SubCommand {
                         return;
                     }
                     if (!Boolean.TRUE.equals(deleted)) {
-                        // раньше всегда писало «удалена», даже если точки не было
+
                         player.sendMessage(plugin.getMessages().getPrefixed("point-not-found",
                                 "name", name));
                         return;

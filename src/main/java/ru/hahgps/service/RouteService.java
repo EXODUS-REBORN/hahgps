@@ -32,8 +32,8 @@ public class RouteService {
 
     public CompletableFuture<List<Location>> buildPathToAsync(Player player, Location target,
                                                              TransportType transport) {
-        // Геометрию игрока и снимок графа фиксируем на вызывающем (главном) потоке,
-        // дальше Pathfinder работает только с локальными копиями.
+
+
         Location start = player.getLocation().clone();
         Location end = target == null ? null : target.clone();
         TransportType type = transport == null ? TransportType.FOOT : transport;

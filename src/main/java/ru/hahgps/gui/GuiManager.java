@@ -9,8 +9,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class GuiManager {
 
-    // Инициализация при загрузке класса: ленивый double-check здесь гонялся
-    // между главным потоком и асинхронными колбэками
+
+
     private static final GuiManager INSTANCE = new GuiManager();
 
     private final Map<UUID, GuiScreen> openGuis = new ConcurrentHashMap<>();
@@ -36,8 +36,8 @@ public class GuiManager {
     }
 
     public void closeAll() {
-        // Снимаем с регистрации ДО закрытия: InventoryCloseEvent вызовет
-        // unregister, и итерация по живой карте дала бы ConcurrentModificationException
+
+
         List<GuiScreen> screens = new ArrayList<>(openGuis.values());
         openGuis.clear();
         for (GuiScreen gui : screens) {
@@ -47,7 +47,7 @@ public class GuiManager {
                     p.closeInventory();
                 }
             } catch (Throwable ignored) {
-                // игрок мог отключиться в этот момент
+
             }
         }
     }

@@ -13,7 +13,7 @@ import java.util.List;
 
 public class PointsListGui extends GuiScreen {
 
-    /** Слоты 0-43 — точки, 44 — бренд, 45-53 — навигация (как в hahtojer). */
+
     private static final int PER_PAGE = 44;
 
     private final Integer categoryId;
@@ -151,8 +151,8 @@ public class PointsListGui extends GuiScreen {
             }
             return;
         }
-        // Клик только по реально отображаемым точкам — иначе появляется
-        // невидимая точка со следующей страницы
+
+
         int start = page * PER_PAGE;
         int shown = Math.max(0, Math.min(PER_PAGE, pois.size() - start));
         if (slot >= 0 && slot < shown) {

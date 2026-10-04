@@ -5,10 +5,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import ru.hahgps.gui.InputManager;
 
-/**
- * Перехват ввода в чате (создание точки, поиск, оценка).
- * Paper-событие AsyncChatEvent вместо устаревшего AsyncPlayerChatEvent.
- */
+
 public class ChatInputListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)

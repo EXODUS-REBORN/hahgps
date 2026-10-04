@@ -22,11 +22,11 @@ public class MapService {
     private final HahGpsPlugin plugin;
     private final TerrainRenderer terrainRenderer;
 
-    // Все карты живут между главным потоком и колбэками рендера — только потокобезопасные мапы
+
     private final Map<UUID, MapView> playerMaps = new ConcurrentHashMap<>();
     private final Map<UUID, BufferedImage> renderedImages = new ConcurrentHashMap<>();
     private final Map<UUID, MapRenderer> renderers = new ConcurrentHashMap<>();
-    /** Поколение рендера: результат устаревшей (более ранней) задачи отбрасывается. */
+
     private final Map<UUID, AtomicLong> renderTokens = new ConcurrentHashMap<>();
 
     private static final BufferedImage BLANK_IMAGE = new BufferedImage(128, 128, BufferedImage.TYPE_INT_RGB);
@@ -108,12 +108,12 @@ public class MapService {
             return;
         }
         UUID id = player.getUniqueId();
-        // токен инкрементируем на главном потоке — устаревшие результаты отбрасываем
+
         long token = renderTokens.computeIfAbsent(id, k -> new AtomicLong()).incrementAndGet();
         int centerX = view.getCenterX();
         int centerZ = view.getCenterZ();
         MapView.Scale scale = view.getScale();
-        // позиция игрока фиксируется здесь (главный поток), не в колбэке БД
+
         Location playerLoc = player.getLocation().clone();
         boolean showPois = plugin.getConfigManager().isMapShowPois();
 
@@ -129,7 +129,7 @@ public class MapService {
                                   && poi.getLocation().getWorld().equals(world))
                           .toList()
                     : List.of();
-            // TerrainRenderer сам перенесёт работу на главный поток, если нужно
+
             terrainRenderer.render(world, centerX, centerZ, scale, filtered, null, playerLoc)
                     .thenAccept(image -> applyRenderedImage(id, token, view, player, image));
         });
@@ -146,18 +146,18 @@ public class MapService {
                 }
                 AtomicLong current = renderTokens.get(id);
                 if (current == null || current.get() != token || playerMaps.get(id) != view) {
-                    return; // уже отрендерено более новой задачей
+                    return;
                 }
                 renderedImages.put(id, image);
                 player.sendMap(view);
             });
         } catch (Throwable ignored) {
-            // сервер выключается — результат просто отбрасывается
+
         }
     }
 
     private void giveMapItem(Player player, MapView view) {
-        // не выдаём дубликат карты при повторном /gps map
+
         for (ItemStack item : player.getInventory().getStorageContents()) {
             if (item == null || item.getType() != Material.FILLED_MAP || !item.hasItemMeta()) {
                 continue;

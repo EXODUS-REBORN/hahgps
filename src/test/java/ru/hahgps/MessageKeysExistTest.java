@@ -18,17 +18,14 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Ключи сообщений, которые запрашивает код, обязаны существовать в messages_*.yml —
- * иначе игрок увидит «Missing: key». Плюс сверка RU/EN наборов ключей.
- */
+
 class MessageKeysExistTest {
 
     private static final Path JAVA = Path.of("src", "main", "java");
     private static final Path RESOURCES = Path.of("src", "main", "resources");
     private static final String KEY = "([a-z][a-zA-Z0-9_.\\-]*)";
 
-    /** Ключи, которые не являются сообщениями (JSON-поля и префиксы). */
+
     private static final Set<String> IGNORE = Set.of(
             "id", "name", "assets", "draft", "prerelease", "tag_name", "gui", "help-",
             "version", "url", "message", "status", "token", "zipball_url", "body");

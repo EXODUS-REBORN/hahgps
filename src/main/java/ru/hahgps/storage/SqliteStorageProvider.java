@@ -24,12 +24,12 @@ public class SqliteStorageProvider extends AbstractSqlStorageProvider {
         createSchema();
     }
 
-    /** PRAGMA живут в конкретном соединении — их надо повторять после каждого reconnect. */
+
     private void applyPragmas() throws SQLException {
         try (var st = connection.createStatement()) {
             st.execute("PRAGMA journal_mode=WAL");
             st.execute("PRAGMA foreign_keys=ON");
-            // ждём освобождения файла вместо мгновенного "database is locked"
+
             st.execute("PRAGMA busy_timeout=5000");
         }
     }

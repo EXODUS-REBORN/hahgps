@@ -31,15 +31,15 @@ public class CategoryDeleteCommand implements SubCommand {
             return;
         }
         String name = args[0];
-        // защита стандартных категорий — как в CategoriesGui, иначе команда
-        // обходила бы запрет, который GUI применяет
+
+
         ru.hahgps.model.Category existing = plugin.getDataService().getCachedCategoryByName(name);
         if (existing != null && existing.isDefaultCategory()) {
             player.sendMessage(plugin.getMessages().getPrefixed("cannot-delete-default"));
             return;
         }
-        // отсутствие в кэше не считаем «не найдено»: категория могла появиться извне —
-        // проверку доверяем БД, её результат ниже
+
+
         plugin.getCategoryService().deleteCategory(name)
                 .whenComplete((deleted, error) -> plugin.getDataService().runSync(() -> {
                     if (!player.isOnline()) {
@@ -62,7 +62,7 @@ public class CategoryDeleteCommand implements SubCommand {
     public List<String> tabComplete(Player player, String[] args) {
         if (args.length == 1) {
             String prefix = args[0].toLowerCase();
-            // кэш вместо запроса БД с join() на главном потоке
+
             return HahGpsPlugin.getInstance().getDataService().getCachedCategories().stream()
                     .map(Category::getName)
                     .filter(n -> n.toLowerCase().startsWith(prefix))

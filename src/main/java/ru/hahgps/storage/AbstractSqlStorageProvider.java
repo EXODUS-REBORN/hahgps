@@ -29,11 +29,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         }
     }
 
-    /**
-     * Проверка живости соединения: после рестарта MySQL/обрыва сети драйвер
-     * считает соединение открытым, а запросы падают вечно — плагин «лечится»
-     * только переподключением.
-     */
+
     private boolean isAlive() {
         try {
             return connection.isValid(3);
@@ -107,10 +103,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         createIndexes();
     }
 
-    /**
-     * Индексы по внешним ключам: без них каждый getRatings/getPoisByCategory
-     * и чтение узлов маршрута — полное сканирование таблицы.
-     */
+
     protected void createIndexes() {
         createIndex("idx_route_nodes_route", "route_nodes", "route_id");
         createIndex("idx_pois_category", "pois", "category_id");
@@ -123,14 +116,14 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         try (Statement st = connection.createStatement()) {
             st.execute(sql);
         } catch (SQLException e) {
-            // MySQL не умеет IF NOT EXISTS для индексов: 1061 = уже существует
+
             if (mysql && e.getErrorCode() == 1061) {
                 return;
             }
             if (String.valueOf(e.getMessage()).toLowerCase().contains("already exists")) {
                 return;
             }
-            // индекс — оптимизация, не повод ронять плагин
+
             java.util.logging.Logger logger = Bukkit.getLogger();
             if (logger != null) {
                 logger.warning("HahGps: не удалось создать индекс " + name + ": " + e.getMessage());
@@ -419,8 +412,8 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         try {
             ensureConnected();
             previousAutoCommit = connection.getAutoCommit();
-            // маршрут и его узлы пишутся одной транзакцией: без неё сбой на середине
-            // оставлял бы запись в routes без route_nodes (битый маршрут в графе)
+
+
             connection.setAutoCommit(false);
             try {
                 try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -479,8 +472,8 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         try {
             ensureConnected();
             previousAutoCommit = connection.getAutoCommit();
-            // узлы и маршрут удаляются одной транзакцией: иначе сбой между ними
-            // оставлял бы «осиротевшие» строки в route_nodes
+
+
             connection.setAutoCommit(false);
             boolean deleted = false;
             try {
@@ -564,7 +557,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 while (nrs.next()) {
                     World w;
                     try {
-                        // чтение идёт из async-потока: не даём исключению уронить всю загрузку маршрутов
+
                         w = Bukkit.getWorld(nrs.getString("world"));
                     } catch (Throwable ignored) {
                         w = null;
@@ -578,7 +571,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         return new Route(id, name, world, transport, createdBy, createdAt, nodes);
     }
 
-    /** synchronized: закрытие не должно пересекаться с запросом из async-потока. */
+
     @Override
     public synchronized void close() {
         try {

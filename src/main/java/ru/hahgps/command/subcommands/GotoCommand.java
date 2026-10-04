@@ -36,7 +36,7 @@ public class GotoCommand implements SubCommand {
         if (args.length >= 2) {
             transport = ru.hahgps.command.SubCommand.parseTransport(args[1]);
             if (transport == null) {
-                // неизвестный транспорт не должен молча превращаться в «пешком»
+
                 player.sendMessage(plugin.getMessages().getPrefixed("invalid-args",
                         "usage", usage()));
                 return;

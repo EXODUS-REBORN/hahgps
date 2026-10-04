@@ -9,7 +9,7 @@ import java.util.List;
 
 public class CategoriesGui extends GuiScreen {
 
-    /** Категории занимают слоты 0-43, 44 — бренд. */
+
     private static final int CONTENT_SLOTS = 44;
 
     private List<Category> categories = new java.util.ArrayList<>();
@@ -139,7 +139,7 @@ public class CategoriesGui extends GuiScreen {
                                 return java.util.concurrent.CompletableFuture.completedFuture(Boolean.FALSE);
                             }
                             if (found.isDefaultCategory()) {
-                                return java.util.concurrent.CompletableFuture.completedFuture(null); // нельзя удалять
+                                return java.util.concurrent.CompletableFuture.completedFuture(null);
                             }
                             return plugin.getCategoryService().deleteCategory(name);
                         }).whenComplete((result, err) ->
@@ -163,7 +163,7 @@ public class CategoriesGui extends GuiScreen {
             return;
         }
 
-        // Клик по реальной категории: только слоты контента и только заполненные
+
         if (slot >= 0 && slot < CONTENT_SLOTS && slot < categories.size()) {
             Category category = categories.get(slot);
             new PointsListGui(player, category.getId()).open();
@@ -171,7 +171,7 @@ public class CategoriesGui extends GuiScreen {
         }
     }
 
-    /** Нарушение UNIQUE — дубликат имени (SQLite и MySQL пишут по-разному). */
+
     private static boolean isDuplicate(Throwable err) {
         Throwable t = err;
         while (t != null) {

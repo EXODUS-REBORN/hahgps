@@ -43,8 +43,8 @@ public class PointRateCommand implements SubCommand {
             return;
         }
         final int finalRating = rating;
-        // сначала проверяем существование точки: ratePoi молча возвращает null
-        // и для несуществующей точки «успех» выглядел бы так же, как для настоящей
+
+
         plugin.getPoiService().loadPoiWithRating(name).whenComplete((poi, error) -> {
             if (error != null) {
                 ru.hahgps.command.SubCommand.sendError(player, error);

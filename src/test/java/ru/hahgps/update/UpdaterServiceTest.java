@@ -6,10 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Хелперы оповещений об обновлении: дата релиза и заметки для чата.
- * Всё чистое — без Bukkit и плагина.
- */
+
 class UpdaterServiceTest {
 
     @Test
@@ -21,7 +18,7 @@ class UpdaterServiceTest {
     @Test
     void releaseDateUnparseablePassesThrough() {
         assertEquals("12.05.2025", UpdaterService.formatReleaseDate("12.05.2025"));
-        // не ISO и без T — отдаём как есть (GitHub всегда шлёт ISO 8601)
+
         assertEquals("2025-05-12 10:30", UpdaterService.formatReleaseDate("2025-05-12 10:30"));
         assertEquals("", UpdaterService.formatReleaseDate(""));
         assertEquals("", UpdaterService.formatReleaseDate(null));

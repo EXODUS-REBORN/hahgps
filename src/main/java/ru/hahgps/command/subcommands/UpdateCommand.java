@@ -19,10 +19,10 @@ public class UpdateCommand implements SubCommand {
 
     private static final List<String> SUBS = List.of("status", "check", "install", "apply", "reload");
 
-    /** Тон палитры hahtojer: основной текст информационных строк. */
-    private static final String TEXT = "<#8fc6ff>";
-    /** Тон палитры hahtojer: акцент (метки, разделители). */
-    private static final String ACCENT = "<#4fd1e0>";
+
+    private static final String TEXT = "<white>";
+
+    private static final String ACCENT = "<#fbbf24>";
 
     @Override
     public String name() {
@@ -52,11 +52,11 @@ public class UpdateCommand implements SubCommand {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
         UpdaterService updater = plugin.getUpdater();
         if (updater == null) {
-            // хранилище/обновлятор ещё не подняты — отвечаем ключом загрузки, а не тишиной
+
             player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
             return;
         }
-        // обновлятор отвечает строками без разметки — красим их в тон палитры
+
         Consumer<String> feedback = message -> player.sendMessage(text(plugin, message));
         String sub = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
         switch (sub) {
@@ -85,7 +85,7 @@ public class UpdateCommand implements SubCommand {
                 }
             }
             case "reload" -> {
-                // stop/reload/start сканируют диск — не держим главный поток
+
                 Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
                     try {
                         updater.stop();

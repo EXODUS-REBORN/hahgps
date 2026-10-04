@@ -7,10 +7,7 @@ import org.bukkit.Location;
 import java.util.*;
 public class Pathfinder {
 
-    /**
-     * Ограничение расширений A*: без него на разросшемся графе поиск мог
-     * крутиться неограниченно долго (в т.ч. на главном потоке).
-     */
+
     private static final int MAX_EXPANSIONS = 100_000;
 
     public static List<GraphNode> findPath(RoadGraph graph, GraphNode from, GraphNode to, TransportType transport) {
@@ -35,7 +32,7 @@ public class Pathfinder {
         int expansions = 0;
         while (!open.isEmpty()) {
             if (++expansions > MAX_EXPANSIONS) {
-                // потолок достигнут — отдаём пустой путь (вызывающий пойдёт по прямой)
+
                 return Collections.emptyList();
             }
             GraphNode current = open.poll();
@@ -66,10 +63,7 @@ public class Pathfinder {
         return Collections.emptyList();
     }
 
-    /**
-     * Эвристика должна быть не выше реальной стоимости (иначе A* даёт
-     * субоптимальный маршрут): масштабируем расстояние на скорость транспорта.
-     */
+
     private static double heuristic(GraphNode a, GraphNode b, TransportType transport) {
         double distance = a.distanceTo(b);
         if (distance == Double.MAX_VALUE) {

@@ -44,7 +44,7 @@ public class CategoryCreateCommand implements SubCommand {
                         return;
                     }
                     if (created == null) {
-                        // нарушение UNIQUE (категория уже есть) или отказ БД
+
                         player.sendMessage(plugin.getMessages().getPrefixed("category-exists"));
                         return;
                     }
@@ -55,7 +55,7 @@ public class CategoryCreateCommand implements SubCommand {
     @Override
     public List<String> tabComplete(Player player, String[] args) {
         if (args.length == 1) {
-            // плейсхолдер только пока префикс пуст — иначе Tab вставлял бы подсказку в команду
+
             return args[0].isEmpty() ? List.of("<имя>") : List.of();
         }
         return List.of();

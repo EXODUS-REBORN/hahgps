@@ -13,10 +13,10 @@ import java.util.concurrent.CompletableFuture;
 public class GraphService {
 
     private final DataService dataService;
-    /** Всегда заменяется целиком; volatile — для безопасной публикации читателям. */
+
     private volatile RoadGraph roadGraph = new RoadGraph();
     private int nextNodeId = 1;
-    /** Счётчик изменений графа — по нему кэши (визуализация) узнают об инвалидации. */
+
     private volatile int revision;
 
     public GraphService(DataService dataService) {
@@ -47,7 +47,7 @@ public class GraphService {
                     prev = node;
                 }
             }
-            // завершение идёт из потока БД — публикуем атомарно с nextNodeId
+
             synchronized (this) {
                 this.roadGraph = graph;
                 this.nextNodeId = nodeId;
@@ -56,10 +56,7 @@ public class GraphService {
         });
     }
 
-    /**
-     * Неизменяемая рабочая копия графа для асинхронного поиска маршрута:
-     * главный поток при этом может редактировать боевой граф без гонок.
-     */
+
     public synchronized RoadGraph snapshot() {
         RoadGraph source = roadGraph;
         RoadGraph copy = new RoadGraph();
@@ -69,7 +66,7 @@ public class GraphService {
         }
         for (GraphNode node : nodes) {
             for (GraphEdge edge : source.getEdges(node)) {
-                // ребро добавляется в граф в обе стороны — копируем один раз
+
                 if (edge.getFrom().getId() >= edge.getTo().getId()) {
                     continue;
                 }

@@ -26,7 +26,7 @@ public class DataService {
     private final Map<Integer, Category> categoryCache = new ConcurrentHashMap<>();
     private final Map<String, Category> categoryByName = new ConcurrentHashMap<>();
 
-    /** Снимок точек для tab-complete: чтение имён не должно блокировать главный поток. */
+
     private final Map<Integer, Poi> poiCache = new ConcurrentHashMap<>();
 
     private final List<Route> routeCache = new ArrayList<>();
@@ -43,8 +43,8 @@ public class DataService {
     }
 
     public CompletableFuture<Void> loadCache() {
-        // Исключения НЕ проглатываются: сбой чтения БД должен быть замечен вызывающей
-        // стороной (HahGpsPlugin выключит плагин), иначе сервер молча стартует «пустым».
+
+
         return CompletableFuture.runAsync(() -> {
             List<Category> categories = provider.getCategories();
             categoryCache.clear();
@@ -105,11 +105,7 @@ public class DataService {
         return new ArrayList<>(categoryCache.values());
     }
 
-    /**
-     * Снимок точек из памяти (сортировка как в БД — по имени).
-     * Используется в tab-complete: запрос к БД там нельзя выполнять
-     * синхронно — он выполняется на главном потоке и подвешивает сервер.
-     */
+
     public List<Poi> getCachedPois() {
         List<Poi> out = new ArrayList<>(poiCache.values());
         out.sort(java.util.Comparator.comparing(Poi::getName, String.CASE_INSENSITIVE_ORDER));
@@ -260,7 +256,7 @@ public class DataService {
 
     public void runSync(Runnable runnable) {
         if (!plugin.isEnabled()) {
-            // плагин выключается/выгружается (hot-swap) — планировщик бросил бы исключение
+
             return;
         }
         try {
@@ -270,11 +266,7 @@ public class DataService {
         }
     }
 
-    /**
-     * Останавливаем БД-пул мягко: ждём завершения начатых записей,
-     * и только потом закрываем соединение (иначе close() мог бы оборвать
-     * идущую транзакцию и данные терялись бы при выключении).
-     */
+
     public void shutdown() {
         executor.shutdown();
         try {

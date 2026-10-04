@@ -71,7 +71,7 @@ public class MapGui extends GuiScreen {
                         || GuiManager.getInstance().get(player) != this) {
                     return;
                 }
-                // 44 зарезервирован под бренд, 13 — сама карта
+
                 int[] slots = {1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16, 17, 19, 21, 22, 23, 25, 26, 28, 29, 30, 32, 33, 34, 35, 37, 38, 39, 40, 41, 42, 43};
                 int idx = 0;
                 for (Poi poi : pois == null ? List.<Poi>of() : pois) {

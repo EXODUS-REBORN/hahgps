@@ -95,8 +95,8 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         String[] remaining = new String[args.length - i];
         System.arraycopy(args, i, remaining, 0, remaining.length);
 
-        // Permission проверяется и для узлов-родителей (usage-ветка),
-        // и для листа — иначе gps.use/gps.edge не применялись бы вовсе.
+
+
         if (!node.isLeaf() || hasPermission(player, node)) {
             node.execute(player, remaining);
         } else {
@@ -223,7 +223,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
 
         var loc = poi.getLocation();
         if (loc == null) {
-            // getLocation()==null означает, что мира точки нет на сервере
+
             player.sendMessage(messages.getPrefixed("world-not-found", "world",
                     poi.getWorld() == null ? "?" : poi.getWorld()));
             return;
@@ -241,9 +241,9 @@ public class CommandManager implements CommandExecutor, TabCompleter {
                     List<org.bukkit.Location> result = path != null
                             ? path
                             : List.<org.bukkit.Location>of();
-                    // Длина маршрута в метрах: раньше сюда попадало число точек маршрута,
-                    // а String.format("%.0f", int) бросал IllegalFormatConversionException
-                    // и игрок не получал сообщение о старте навигации.
+
+
+
                     double distance = Pathfinder.routeLength(result);
                     if (distance <= 0 && loc.getWorld() != null) {
                         distance = LocationUtil.distance(player.getLocation(), loc);
@@ -254,7 +254,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
                     navService.startNavigation(player, poi.getName(), loc, result, distance, transport);
                     player.sendMessage(messages.getPrefixed("route-started",
                             "name", poi.getName(),
-                            "distance", String.format("%.0f", distance)));
+                            "distance", LocationUtil.formatDistance(distance)));
                 }));
     }
 }

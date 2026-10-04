@@ -122,7 +122,7 @@ public final class HotSwap {
             return new Result(false, version, "файла нет");
         }
         try {
-            // не даём скопировать в plugins/ обрезанный/битый jar
+
             UpdaterService.ensureJar(staged);
         } catch (IOException e) {
             String reason = "повреждённый файл обновления: " + message(e);
@@ -280,7 +280,7 @@ public final class HotSwap {
 
             if (!fresh || (!version.isBlank() && !version.equals(current))) return;
             lastResult = "применено на ходу: " + (version.isBlank() ? current : version);
-            // оповещение — только группам из обновление.группы-оповещения (не OP, не gps.admin)
+
             announcer.announce("update-installed", "version", version.isBlank() ? current : version);
             return;
         }

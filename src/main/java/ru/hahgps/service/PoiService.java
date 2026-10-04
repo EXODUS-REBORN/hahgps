@@ -17,8 +17,8 @@ public class PoiService {
     }
 
     public CompletableFuture<Poi> createPoi(Player player, String name, String categoryName, String description) {
-        // Все обращения к игроку — здесь, на вызывающем (главном) потоке;
-        // дальше по цепочке мы работаем уже в асинхронном контексте.
+
+
         Location loc = player.getLocation().clone();
         String author = player.getName();
         if (loc.getWorld() == null) {
@@ -107,7 +107,7 @@ public class PoiService {
             return Double.MAX_VALUE;
         }
         Location playerLoc = player.getLocation();
-        // Location.distance бросает исключение при разных мирах — проверяем заранее
+
         if (poiLoc.getWorld() == null || playerLoc.getWorld() == null
                 || !poiLoc.getWorld().equals(playerLoc.getWorld())) {
             return Double.MAX_VALUE;

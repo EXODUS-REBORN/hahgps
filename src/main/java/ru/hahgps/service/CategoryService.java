@@ -43,8 +43,8 @@ public class CategoryService {
             }
             return future;
         }).exceptionally(error -> {
-            // CompletableFuture молча проглатывает исключения — логируем иначе
-            // сбой посева стандартных категорий не виден никому
+
+
             ru.hahgps.HahGpsPlugin plugin = ru.hahgps.HahGpsPlugin.getInstance();
             if (plugin != null) {
                 plugin.getLogger().log(java.util.logging.Level.WARNING,

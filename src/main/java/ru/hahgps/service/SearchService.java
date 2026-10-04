@@ -50,7 +50,7 @@ public class SearchService {
                 if (contains) {
                     sim = FuzzyMatcher.similarity(qLower, nameLower);
                 } else {
-                    // быстрый отсев: по разнице длин похожесть заведомо не дотянет до порога
+
                     if (FuzzyMatcher.upperBound(qLower, nameLower) < minSimilarity) {
                         continue;
                     }

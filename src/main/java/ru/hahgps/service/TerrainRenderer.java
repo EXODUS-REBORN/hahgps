@@ -23,16 +23,13 @@ public class TerrainRenderer {
     private static final int MAP_SIZE = 128;
     private static final int TOTAL_SAMPLES = MAP_SIZE * MAP_SIZE;
 
-    /**
-     * Потолок подгружаемых чанков за один рендер (32×32). Без него масштаб
-     * FARTHEST требовал бы ~16 000 чанков, включая генерацию неизведанной местности.
-     */
+
     private static final int MAX_CHUNK_REQUESTS = 1024;
 
-    /** Сколько пикселей выбораем на главном потоке за тик (квота на блокировку тика). */
+
     private static final int SAMPLES_PER_TICK = 2048;
 
-    /** «Нет данных» — незагруженный чанк или ошибка чтения. */
+
     private static final int NO_DATA = 0x202020;
 
     private final HahGpsPlugin plugin;
@@ -47,7 +44,7 @@ public class TerrainRenderer {
         });
     }
 
-    /** Останавливает фоновый поток отрисовки (вызывается из MapService.stop()). */
+
     public void shutdown() {
         drawExecutor.shutdownNow();
     }
@@ -62,10 +59,7 @@ public class TerrainRenderer {
         };
     }
 
-    /**
-     * Рендер карты. Потокобезопасно: обращения к миру выполняются только на главном
-     * потоке порционно (по квоте на тик), сама отрисовка картинки — в фоновом потоке.
-     */
+
     public CompletableFuture<BufferedImage> render(World world, int centerX, int centerZ,
                                                    MapView.Scale scale, List<Poi> pois,
                                                    List<Location> route, Location playerLoc) {
@@ -110,7 +104,7 @@ public class TerrainRenderer {
         int centerChunkX = centerX >> 4;
         int centerChunkZ = centerZ >> 4;
 
-        // Какие чанки нужны для выборки (чистая арифметика, без доступа к миру)
+
         List<int[]> chunks = new ArrayList<>();
         for (int cx = minChunkX; cx <= maxChunkX; cx++) {
             for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
@@ -118,7 +112,7 @@ public class TerrainRenderer {
             }
         }
         if (chunks.size() > MAX_CHUNK_REQUESTS) {
-            // ближе к центру — приоритет; остальную местность покажем, если она уже загружена
+
             chunks.sort(Comparator.comparingInt(c -> {
                 int dx = c[0] - centerChunkX;
                 int dz = c[1] - centerChunkZ;
@@ -127,15 +121,15 @@ public class TerrainRenderer {
             chunks = new ArrayList<>(chunks.subList(0, MAX_CHUNK_REQUESTS));
         }
 
-        // Подгрузка без генерации новых чанков — асинхронно; несгенерированные
-        // чанки отклоняются самим Paper (generate=false), ошибку гасим handle()
+
+
         List<CompletableFuture<?>> loads = new ArrayList<>(chunks.size());
         for (int[] c : chunks) {
             try {
                 CompletableFuture<Chunk> load = world.getChunkAtAsync(c[0], c[1], false);
                 loads.add(load.handle((chunk, error) -> null));
             } catch (Throwable ignored) {
-                // мир выгружается/сервер останавливается — просто пропускаем чанк
+
             }
         }
 
@@ -157,10 +151,7 @@ public class TerrainRenderer {
                 drawExecutor);
     }
 
-    /**
-     * Порционная выборка блоков: только на главном потоке и только по квоте SAMPLES_PER_TICK
-     * на тик, исключительно из уже загруженных чанков — без синхронной генерации.
-     */
+
     private void startSampling(World world, int centerX, int centerZ, double bpp,
                                CompletableFuture<int[]> out) {
         int[] colors = new int[TOTAL_SAMPLES];
@@ -179,8 +170,8 @@ public class TerrainRenderer {
                     colors[index] = sampleBlock(world, worldX, worldZ);
                 }
                 if (cursor[0] >= TOTAL_SAMPLES) {
-                    // теоретическая гонка назначения таска — complete() идемпотентен,
-                    // а на следующем тике задача гарантированно отменится
+
+
                     BukkitTask task = holder[0];
                     if (task != null) {
                         task.cancel();
@@ -189,7 +180,7 @@ public class TerrainRenderer {
                 }
             }, 0L, 1L);
         } catch (Throwable t) {
-            // плагин выключается — задача не нужна
+
             out.completeExceptionally(t);
         }
     }
@@ -197,13 +188,13 @@ public class TerrainRenderer {
     private int sampleBlock(World world, int x, int z) {
         try {
             if (!world.isChunkLoaded(x >> 4, z >> 4)) {
-                return NO_DATA; // не грузим чанк ради карты
+                return NO_DATA;
             }
             int y = world.getHighestBlockYAt(x, z);
             Material material = world.getBlockAt(x, y, z).getType();
             if (material.isAir()) {
-                // getHighestBlockYAt может отдать как первый свободный блок над землёй,
-                // так и сам верхний блок — нормализуем к фактической поверхности
+
+
                 int below = y - 1;
                 if (below < world.getMinHeight()) {
                     return NO_DATA;
@@ -230,7 +221,7 @@ public class TerrainRenderer {
         return new BufferedImage(MAP_SIZE, MAP_SIZE, BufferedImage.TYPE_INT_RGB);
     }
 
-    /** Чистая отрисовка по уже собранной выборке — мира не касается, можно в фоне. */
+
     private BufferedImage drawImage(int[] colors, int centerX, int centerZ, double bpp,
                                     List<Poi> pois, List<Location> route, Location playerLoc,
                                     World world) {

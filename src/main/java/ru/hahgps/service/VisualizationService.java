@@ -21,25 +21,25 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class VisualizationService {
 
-    /** Радиус отрисовки вокруг игрока, блоки. */
+
     private static final double RADIUS = 64.0;
     private static final double RADIUS_SQ = RADIUS * RADIUS;
-    /** Шаг между частицами вдоль ребра, блоки. */
+
     private static final double PARTICLE_STEP = 2.0;
-    /** Бюджет частиц на один тип визуализации за тик (защита от лагов). */
+
     private static final int PARTICLE_BUDGET = 600;
 
     private final GraphService graphService;
     private final Map<UUID, Set<TransportType>> activeVisualizations = new ConcurrentHashMap<>();
 
-    /** Кэш рёбер по типу транспорта: строится один раз и перестраивается только при смене ревизии графа. */
+
     private final Map<TransportType, List<GraphEdge>> edgeCache = new EnumMap<>(TransportType.class);
     private final Map<TransportType, Particle.DustOptions> dustCache = new EnumMap<>(TransportType.class);
     private int cachedRevision = -1;
 
-    /** Буфер результата обрезки отрезка (тик выполняется только на главном потоке). */
+
     private final double[] clipBuffer = new double[2];
-    /** Переиспользуемый список кандидатов — без аллокаций в тик-цикле. */
+
     private final List<GraphEdge> candidates = new ArrayList<>();
 
     public VisualizationService(GraphService graphService) {
@@ -87,7 +87,7 @@ public class VisualizationService {
         for (Map.Entry<UUID, Set<TransportType>> entry : activeVisualizations.entrySet()) {
             Player player = Bukkit.getPlayer(entry.getKey());
             if (player == null || !player.isOnline()) {
-                // вычищаем сессии вышедших игроков — иначе запись живёт вечно
+
                 if (offline == null) {
                     offline = new ArrayList<>(1);
                 }
@@ -108,11 +108,7 @@ public class VisualizationService {
         }
     }
 
-    /**
-     * Перестройка кэша рёбер — один раз на изменение графа, а не на каждый тик.
-     * Ревизия читается до снятия копии: если граф заменили «между» — на следующем
-     * тике кэш просто перестроится повторно.
-     */
+
     private void refreshCacheIfNeeded() {
         int revision = graphService.getRevision();
         if (revision == cachedRevision) {
@@ -124,7 +120,7 @@ public class VisualizationService {
             List<GraphEdge> edges = new ArrayList<>();
             for (GraphNode node : nodes) {
                 for (GraphEdge edge : graph.getEdges(node, type)) {
-                    // двустороннее ребро встречается дважды — оставляем одно
+
                     if (edge.getFrom() != null && edge.getTo() != null
                             && edge.getFrom().getId() < edge.getTo().getId()) {
                         edges.add(edge);
@@ -151,8 +147,8 @@ public class VisualizationService {
         double pz = playerLoc.getZ();
         double py = playerLoc.getY();
 
-        // Сначала собираем рёбра того же мира, ближе к игроку — выше приоритет бюджета,
-        // иначе при нехватке частиц всегда рисовался бы один и тот же «хвост» списка.
+
+
         candidates.clear();
         for (GraphEdge edge : edges) {
             org.bukkit.Location from = edge.getFrom().getLocation();
@@ -191,7 +187,7 @@ public class VisualizationService {
             double length = Math.hypot(bx - ax, bz - az);
             int steps = Math.max(1, (int) (length / PARTICLE_STEP));
             if (steps > budget) {
-                // бюджет кончился: снижаем плотность, а не обрываем маршрут
+
                 steps = budget;
             }
             budget -= steps;
@@ -218,7 +214,7 @@ public class VisualizationService {
                 color & 0xFF), 1.0f);
     }
 
-    /** Квадрат расстояния от игрока до ближайшего конца ребра (без sqrt, для сортировки). */
+
     private static double nearestDistSq(GraphEdge edge, double px, double pz) {
         org.bukkit.Location from = edge.getFrom().getLocation();
         org.bukkit.Location to = edge.getTo().getLocation();
@@ -229,10 +225,7 @@ public class VisualizationService {
         return Math.min(fx * fx + fz * fz, tx * tx + tz * tz);
     }
 
-    /**
-     * Обрезает отрезок A→B до его части внутри круга (cx,cz,R).
-     * Результат пишется в clipBuffer как параметры t∈[0,1]; false — ничего не видно.
-     */
+
     private boolean clipSegment(double ax, double az, double bx, double bz,
                                 double cx, double cz) {
         double dx = bx - ax;
@@ -241,7 +234,7 @@ public class VisualizationService {
         double fz = az - cz;
         double a = dx * dx + dz * dz;
         if (a < 1e-9) {
-            // вырожденный отрезок
+
             if (fx * fx + fz * fz <= RADIUS_SQ) {
                 clipBuffer[0] = 0.0;
                 clipBuffer[1] = 1.0;
@@ -252,7 +245,7 @@ public class VisualizationService {
         double b = 2.0 * (fx * dx + fz * dz);
         double c = fx * fx + fz * fz - RADIUS_SQ;
         if (c <= 0.0) {
-            // начало внутри круга: обрезаемся по точке выхода
+
             double disc = b * b - 4.0 * a * c;
             double tExit = disc >= 0.0 ? (-b + Math.sqrt(disc)) / (2.0 * a) : 1.0;
             clipBuffer[0] = 0.0;
@@ -261,7 +254,7 @@ public class VisualizationService {
         }
         double disc = b * b - 4.0 * a * c;
         if (disc < 0.0) {
-            return false; // отрезок не пересекает круг
+            return false;
         }
         double sqrt = Math.sqrt(disc);
         double t1 = (-b - sqrt) / (2.0 * a);

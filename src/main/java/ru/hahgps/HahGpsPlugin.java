@@ -27,7 +27,7 @@ public class HahGpsPlugin extends JavaPlugin {
 
     private ConfigManager configManager;
     private MessagesManager messagesManager;
-    /** volatile: создаётся в async-потоке инициализации, читается главным потоком. */
+
     private volatile DataService dataService;
     private StorageProvider storageProvider;
 
@@ -56,8 +56,8 @@ public class HahGpsPlugin extends JavaPlugin {
         messagesManager = new MessagesManager(this);
         messagesManager.load(configManager.getLanguage());
 
-        // Команда доступна сразу: до готовности хранилища игрок получает
-        // «Загрузка данных...», а не usage от Bukkit или NPE внутри подкоманд.
+
+
         registerPendingCommand();
 
         initStorage();
@@ -97,7 +97,7 @@ public class HahGpsPlugin extends JavaPlugin {
                 dataService = service;
                 service.loadCache().whenComplete((v, error) -> {
                     if (!isEnabled()) {
-                        return; // плагин выключили, пока читалась БД — это не ошибка
+                        return;
                     }
                     if (error != null) {
                         getLogger().log(Level.SEVERE, "Failed to load HahGps data cache", error);
@@ -105,7 +105,7 @@ public class HahGpsPlugin extends JavaPlugin {
                         return;
                     }
                     try {
-                        // регистрации слушателей/команд — только на главном потоке
+
                         Bukkit.getScheduler().runTask(this, this::onStorageReady);
                     } catch (Throwable t) {
                         getLogger().log(Level.SEVERE, "HahGps: failed to schedule startup", t);
@@ -118,18 +118,18 @@ public class HahGpsPlugin extends JavaPlugin {
         });
     }
 
-    /** Ошибка инициализации хранилища: закрываем соединение, выключаем плагин на главном потоке. */
+
     private void failStartup() {
         if (dataService == null && storageProvider != null) {
-            // пул ещё не создан (упал сам init()) — соединение здесь никем не занято
+
             try {
                 storageProvider.close();
             } catch (Throwable ignored) {
             }
         }
         try {
-            // закрытие пула — только на главном потоке: внутри воркера оно ждало бы
-            // завершения собственной задачи (deadlock на awaitTermination)
+
+
             Bukkit.getScheduler().runTask(this, () -> {
                 if (dataService != null) {
                     try {
@@ -144,11 +144,11 @@ public class HahGpsPlugin extends JavaPlugin {
                 }
             });
         } catch (Throwable ignored) {
-            // плагин уже выгружен
+
         }
     }
 
-    /** Вызывается ТОЛЬКО на главном потоке после успешной загрузки хранилища. */
+
     private void onStorageReady() {
         if (!isEnabled()) {
             return;
@@ -198,7 +198,7 @@ public class HahGpsPlugin extends JavaPlugin {
             ConsoleBanner.printBanner(this, getPluginMeta().getVersion());
             getLogger().info("HahGps enabled. Storage: " + configManager.getStorageType());
         } catch (Throwable t) {
-            // иначе исключение «проглотится» планировщиком и плагин останется висеть в «загрузке»
+
             getLogger().log(Level.SEVERE, "HahGps: startup failed", t);
             ready = false;
             failStartup();
@@ -218,14 +218,14 @@ public class HahGpsPlugin extends JavaPlugin {
     public void onDisable() {
         ready = false;
 
-        // 1. обновлятор: сначала глушим фоновую проверку, чтобы она не запланировала задачу в выгружаемый плагин
+
         UpdaterService service = updater;
         updater = null;
         if (service != null) {
             service.stop();
         }
 
-        // 2. таски и визуализация (каждый шаг изолирован — упавший не должен мешать сбросу данных)
+
         try {
             if (navigationService != null) {
                 navigationService.stop();
@@ -255,7 +255,7 @@ public class HahGpsPlugin extends JavaPlugin {
             getLogger().log(Level.WARNING, "HahGps: GUI cleanup failed", t);
         }
 
-        // 3. хранилище — в конце: начатые записи должны дожиться до конца (дозапись), соединение закрывается последним
+
         if (dataService != null) {
             try {
                 dataService.shutdown();
@@ -270,7 +270,7 @@ public class HahGpsPlugin extends JavaPlugin {
             }
         }
 
-        // 4. применяем подготовленное обновление (кроме hot-swap — там jar уже подменён)
+
         if (service != null && !hotSwapping) {
             try {
                 if (service.applyStaged()) {

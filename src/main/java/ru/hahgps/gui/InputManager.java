@@ -9,7 +9,7 @@ import java.util.function.Consumer;
 
 public class InputManager {
 
-    /** Сколько времени ждём ответа в чате, прежде чем снять запрос (мс). */
+
     private static final long TIMEOUT_MS = 60_000L;
 
     private record Pending(Consumer<String> callback, long createdAt) {
@@ -17,7 +17,7 @@ public class InputManager {
 
     private static InputManager instance = new InputManager();
 
-    // Чат приходит из асинхронного потока — только потокобезопасная коллекция
+
     private final Map<UUID, Pending> pending = new ConcurrentHashMap<>();
 
     public static InputManager getInstance() {
@@ -35,7 +35,7 @@ public class InputManager {
             return false;
         }
         if (System.currentTimeMillis() - entry.createdAt() > TIMEOUT_MS) {
-            // Время вышло — пускаем сообщение в обычный чат
+
             return false;
         }
         try {

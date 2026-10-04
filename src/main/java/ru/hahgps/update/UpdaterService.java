@@ -45,7 +45,7 @@ public final class UpdaterService {
     private String token = "";
     private String api = API;
     private volatile BukkitTask task;
-    /** false после stop(): отложенный async-скан не должен перезапустить проверку. */
+
     private volatile boolean active;
     private volatile boolean busy;
     private volatile String lastError = "";
@@ -71,7 +71,7 @@ public final class UpdaterService {
         tokenFile = String.valueOf(cfg.getString("обновление.файл-ключа", "github-token.txt")).trim();
         autoDownload = cfg.getBoolean("обновление.авто-скачивание", true);
         hotApply = cfg.getBoolean("обновление.горячее-обновление", true);
-        // Кому приходят оповещения об обновлении: группы LuckPerms (не OP и не gps.admin)
+
         announcer.setGroups(cfg.getStringList("обновление.группы-оповещения"));
         String custom = String.valueOf(cfg.getString("обновление.адрес-api", API)).trim();
         api = custom.isEmpty() ? API : custom.replaceAll("/+$", "");
@@ -234,7 +234,7 @@ public final class UpdaterService {
         }
         active = true;
         try {
-            // сканирование update/ (чтение jar, проверка токена) уходит с главного потока
+
             Bukkit.getScheduler().runTaskAsynchronously(plugin, this::scanStagedAndSchedule);
         } catch (Throwable t) {
             active = false;
@@ -243,7 +243,7 @@ public final class UpdaterService {
         }
     }
 
-    /** async: диск и таймеры — вне главного потока. */
+
     private void scanStagedAndSchedule() {
         if (!active || !plugin.isEnabled()) {
             return;
@@ -284,7 +284,7 @@ public final class UpdaterService {
             if (active) {
                 task = timer;
             } else {
-                // stop() успел вызваться, пока сканировали диск — таймер не должен пережить остановку
+
                 timer.cancel();
             }
         } catch (Throwable t) {
@@ -338,7 +338,7 @@ public final class UpdaterService {
 
                 if (!release.version().equals(announcedVersion)) {
                     announcedVersion = release.version();
-                    // оповещение — только группам из обновление.группы-оповещения (не OP, не gps.admin)
+
                     announcer.announce("update-available",
                             "version", release.version(), "date", formatReleaseDate(release.publishedAt()));
                     if (!release.body().isBlank()) {
@@ -409,8 +409,8 @@ public final class UpdaterService {
             }
             });
         } catch (Throwable t) {
-            // например, плагин уже выгружен: без этого флага busy навсегда остался бы true
-            // и ни одна следующая проверка не прошла бы
+
+
             busy = false;
             String message = t.getMessage() == null ? t.toString() : t.getMessage();
             plugin.getLogger().warning("Обновление: не удалось запустить проверку (" + message + ")");
@@ -523,8 +523,8 @@ public final class UpdaterService {
             }
             throw new IOException("скачанный файл не jar (" + size + " байт), начинается с: " + preview);
         }
-        // заголовок PK бывает и у обрезанного файла — проверяем, что это действительно
-        // читаемый архив с plugin.yml, иначе битый jar доедет до plugins/ и уронит загрузку
+
+
         try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(file.toFile(),
                 java.nio.charset.StandardCharsets.UTF_8)) {
             if (zip.getEntry("plugin.yml") == null) {
@@ -536,13 +536,13 @@ public final class UpdaterService {
     }
 
     private void fetchAsset(Release release, Path tmp) throws Exception {
-        // ofByteArray + timeout на запросе: тело ответа читается целиком внутри запроса,
-        // поэтому 30-секундный таймаут ограничивает И заголовки, И скачивание.
-        // Старый вариант (ofInputStream) не имел ни одного ограничения на чтение тела —
-        // зависший сокет держал бы поток проверки вечно.
+
+
+
+
         HttpRequest request = api("/repos/" + repo + "/releases/assets/" + release.assetId())
                 .setHeader("Accept", "application/octet-stream")
-                // jar может качаться долго — общие 30 секунд api() слишком узки для тела
+
                 .timeout(Duration.ofMinutes(5))
                 .GET()
                 .build();
@@ -671,7 +671,7 @@ public final class UpdaterService {
         return out;
     }
 
-    /** Дата релиза из GitHub (ISO 8601) → dd.MM.yyyy для чата; не разобралось — как есть. */
+
     static String formatReleaseDate(String iso) {
         if (iso == null || iso.isBlank()) return "";
         String raw = iso.trim();
@@ -684,7 +684,7 @@ public final class UpdaterService {
         }
     }
 
-    /** Заметки релиза для чата: слишком длинные обрезаем, чтобы не забить чат. */
+
     static String shortNotes(String body) {
         if (body == null) return "";
         String notes = body.strip();
@@ -734,7 +734,7 @@ public final class UpdaterService {
                 if (!isNewer(version, current)) continue;
 
                 try {
-                    // до проверки токена: если OWN пуст, verify() — no-op, а битый архив отсеять всё равно нужно
+
                     ensureJar(file);
                     BuildToken.verify(file);
                 } catch (IOException e) {

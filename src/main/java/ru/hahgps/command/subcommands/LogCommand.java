@@ -26,7 +26,7 @@ public class LogCommand implements SubCommand {
     public void execute(Player player, String[] args) {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
         if (!plugin.getNavigationService().isNavigating(player)) {
-            // переключать нечего — иначе игрок видел бы «выключена», когда ничего не включалось
+
             player.sendMessage(plugin.getMessages().getPrefixed("no-active-route"));
             return;
         }

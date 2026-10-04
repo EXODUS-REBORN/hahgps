@@ -31,8 +31,8 @@ public class MysqlStorageProvider extends AbstractSqlStorageProvider {
     }
 
     private Connection newConnection() throws SQLException {
-        // Таймауты обязательны: без них «зависший» сетевой запрос держал бы
-        // монитор провайдера и подвешивал главный поток (tab-complete, shutdown).
+
+
         String url = "jdbc:mysql://" + host + ":" + port + "/" + database +
                 "?useSSL=" + useSsl + "&allowPublicKeyRetrieval=true&serverTimezone=UTC" +
                 "&connectTimeout=5000&socketTimeout=30000";

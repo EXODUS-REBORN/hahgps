@@ -14,7 +14,7 @@ public class SearchGui extends GuiScreen {
     private String query = "";
     private boolean showingResults;
 
-    /** Результаты, которые нужно показать сразу после открытия (поиск из чата). */
+
     private final String initialQuery;
     private final List<SearchService.SearchResult> initialResults;
 
@@ -41,8 +41,8 @@ public class SearchGui extends GuiScreen {
     @Override
     public void open() {
         super.open();
-        // После закрытия меню ради ввода в чат экран уже переоткрыт —
-        // результаты просто отрисовываем поверх
+
+
         if (initialResults != null) {
             showResults(initialQuery, initialResults);
         }
@@ -77,9 +77,9 @@ public class SearchGui extends GuiScreen {
             return;
         }
 
-        // Режим результатов: слоты 0-43 — найденные точки, 53 — «назад».
-        // Раньше результат в слоте 22 перехватывался кнопкой «назад» и
-        // вместо перехода к точке очищал поиск.
+
+
+
         if (showingResults) {
             if (slot == 53) {
                 results = new ArrayList<>();
@@ -104,7 +104,7 @@ public class SearchGui extends GuiScreen {
             return;
         }
 
-        // Обычный режим: 22 — «назад» в главное меню, 11/15 — ввод запроса
+
         if (slot == 22) {
             new MainMenuGui(player).open();
             GuiTheme.click(player);
@@ -121,7 +121,7 @@ public class SearchGui extends GuiScreen {
                         }
                         plugin.getDataService().runSync(() -> {
                             if (player.isOnline()) {
-                                // Открываем новый экран: старый закрыт чатом
+
                                 new SearchGui(player, input, found).open();
                             }
                         });

@@ -5,10 +5,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
-/**
- * Миграция старых файлов сообщений: вне-палитурные тона прошлых версий
- * обязаны переходить на тона GuiTheme.TONES, а старый префикс — на фирменный.
- */
+
 class MessagesMigrationTest {
 
     @Test
@@ -21,15 +18,24 @@ class MessagesMigrationTest {
     @Test
     void oldPrefixBecomesTheBrandedGradient() {
         String migrated = MessagesManager.remapPalette("<#8fc6ff>[GPS]<reset> ");
-        assertEquals("<gray>[</gray><font:minecraft:alt><gradient:#2464c8:#8fe9f5>GPS</gradient></font><gray>]</gray> ",
+        assertEquals("<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> ",
                 migrated);
         assertFalse(migrated.contains("[GPS]<reset>"), "старый префикс не заменён");
     }
 
     @Test
+    void oldTinyFontPrefixBecomesTheBoldOne() {
+        String oldPrefix = "<gray>[</gray><font:minecraft:alt><gradient:#2464c8:#8fe9f5>GPS</gradient></font><gray>]</gray>";
+        String migrated = MessagesManager.remapPalette(oldPrefix + " текст");
+        assertEquals("<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> текст",
+                migrated);
+        assertFalse(migrated.contains("<font:"), "alt-шрифт остался в префиксе: " + migrated);
+    }
+
+    @Test
     void cleanStringsAreUntouched() {
-        String clean = "<gray>[</gray><font:minecraft:alt><gradient:#2464c8:#8fe9f5>GPS</gradient></font><gray>]</gray> "
-                + "<red>Ошибка</red> <white>Значение</white>";
+        String clean = "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
+                + "<#f87171>Ошибка</#f87171> <white>Значение</white>";
         assertEquals(clean, MessagesManager.remapPalette(clean));
     }
 }

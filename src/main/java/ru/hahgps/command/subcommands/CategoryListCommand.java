@@ -52,7 +52,7 @@ public class CategoryListCommand implements SubCommand {
                         return null;
                     });
         }).whenComplete((v, error) -> {
-            // без этого звена сбой БД оставлял бы игрока без ответа
+
             if (error != null) {
                 ru.hahgps.command.SubCommand.sendError(player, error);
             }

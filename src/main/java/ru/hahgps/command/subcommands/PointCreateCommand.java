@@ -48,7 +48,7 @@ public class PointCreateCommand implements SubCommand {
                         return;
                     }
                     if (created == null) {
-                        // категорий в БД нет — точка не создана, сообщать «создана» нельзя
+
                         player.sendMessage(plugin.getMessages().getPrefixed("category-not-found",
                                 "name", category));
                         return;

@@ -25,8 +25,8 @@ public class EdgeCommand implements SubCommand {
 
     @Override
     public String permission() {
-        // plugin.yml объявляет gps.edge — раньше здесь стоял gps.admin и разрешение
-        // из plugin.yml не применялось вовсе
+
+
         return "gps.edge";
     }
 
@@ -77,7 +77,7 @@ public class EdgeCommand implements SubCommand {
                     for (String t : args[2].split(",")) {
                         TransportType type = SubCommand.parseTransport(t);
                         if (type == null) {
-                            // раньше неизвестный тип молча становился FOOT
+
                             player.sendMessage(plugin.getMessages().getPrefixed("invalid-args",
                                     "usage", usage()));
                             return;

@@ -23,7 +23,7 @@ public class VisualCommand implements SubCommand {
 
     @Override
     public String permission() {
-        // plugin.yml объявляет gps.visual — раньше стоял gps.admin
+
         return "gps.visual";
     }
 

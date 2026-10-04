@@ -37,7 +37,7 @@ public class NavigationService {
     }
 
     public synchronized void start() {
-        // повторный старт (reload/повторный onStorageReady) не должен оставлять «висячий» таск
+
         if (updateTask != null) {
             updateTask.cancel();
             updateTask = null;
@@ -83,10 +83,7 @@ public class NavigationService {
         bossBars.put(player.getUniqueId(), bar);
     }
 
-    /**
-     * Истинная длина маршрута в блоках. Раньше сюда мог прилететь «размер списка
-     * точек», из-за чего прогресс BossBar считался от бессмысленного числа.
-     */
+
     private static double routeLengthOrDefault(java.util.List<Location> path, double fallback) {
         if (path != null && path.size() >= 2) {
             double length = 0.0;
@@ -152,7 +149,7 @@ public class NavigationService {
             try {
                 updateSession(player, entry.getValue());
             } catch (Exception ex) {
-                // сбой одного игрока не должен останавливать обновления остальных
+
                 plugin.getLogger().log(java.util.logging.Level.WARNING,
                         "HahGps: не удалось обновить навигацию для " + player.getName(), ex);
             }
@@ -164,22 +161,22 @@ public class NavigationService {
         Location playerLoc = player.getLocation();
         String transportIcon = getTransportIcon(session.getTransport());
         String targetName = session.getTargetName() == null ? "?" : session.getTargetName();
-        // Имя точки — пользовательский текст: экранируем для MiniMessage,
-        // иначе название с «<» ломает разбор и роняет тик навигации.
-        // Сырой '>' в тексте безопасен, экранировать его нельзя.
-        String targetNameMm = targetName
+
+
+
+        String targetNameMm = ru.hahgps.gui.GuiTheme.clipPlain(targetName, ru.hahgps.gui.GuiTheme.NAME_MAX)
                 .replace("\\", "\\\\")
                 .replace("<", "\\<");
 
-        // Цель в другом мире: расстояние/подсказки бессмысленны (раньше здесь
-        // показывалось «1.797…e308 м»), просто удерживаем имя цели до возврата.
+
+
         if (target == null || target.getWorld() == null || playerLoc.getWorld() == null
                 || !playerLoc.getWorld().equals(target.getWorld())) {
             BossBar crossWorldBar = bossBars.get(player.getUniqueId());
             if (crossWorldBar != null) {
                 crossWorldBar.setTitle(transportIcon + " " + targetName);
             }
-            player.sendActionBar(miniMessage.deserialize("<#66aaff>" + targetNameMm));
+            player.sendActionBar(miniMessage.deserialize("<#38bdf8>" + targetNameMm));
             return;
         }
 
@@ -200,8 +197,8 @@ public class NavigationService {
 
         BossBar bar = bossBars.get(player.getUniqueId());
         if (bar != null) {
-            // BossBar в Bukkit умеет только plain-text — никакого MiniMessage
-            // на каждом тике не нужно
+
+
             bar.setTitle(transportIcon + " " + targetName + " " + arrow + " "
                     + LocationUtil.formatDistance(distanceToTarget));
             float progress = session.getTotalDistance() > 0
@@ -210,17 +207,14 @@ public class NavigationService {
             bar.setProgress(progress);
         }
 
-        // Числа — в моноширинном uniform: цифры выравниваются и читаются как прибор.
-        // Теги закрываются явно — строка разбирается напрямую, без GuiTheme.safe().
+
+
         Component hotbarText = miniMessage.deserialize(
-                "<#66aaff>" + transportIcon + " <#8fc6ff>" + targetNameMm + "</#8fc6ff>"
-                        + " <#8fe9f5>|</#8fe9f5> "
-                        + "<font:minecraft:uniform>"
-                        + "<#8fe9f5>" + LocationUtil.formatDistance(distanceToTarget) + "</#8fe9f5>"
-                        + " <#66aaff>|</#66aaff> "
-                        + "<#66aaff>" + (int) distanceToTarget + "</#66aaff>"
-                        + " <#8fc6ff>m</#8fc6ff>"
-                        + "</font>");
+                "<#38bdf8>" + transportIcon + "</#38bdf8> <white><bold>" + targetNameMm + "</bold></white>"
+                        + " <dark_gray>|</dark_gray> "
+                        + "<#4ade80><bold>" + LocationUtil.formatDistance(distanceToTarget) + "</bold></#4ade80>"
+                        + " <dark_gray>|</dark_gray> "
+                        + "<#fbbf24>" + (int) distanceToTarget + " m</#fbbf24>");
         player.sendActionBar(hotbarText);
 
         HudService hud = plugin.getHudService();

@@ -44,12 +44,9 @@ public class PointListCommand implements SubCommand {
                     Category category = plugin.getDataService().getCachedCategory(poi.getCategoryId());
                     String categoryName = category != null ? category.getName() : "?";
                     double distance = plugin.getPoiService().distanceTo(player, poi);
-                    // шаблон messages сам добавляет «м»: раньше сюда уходило «500 м» и в чате
-                    // появлялось «500 мм», а «1.2 км» превращалось в «1.2 кмм»
-                    String distanceStr = distance == Double.MAX_VALUE
-                            || Double.isInfinite(distance)
-                            || Double.isNaN(distance)
-                            ? "—" : String.format("%.0f", distance);
+
+
+                    String distanceStr = ru.hahgps.util.LocationUtil.formatDistance(distance);
                     player.sendMessage(messages.getPrefixed("point-list-entry",
                             "name", poi.getName(),
                             "category", categoryName,

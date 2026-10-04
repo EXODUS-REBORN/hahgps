@@ -32,7 +32,7 @@ public class HelpCommand implements SubCommand {
             if (cmd.permission().isEmpty() || player.hasPermission(cmd.permission())) {
                 String description = messages.get("help-" + cmd.name(), "description", "");
                 if (description.contains("Missing:")) {
-                    // ключ help-<имя> ещё не добавлен в messages_*.yml — не показываем игроку служебный текст
+
                     description = cmd.usage();
                 }
                 player.sendMessage(messages.getPrefixed("help-entry",

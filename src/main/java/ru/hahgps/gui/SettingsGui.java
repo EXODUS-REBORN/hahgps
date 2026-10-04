@@ -93,10 +93,7 @@ public class SettingsGui extends GuiScreen {
         }
     }
 
-    /**
-     * Сохраняет правку в config.yml. Без saveConfig() перезагрузка конфига
-     * просто выбрасывала изменение — тумблеры молча не работали.
-     */
+
     private void persistConfig(HahGpsPlugin plugin) {
         try {
             plugin.saveConfig();

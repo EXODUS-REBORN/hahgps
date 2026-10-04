@@ -13,7 +13,7 @@ public final class FuzzyMatcher {
         return levenshteinLower(a.toLowerCase(Locale.ROOT), b.toLowerCase(Locale.ROOT));
     }
 
-    /** Левенштейн для уже нормализованных (lowercase) строк — без повторных аллокаций строк. */
+
     private static int levenshteinLower(String a, String b) {
         if (a.equals(b)) {
             return 0;
@@ -36,10 +36,7 @@ public final class FuzzyMatcher {
         return prev[b.length()];
     }
 
-    /**
-     * Верхняя оценка похожести только по разнице длин: если она уже ниже порога,
-     * полный проход Левенштейна бессмысленен (используется в горячем поиске).
-     */
+
     public static double upperBound(String a, String b) {
         if (a == null || b == null) {
             return 0.0;
@@ -91,8 +88,8 @@ public final class FuzzyMatcher {
             if (target == null) {
                 continue;
             }
-            // upperBound — максимально возможная похожесть для данной пары длин;
-            // если она ниже порога, полный Левенштейн бессмысленен
+
+
             if (upperBound(query, target) < threshold) {
                 continue;
             }

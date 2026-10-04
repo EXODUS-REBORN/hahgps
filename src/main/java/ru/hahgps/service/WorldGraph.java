@@ -7,17 +7,12 @@ import ru.hahgps.model.TransportType;
 import ru.hahgps.util.LocationUtil;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-/**
- * Поиск пути непосредственно по блокам мира (сетка CELL×CELL).
- * ВАЖНО: весь доступ к миру (getHighestBlockYAt/getBlockAt) разрешён только с
- * главного потока, поэтому с другого потока findPath безопасно откатывается к
- * прямой линии, а не читает мир из фонового потока.
- */
+
 public class WorldGraph {
     private static final int CELL = 4;
     private static final int MARGIN = 24;
     private static final int MAX_DISTANCE = 512;
-    /** Радиус поиска ближайшего узла сетки, в клетках (2 = старое значение). */
+
     private static final int NEAREST_SEARCH_RADIUS = 10;
     private static final AtomicBoolean WARNED_OFF_THREAD = new AtomicBoolean();
 
@@ -54,7 +49,7 @@ public class WorldGraph {
         if (!start.getWorld().equals(end.getWorld())) {
             return straightLine(start, end);
         }
-        // межпоточный доступ к блокам недопустим — не читаем мир вне главного потока
+
         if (!Bukkit.isPrimaryThread()) {
             if (WARNED_OFF_THREAD.compareAndSet(false, true)) {
                 Bukkit.getLogger().warning(
@@ -121,13 +116,13 @@ public class WorldGraph {
     }
 
     private Node buildNode(World world, int gx, int gz, int wx, int wz) {
-        // не генерируем чанки ради построения маршрута
+
         if (!world.isChunkLoaded(wx >> 4, wz >> 4)) {
             return null;
         }
         int y = world.getHighestBlockYAt(wx, wz);
         int minY = world.getMinHeight();
-        // нормализуем: y может быть как верхним блоком, так и первым свободным над ним
+
         Material feetMaterial = world.getBlockAt(wx, y, wz).getType();
         if (!feetMaterial.isAir()) {
             y++;
@@ -169,7 +164,7 @@ public class WorldGraph {
 
         Node best = null;
         double bestDist = Double.MAX_VALUE;
-        // расширенный поиск: старый радиус 2 клетки часто не находил узел рядом с игроком
+
         for (int dx = -NEAREST_SEARCH_RADIUS; dx <= NEAREST_SEARCH_RADIUS; dx++) {
             for (int dz = -NEAREST_SEARCH_RADIUS; dz <= NEAREST_SEARCH_RADIUS; dz++) {
                 Node node = nodes.get(key(gx + dx, gz + dz));
@@ -197,8 +192,8 @@ public class WorldGraph {
         fScore.put(start, heuristic(start, end, transport));
         open.add(start);
 
-        // ограничение: сетка 512 блоков даёт до ~20k узлов; каждый узел имеет ≤8
-        // соседей, поэтому ≤8V опросов очереди — потолок с запасом и без ложных срабатываний
+
+
         int expansions = 0;
         final int maxExpansions = 8 * (nodes.size() + 1) + 1000;
         while (!open.isEmpty()) {
@@ -267,10 +262,7 @@ public class WorldGraph {
         return dist * 1.0;
     }
 
-    /**
-     * Адекватная (не завышенная) эвристика: минимальный коэффициент стоимости
-     * ребра — 0.8 (для CAR — ровно dist), иначе A* возвращал субоптимальный путь.
-     */
+
     private double heuristic(Node a, Node b, TransportType transport) {
         double distance = LocationUtil.distance(a.location, b.location);
         if (distance == Double.MAX_VALUE) {
@@ -329,8 +321,8 @@ public class WorldGraph {
         if (end != null) {
             path.add(end);
         }
-        // раньше здесь было start.distance(end), которое бросало исключение
-        // при разных мирах/отсутствии мира
+
+
         double distance = (start != null && end != null) ? LocationUtil.distance(start, end) : 0;
         if (!Double.isFinite(distance) || distance == Double.MAX_VALUE) {
             distance = 0;

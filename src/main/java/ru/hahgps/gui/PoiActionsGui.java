@@ -39,7 +39,7 @@ public class PoiActionsGui extends GuiScreen {
                 comp("gui.rate"),
                 lore("gui.lore-rate")));
 
-        // Удаление — только для тех, у кого есть право (как и в команде)
+
         if (player.hasPermission("gps.point.delete")) {
             inventory.setItem(16, GuiUtil.item(Material.LAVA_BUCKET,
                     comp("gui.delete"),

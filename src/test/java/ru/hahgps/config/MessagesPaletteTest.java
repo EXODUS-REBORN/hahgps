@@ -23,31 +23,39 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
-/**
- * Палитра и разметка messages_*.yml: только тона GuiTheme.TONES, нейтральные
- * цвета и красный; все теги закрыты и разбираются без «сырых» остатков в чате.
- */
+
 class MessagesPaletteTest {
 
     private static final Path RESOURCES = Path.of("src", "main", "resources");
     private static final Pattern HEX = Pattern.compile("#[0-9a-fA-F]{6}");
     private static final Pattern RAW_MARKUP = Pattern.compile("</?[a-zA-Z#][^>]*>", Pattern.DOTALL);
     private static final Pattern NAMED_TAG = Pattern.compile("</?([a-z_]+)>");
-    /** Запрещённые чужие цвета (см. docs/gui.md). */
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{[^}]*}");
+
+
     private static final Set<String> FORBIDDEN =
-            Set.of("gold", "green", "yellow", "light_purple", "dark_green", "dark_red", "dark_purple");
-    /** Разрешённые именованные теги. */
+            Set.of("gold", "green", "yellow", "light_purple", "dark_green", "dark_red", "dark_purple", "red");
+
+
     private static final Set<String> ALLOWED = Set.of(
-            "white", "gray", "dark_gray", "black", "red", "blue", "dark_blue", "dark_aqua",
+            "white", "gray", "dark_gray", "black",
             "bold", "italic", "underlined", "strikethrough", "obfuscated", "reset",
             "gradient", "color", "colour", "click", "hover", "key", "newline", "font");
-    /** Разрешённые ванильные шрифты: uniform — везде, alt — только латиница. */
-    private static final Set<String> ALLOWED_FONTS =
-            Set.of("minecraft:uniform", "minecraft:alt", "uniform", "alt");
-    /** Тег шрифта: <font:minecraft:uniform>…</font>. */
+
+
+    private static final Set<String> ALLOWED_FONTS = Set.of("minecraft:uniform", "uniform");
+
+
+    private static final Set<String> SIZE_ACCENT_PLACEHOLDERS = Set.of("{date}", "{time}", "{version}");
+
+
+    private static final Set<String> NUMERIC_PLACEHOLDERS = Set.of(
+            "{x}", "{y}", "{z}", "{rating}", "{distance}", "{match}", "{percent}",
+            "{page}", "{pages}", "{count}", "{votes}", "{value}");
+
     private static final Pattern FONT_TAG =
             Pattern.compile("<font:([^>]+)>(.*?)</font>", Pattern.DOTALL);
-    /** Отдельный <font…> без закрытия или с незнакомым ключом. */
+
     private static final Pattern ANY_FONT_OPEN =
             Pattern.compile("<font:([^>]+)>");
 
@@ -91,6 +99,10 @@ class MessagesPaletteTest {
         return keys;
     }
 
+    private static String stripTags(String mini) {
+        return mini.replaceAll("</?[a-zA-Z#][^>]*>", "");
+    }
+
     @Test
     void paletteVersionIsCurrent() throws IOException {
         for (String lang : List.of("ru", "en")) {
@@ -99,7 +111,7 @@ class MessagesPaletteTest {
             for (String[] kv : parse(file)) {
                 if ("palette-version".equals(kv[0])) {
                     found = true;
-                    assertEquals("3", kv[1].trim(), lang + ": устаревшая схема палитры");
+                    assertEquals("4", kv[1].trim(), lang + ": устаревшая схема палитры");
                 }
             }
             assertTrue(found, lang + ": нет ключа palette-version");
@@ -107,8 +119,8 @@ class MessagesPaletteTest {
     }
 
     @Test
-    void onlyPaletteTonesAndAllowedTags() throws IOException {
-        Set<String> tones = new HashSet<>(List.of(GuiTheme.TONES));
+    void onlyPaletteColorsAndAllowedTags() throws IOException {
+        Set<String> palette = new HashSet<>(List.of(GuiTheme.PALETTE));
         for (String lang : List.of("ru", "en")) {
             for (String[] kv : parse(RESOURCES.resolve("messages_" + lang + ".yml"))) {
                 String key = kv[0], value = kv[1];
@@ -117,8 +129,8 @@ class MessagesPaletteTest {
 
                 Matcher hex = HEX.matcher(value);
                 while (hex.find()) {
-                    assertTrue(tones.contains(hex.group()),
-                            lang + " " + key + ": цвет вне палитры " + hex.group());
+                    assertTrue(palette.contains(hex.group().toLowerCase()),
+                            lang + " " + key + ": цвет вне RGB-палитры " + hex.group());
                 }
 
                 Matcher tag = NAMED_TAG.matcher(value);
@@ -126,7 +138,7 @@ class MessagesPaletteTest {
                     String name = tag.group(1);
                     if (name.startsWith("#")) continue;
                     assertFalse(FORBIDDEN.contains(name),
-                            lang + " " + key + ": запрещённый цвет <" + name + ">");
+                            lang + " " + key + ": именованный цвет <" + name + "> — используй RGB-хекс из палитры");
                     assertTrue(ALLOWED.contains(name) || name.matches("#[0-9a-fA-F]{6}"),
                             lang + " " + key + ": неизвестный тег <" + name + ">");
                 }
@@ -168,7 +180,7 @@ class MessagesPaletteTest {
         assertTrue(onlyEn.isEmpty(), "ключ только в messages_en.yml: " + onlyEn);
     }
 
-    /** Все теги шрифта закрыты и используют только ванильные ключи. */
+
     @Test
     void fontTagsAreClosedAndUseVanillaKeys() throws IOException {
         for (String lang : List.of("ru", "en")) {
@@ -189,59 +201,96 @@ class MessagesPaletteTest {
         }
     }
 
-    /**
-     * alt (руны зачарований) рисует только латиницу A-Z/a-z и пробел —
-     * кириллица и цифры дадут «тофу». Проверяем содержимое каждого alt-отрезка.
-     */
+
     @Test
-    void altFontWrapsOnlyLatinText() throws IOException {
+    void sizeAccentOnlyForTimeAndVersions() throws IOException {
         for (String lang : List.of("ru", "en")) {
             for (String[] kv : parse(RESOURCES.resolve("messages_" + lang + ".yml"))) {
                 String key = kv[0], value = kv[1];
                 Matcher m = FONT_TAG.matcher(value);
                 while (m.find()) {
-                    String fontKey = m.group(1).trim();
-                    if (!fontKey.endsWith("alt")) continue;
-                    // вложенные теги (<gradient> и т.п.) вычищаем — остаётся текст
-                    String text = m.group(2).replaceAll("</?[a-zA-Z#][^>]*>", "");
-                    assertTrue(text.matches("[A-Za-z\\s]*"),
-                            lang + " " + key + ": в alt-шрифте не-латинский текст: '" + text + "'");
+                    String text = stripTags(m.group(2));
+                    boolean allowed = SIZE_ACCENT_PLACEHOLDERS.stream().anyMatch(text::contains);
+                    assertTrue(allowed, lang + " " + key
+                            + ": мини-шрифт допустим только для времени и версий, а обёрнут '"
+                            + text + "'");
                 }
             }
         }
     }
 
-    /**
-     * Числовые значения (координаты, расстояния, страницы, рейтинги, проценты)
-     * обязаны быть в uniform — моноширинный шрифт выравнивает цифры.
-     * Ключи с числами: точность — сами плейсхолдеры {x},{y},{z},{count} и т.п.
-     */
+
     @Test
-    void numericPlaceholdersUseUniformFont() throws IOException {
-        Set<String> NUMERIC = Set.of(
-                "{x}", "{y}", "{z}", "{rating}", "{distance}", "{match}", "{percent}",
-                "{page}", "{pages}", "{count}", "{votes}", "{value}");
+    void numbersNeverUseTheTinyFont() throws IOException {
         for (String lang : List.of("ru", "en")) {
             for (String[] kv : parse(RESOURCES.resolve("messages_" + lang + ".yml"))) {
                 String key = kv[0], value = kv[1];
-                // значения без разметки (state-on/off, distance-format) не трогаем:
-                // distance-format уходит в BossBar обычным текстом
-                if (!value.contains("<")) continue;
-                if (key.equals("distance-format") || key.equals("distance-format-km")) continue;
-                for (String num : NUMERIC) {
-                    if (!value.contains(num)) continue;
+                for (String num : NUMERIC_PLACEHOLDERS) {
                     int idx = value.indexOf(num);
-                    // ближайший открывающий шрифт-тег перед плейсхолдером должен быть uniform
+                    if (idx < 0) continue;
                     String before = value.substring(0, idx);
                     int lastFont = before.lastIndexOf("<font:");
-                    assertTrue(lastFont >= 0,
-                            lang + " " + key + ": число " + num + " без тега шрифта");
-                    // шрифт, открытый перед числом, обязан ещё быть открыт
+                    if (lastFont < 0) continue;
                     assertEquals(-1, before.indexOf("</font>", lastFont),
-                            lang + " " + key + ": число " + num + " вне <font> (шрифт закрыт раньше)");
-                    String fontKey = before.substring(lastFont + 6, before.indexOf('>', lastFont)).trim();
-                    assertEquals("minecraft:uniform", fontKey,
-                            lang + " " + key + ": число " + num + " не в uniform-шрифте");
+                            lang + " " + key + ": число " + num + " не должно быть в мини-шрифте");
+                }
+            }
+        }
+    }
+
+
+    @Test
+    void lineTemplatesAreUniform() throws IOException {
+        for (String lang : List.of("ru", "en")) {
+            for (String[] kv : parse(RESOURCES.resolve("messages_" + lang + ".yml"))) {
+                String key = kv[0];
+                for (String line : kv[1].split("\n")) {
+                    if (line.isBlank()) continue;
+                    String plain = stripTags(line).trim();
+                    if (plain.isEmpty()) continue;
+                    String trimmed = line.trim();
+
+                    if (plain.startsWith("✔")) {
+                        assertTrue(trimmed.startsWith("<#4ade80>✔") || trimmed.startsWith("<#4ade80><bold>✔"),
+                                lang + " " + key + ": успех должен начинаться с <#4ade80>✔: '" + trimmed + "'");
+                    }
+                    if (plain.startsWith("✖")) {
+                        assertTrue(trimmed.startsWith("<#f87171>✖") || trimmed.startsWith("<#f87171><bold>✖"),
+                                lang + " " + key + ": ошибка должна начинаться с <#f87171>✖: '" + trimmed + "'");
+                    }
+                    if (plain.startsWith("→") && key.startsWith("input-")) {
+                        assertTrue(trimmed.startsWith("<#c084fc>→") || trimmed.startsWith("<#c084fc><bold>→"),
+                                lang + " " + key + ": подсказка должна начинаться с <#c084fc>→: '" + trimmed + "'");
+                    }
+                    if (key.startsWith("hint-")) {
+                        assertTrue(trimmed.startsWith("<#") && trimmed.contains("<bold>"),
+                                lang + " " + key + ": подсказка направления — цвет секции + <bold>: '" + trimmed + "'");
+                    }
+                    if (plain.contains("══")) {
+                        assertTrue(trimmed.startsWith("<bold>"),
+                                lang + " " + key + ": шапка с ═══ должна быть в <bold>: '" + trimmed + "'");
+                    }
+                }
+            }
+        }
+    }
+
+
+    @Test
+    void guiTextsFitTheirBoxes() throws IOException {
+        for (String lang : List.of("ru", "en")) {
+            for (String[] kv : parse(RESOURCES.resolve("messages_" + lang + ".yml"))) {
+                String key = kv[0], value = kv[1];
+                if (!key.startsWith("gui.")) continue;
+                int max = key.startsWith("gui.lore-") ? GuiTheme.LORE_MAX : GuiTheme.NAME_MAX;
+                String plain = stripTags(value);
+                plain = PLACEHOLDER.matcher(plain).replaceAll("");
+                for (String line : plain.split("\n")) {
+                    String text = line.trim();
+                    if (text.isEmpty()) continue;
+                    assertTrue(text.length() <= max, lang + " " + key
+                            + ": текст '" + text + "' (" + text.length() + ") вылезает за границы ("
+                            + max + ")");
                 }
             }
         }

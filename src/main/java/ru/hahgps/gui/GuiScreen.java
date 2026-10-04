@@ -69,11 +69,7 @@ public abstract class GuiScreen implements InventoryHolder {
         putBrand();
     }
 
-    /**
-     * Бренд-предмет в углу меню (44 — для больших инвентарей, 26 — для маленьких),
-     * как в hahtojer. Ставится только в пустой слот, чтобы не затирать содержимое.
-     * Пояснения берутся из messages_*.yml (gui.brand-*), чтобы EN-версия была полной.
-     */
+
     protected void putBrand() {
         if (inventory == null) return;
         int slot = size() >= 54 ? 44 : 26;
@@ -82,7 +78,7 @@ public abstract class GuiScreen implements InventoryHolder {
         }
     }
 
-    /** Строки бренда из messages_*.yml с подстановкой версии. */
+
     private List<String> brandLore() {
         try {
             String version = GuiTheme.version();
@@ -92,11 +88,11 @@ public abstract class GuiScreen implements InventoryHolder {
                     messages.get("gui.brand-project"),
                     messages.get("gui.brand-style"));
         } catch (Throwable t) {
-            return List.of(); // сообщения ещё не подняты — бренд без пояснений
+            return List.of();
         }
     }
 
-    /** Пояснение под кнопкой из messages_*.yml. */
+
     protected List<Component> lore(String key, String... args) {
         try {
             return List.of(HahGpsPlugin.getInstance().getMessages().getComponent(key, args));
@@ -105,12 +101,12 @@ public abstract class GuiScreen implements InventoryHolder {
         }
     }
 
-    /** Компонент из messages_*.yml. */
+
     protected Component comp(String key, String... args) {
         return HahGpsPlugin.getInstance().getMessages().getComponent(key, args);
     }
 
-    /** Строка из messages_*.yml (без разбора разметки) — для подстановки в плейсхолдеры. */
+
     protected String getMsg(String key) {
         try {
             return HahGpsPlugin.getInstance().getMessages().get(key);
@@ -119,11 +115,7 @@ public abstract class GuiScreen implements InventoryHolder {
         }
     }
 
-    /**
-     * Сбой фоновой операции из GUI: причина — в лог, игроку — «Произошла ошибка».
-     * Без этого любой сбой БД оставлял игрока в молчании (выполнялось thenRun/thenAccept
-     * без обработки исключений).
-     */
+
     protected void reportError(Throwable error) {
         if (error == null) return;
         try {
@@ -143,11 +135,11 @@ public abstract class GuiScreen implements InventoryHolder {
                 notify.run();
             }
         } catch (Throwable ignored) {
-            // сообщение об ошибке не должно само падать
+
         }
     }
 
-    /** Самая глубокая причина исключения — короткий текст для игрока. */
+
     protected static String rootMessage(Throwable error) {
         Throwable t = error;
         while (t.getCause() != null && t.getCause().getMessage() != null) {

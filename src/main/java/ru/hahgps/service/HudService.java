@@ -44,7 +44,7 @@ public class HudService {
             String text = icon + " " + (targetName == null ? "" : targetName) + " | " + meters + "m";
             sendMethod.invoke(wrapperInstance, player.getUniqueId().toString(), text);
         } catch (Throwable ignored) {
-            // один сбойный вызов не должен сыпать рефлексией каждый тик
+
             apiBroken = true;
         }
     }
@@ -66,9 +66,7 @@ public class HudService {
         }
     }
 
-    /**
-     * ItemsAdder работает с инвентарями/пакетами — вызов обязан идти с главного потока.
-     */
+
     private boolean ensureMainThread(Runnable retry) {
         if (Bukkit.isPrimaryThread()) {
             return true;
@@ -78,7 +76,7 @@ public class HudService {
             try {
                 Bukkit.getScheduler().runTask(plugin, retry);
             } catch (Throwable ignored) {
-                // плагин выключается — тихо бросаем вызов
+
             }
         }
         return false;
@@ -107,7 +105,7 @@ public class HudService {
             try {
                 Object instance = getInstanceMethod.invoke(null);
                 if (instance == null) {
-                    // ItemsAdder ещё не инициализировался — попробуем в следующем тике
+
                     return false;
                 }
                 wrapperInstance = instance;

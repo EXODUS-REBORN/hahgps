@@ -11,13 +11,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
-/**
- * Выбор вида транспорта. Показываются только типы, включённые в config.yml
- * (transport.foot / car / transit / air / water); по умолчанию — пешком и авто.
- */
+
 public class TransportSelectGui extends GuiScreen {
 
-    /** Слоты ряда 9-17 под 1..5 кнопок — симметрично относительно центра. */
+
     private static final int[][] LAYOUT = {
             {13},
             {11, 15},

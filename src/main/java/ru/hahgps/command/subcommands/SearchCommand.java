@@ -59,7 +59,7 @@ public class SearchCommand implements SubCommand {
     @Override
     public List<String> tabComplete(Player player, String[] args) {
         if (args.length == 1) {
-            // подсказываем имена точек из кэша (без запроса к БД на главном потоке)
+
             String prefix = args[0].toLowerCase();
             java.util.List<String> names = new java.util.ArrayList<>();
             for (var poi : HahGpsPlugin.getInstance().getDataService().getCachedPois()) {
