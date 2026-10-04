@@ -61,6 +61,22 @@ jobs:
             exit 1
           }
 
+      # Публикуемый jar обязан совпадать с pom.xml: иначе на сервере он не грузится
+      # рядом со старым файлом (duplicate plugin identifier: имя + версия из plugin.yml).
+      - name: Идентичность плагина совпадает с pom.xml
+        run: |
+          set -euo pipefail
+          VERSION="$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          JAR="target/hahgps-${VERSION}.jar"
+          YML="$(unzip -p "$JAR" plugin.yml)"
+          INNER="$(echo "$YML" | sed -n 's/^version: *//p' | tr -d "'\r")"
+          NAME="$(echo "$YML" | sed -n 's/^name: *//p' | tr -d "'\r")"
+          echo "публикуем $NAME $INNER из файла $JAR"
+          if [ "$INNER" != "$VERSION" ]; then
+            echo "::error::В $JAR версия '$INNER', а в pom.xml '$VERSION' — такой файл нельзя отдавать автообновлению."
+            exit 1
+          fi
+
       - name: Публикация релиза с jar
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

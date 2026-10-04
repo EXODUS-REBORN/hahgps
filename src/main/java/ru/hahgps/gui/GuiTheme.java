@@ -43,48 +43,22 @@ public final class GuiTheme {
             "#8fe9f5"
     };
 
+    // ЕДИНЫЙ ШАБЛОН: один синий оттенок (TONES) + нейтрали.
+    // Зелёных, красных, золотых, фиолетовых и прочих «радужных»
+    // цветов в текстах нет — отличаемся тоном синего и начертанием.
+    public static final String OK = "#8fe9f5";     // ✔ успех: самый светлый тон
+    public static final String INFO = "#66aaff";   // → подсказки, промпты
+    public static final String VALUE = "#8fc6ff";  // значения, названия кнопок
+    public static final String STEP = "#4fd1e0";   // подсказки «резко»
+    public static final String ERR = "#3f86ff";    // ✖ ошибки: тёмный тон + жирный
 
-    public static final String GREEN = "#4ade80";
-    public static final String GREEN_DEEP = "#22c55e";
-    public static final String LIME = "#a3e635";
-    public static final String RED = "#f87171";
-    public static final String RED_DEEP = "#ef4444";
-    public static final String ORANGE = "#fb923c";
-    public static final String ORANGE_DEEP = "#f97316";
-    public static final String AMBER = "#fbbf24";
-    public static final String GOLD = "#fcd34d";
-    public static final String PURPLE = "#c084fc";
-    public static final String VIOLET = "#a855f7";
-    public static final String PINK = "#f472b6";
-    public static final String TEAL = "#2dd4bf";
-    public static final String SKY = "#38bdf8";
-    public static final String INDIGO = "#818cf8";
-    public static final String CYAN = "#22d3ee";
-    public static final String BLUE = "#3b82f6";
+    /** Палитра для сообщений: только синяя линейка. Других оттенков быть не должно. */
+    public static final String[] PALETTE = TONES.clone();
 
 
-    public static final String[] ACCENTS = {
-            GREEN, GREEN_DEEP, LIME,
-            RED, RED_DEEP,
-            ORANGE, ORANGE_DEEP, AMBER, GOLD,
-            PURPLE, VIOLET, PINK,
-            TEAL, SKY, INDIGO, CYAN, BLUE
-    };
-
-
-    public static final String[] PALETTE = concat(TONES, ACCENTS);
-
-
-    public static final String OK_MARK = "<" + GREEN + ">✔</" + GREEN + ">";
-    public static final String ERR_MARK = "<" + RED + ">✖</" + RED + ">";
-    public static final String PROMPT_MARK = "<" + PURPLE + ">→</" + PURPLE + ">";
-
-    private static String[] concat(String[] a, String[] b) {
-        String[] out = new String[a.length + b.length];
-        System.arraycopy(a, 0, out, 0, a.length);
-        System.arraycopy(b, 0, out, a.length, b.length);
-        return out;
-    }
+    public static final String OK_MARK = "<" + OK + ">✔</" + OK + ">";
+    public static final String ERR_MARK = "<" + ERR + ">✖</" + ERR + ">";
+    public static final String PROMPT_MARK = "<" + INFO + ">→</" + INFO + ">";
 
     public static final String GRADIENT_START = TONES[1];
     public static final String GRADIENT_MID = TONES[4];
@@ -316,19 +290,21 @@ public final class GuiTheme {
             if (c == '\u00a7' && i + 1 < s.length()) {
                 char code = Character.toLowerCase(s.charAt(i + 1));
                 String tag = switch (code) {
-                    case '0' -> "black";
-                    case '1' -> "dark_blue";
+                    // Все цвета — только из синей линейки TONES; нейтрали
+                    // (белый/серый/тёмно-серый) остаются именованными.
+                    case '0' -> TONES[0];
+                    case '1' -> TONES[1];
                     case '2' -> TONES[5];
-                    case '3' -> "dark_aqua";
-                    case '4' -> "red";
+                    case '3' -> TONES[8];
+                    case '4' -> TONES[5];
                     case '5' -> TONES[4];
                     case '6' -> TONES[8];
                     case '7' -> "gray";
                     case '8' -> "dark_gray";
-                    case '9' -> "blue";
+                    case '9' -> TONES[3];
                     case 'a' -> TONES[7];
-                    case 'b' -> "aqua";
-                    case 'c' -> "red";
+                    case 'b' -> TONES[8];
+                    case 'c' -> TONES[5];
                     case 'd' -> TONES[6];
                     case 'e' -> TONES[9];
                     case 'f' -> "white";

@@ -1,24 +1,31 @@
 # ============================================================
 #  HahGps — сообщения (Русский)
 #
-#  Цвета — RGB-палитра GuiTheme.PALETTE: в текстах используются
-#  десятки оттенков (синий, бирюза, зелёный, золото, оранжевый,
-#  фиолетовый, розовый, красный), а не 3–4 цвета.
-#  Нейтральные: <white> — значения, <gray> — подписи,
-#  <dark_gray> — разделители.
+#  ОДИН ШАБЛОН: синяя линейка GuiTheme.PALETTE плюс нейтрали.
+#  Зелёных, красных, золотых, оранжевых, фиолетовых и розовых
+#  оттенков в текстах нет вообще — отличаемся тоном синего.
+#  Значения — <white><bold>, подписи — <gray>, разделители —
+#  <dark_gray>, служебные пометки — <italic>.
+#
+#  Смысловые тона (все из синей линейки):
+#    #8fe9f5 — ✔ успех (самый светлый тон)
+#    #8fc6ff — значения и названия кнопок
+#    #66aaff — → подсказки и промпты
+#    #4fd1e0 — подсказки «резко вбок»
+#    #3f86ff — ✖ ошибки (тёмный тон + жирный)
+#
+#  Шаблоны строк (одинаковые для всех сообщений):
+#    успех   — <#8fe9f5>✔</#8fe9f5> <gray>описание</gray> <white><bold>значение</bold></white>
+#    ошибка  — <#3f86ff>✖ описание <white><bold>значение</bold></white></#3f86ff>
+#    подсказка— <#66aaff>→</#66aaff> <gray>описание</gray>
+#    шапка   — <bold><gradient:#2464c8:#8fe9f5>═══ НАЗВАНИЕ ═══</gradient></bold>
 #
 #  Шрифт и размер: обычный текст — стандартный шрифт Minecraft.
 #  Разница размеров (мини-шрифт uniform) применяется ТОЛЬКО
 #  к времени и версиям: <font:minecraft:uniform>…</font>
 #  вокруг {date} и {version}.
 #  Выделение — декорациями: <bold> — заголовки и значения,
-#  <italic> — пояснения, <underlined>/<strikethrough> — акценты.
-#
-#  Шаблоны строк (единые для всех сообщений):
-#    успех  — <#4ade80>✔</#4ade80> <gray>описание</gray> <white>значение</white>
-#    ошибка — <#f87171>✖ описание <white>значение</white></#f87171>
-#    подсказка — <#c084fc>→</#c084fc> <gray>описание</gray>
-#    шапка  — <bold><gradient:…>═══ НАЗВАНИЕ ═══</gradient></bold>
+#  <italic> — пояснения.
 #
 #  Тексты не выходят за границы окон и подсказок: названия
 #  и подписи обрезаются кодом (GuiTheme.clipPlain/clipMini).
@@ -27,79 +34,79 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Версия схемы палитры: при несовпадении файл заменяется эталоном (старый — в .bak)
-palette-version: 4
+palette-version: 5
 
-no-permission: "<#f87171>✖ У вас нет прав для выполнения этой команды.</#f87171>"
-player-only: "<#f87171>✖ Эта команда доступна только игрокам.</#f87171>"
-usage: "<#f87171>✖ Использование:</#f87171> <bold><white>{usage}</white></bold>"
-invalid-args: "<#f87171>✖ Неверные аргументы.</#f87171> <gray>Использование:</gray> <bold><white>{usage}</white></bold>"
+no-permission: "<#3f86ff>✖ У вас нет прав для выполнения этой команды.</#3f86ff>"
+player-only: "<#3f86ff>✖ Эта команда доступна только игрокам.</#3f86ff>"
+usage: "<#3f86ff>✖ Использование:</#3f86ff> <bold><white>{usage}</white></bold>"
+invalid-args: "<#3f86ff>✖ Неверные аргументы.</#3f86ff> <gray>Использование:</gray> <bold><white>{usage}</white></bold>"
 
 # --- Точки ---
-point-created: "<#4ade80>✔</#4ade80> <gray>Точка</gray> <white><bold>{name}</bold></white> <dark_gray>создана.</dark_gray>"
-point-deleted: "<#4ade80>✔</#4ade80> <gray>Точка</gray> <white><bold>{name}</bold></white> <dark_gray>удалена.</dark_gray>"
-point-not-found: "<#f87171>✖ Точка <white><bold>{name}</bold></white> не найдена.</#f87171>"
-point-exists: "<#f87171>✖ Точка с именем <white><bold>{name}</bold></white> уже существует.</#f87171>"
+point-created: "<#8fe9f5>✔</#8fe9f5> <gray>Точка</gray> <white><bold>{name}</bold></white> <dark_gray>создана.</dark_gray>"
+point-deleted: "<#8fe9f5>✔</#8fe9f5> <gray>Точка</gray> <white><bold>{name}</bold></white> <dark_gray>удалена.</dark_gray>"
+point-not-found: "<#3f86ff>✖ Точка <white><bold>{name}</bold></white> не найдена.</#3f86ff>"
+point-exists: "<#3f86ff>✖ Точка с именем <white><bold>{name}</bold></white> уже существует.</#3f86ff>"
 point-info: |
   <bold><gradient:#2464c8:#8fe9f5>════════ ТОЧКА ════════</gradient></bold>
   <gray>Название:</gray> <white><bold>{name}</bold></white>
-  <gray>Категория:</gray> <#22d3ee>{category}</#22d3ee>
-  <gray>Координаты:</gray> <#22d3ee><bold>{x}, {y}, {z}</bold></#22d3ee>
+  <gray>Категория:</gray> <#8fc6ff>{category}</#8fc6ff>
+  <gray>Координаты:</gray> <#8fc6ff><bold>{x}, {y}, {z}</bold></#8fc6ff>
   <gray>Мир:</gray> <white>{world}</white>
-  <gray>Рейтинг:</gray> <#fbbf24><bold>{rating}/10</bold></#fbbf24> <dark_gray>·</dark_gray> <gray>голосов:</gray> <white>{votes}</white>
+  <gray>Рейтинг:</gray> <#8fc6ff><bold>{rating}/10</bold></#8fc6ff> <dark_gray>·</dark_gray> <gray>голосов:</gray> <white>{votes}</white>
   <gray>Автор:</gray> <white>{author}</white>
   <gray>Создана:</gray> <font:minecraft:uniform><white>{date}</white></font>
   <gray>Описание:</gray> <white><italic>{description}</italic></white>
-point-rated: "<#4ade80>✔</#4ade80> <gray>Вы оценили точку</gray> <white><bold>{name}</bold></white> <dark_gray>—</dark_gray> <#fbbf24><bold>{rating}</bold></#fbbf24><gray>/10</gray>"
-invalid-rating: "<#f87171>✖ Рейтинг должен быть от <bold>1</bold> до <bold>10</bold>.</#f87171>"
+point-rated: "<#8fe9f5>✔</#8fe9f5> <gray>Вы оценили точку</gray> <white><bold>{name}</bold></white> <dark_gray>—</dark_gray> <#8fc6ff><bold>{rating}</bold></#8fc6ff><gray>/10</gray>"
+invalid-rating: "<#3f86ff>✖ Рейтинг должен быть от <bold>1</bold> до <bold>10</bold>.</#3f86ff>"
 point-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ ТОЧКИ ({count}) ═══</gradient></bold>"
-point-list-entry: "<#22d3ee>•</#22d3ee> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>{category}</gray> <dark_gray>|</dark_gray> <#fbbf24>★ {rating}</#fbbf24> <dark_gray>|</dark_gray> <#4ade80>{distance}</#4ade80>"
+point-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>{category}</gray> <dark_gray>|</dark_gray> <#8fc6ff>★ {rating}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff>"
 
 # --- Категории ---
-category-created: "<#4ade80>✔</#4ade80> <gray>Категория</gray> <white><bold>{name}</bold></white> <dark_gray>создана.</dark_gray>"
-category-deleted: "<#4ade80>✔</#4ade80> <gray>Категория</gray> <white><bold>{name}</bold></white> <dark_gray>удалена.</dark_gray>"
-category-not-found: "<#f87171>✖ Категория <white><bold>{name}</bold></white> не найдена.</#f87171>"
-category-exists: "<#f87171>✖ Категория с таким именем уже существует.</#f87171>"
-cannot-delete-default: "<#f87171>✖ Нельзя удалить стандартную категорию.</#f87171>"
-category-list-header: "<bold><gradient:#22c55e:#a3e635>═══ КАТЕГОРИИ ({count}) ═══</gradient></bold>"
-category-list-entry: "<#4ade80>•</#4ade80> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>точек:</gray> <#a3e635><bold>{count}</bold></#a3e635>"
+category-created: "<#8fe9f5>✔</#8fe9f5> <gray>Категория</gray> <white><bold>{name}</bold></white> <dark_gray>создана.</dark_gray>"
+category-deleted: "<#8fe9f5>✔</#8fe9f5> <gray>Категория</gray> <white><bold>{name}</bold></white> <dark_gray>удалена.</dark_gray>"
+category-not-found: "<#3f86ff>✖ Категория <white><bold>{name}</bold></white> не найдена.</#3f86ff>"
+category-exists: "<#3f86ff>✖ Категория с таким именем уже существует.</#3f86ff>"
+cannot-delete-default: "<#3f86ff>✖ Нельзя удалить стандартную категорию.</#3f86ff>"
+category-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ КАТЕГОРИИ ({count}) ═══</gradient></bold>"
+category-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>точек:</gray> <#8fc6ff><bold>{count}</bold></#8fc6ff>"
 
 # --- Маршруты и навигация ---
-route-started: "<#4ade80>✔</#4ade80> <gray>Навигация к</gray> <white><bold>{name}</bold></white> <dark_gray>начата · осталось</dark_gray> <#fb923c><bold>{distance}</bold></#fb923c>"
-route-stopped: "<#4ade80>✔</#4ade80> <gray>Навигация остановлена.</gray>"
-no-active-route: "<#f87171>✖ У вас нет активной навигации.</#f87171>"
-arrival: "<#4ade80><bold>✔ ЦЕЛЬ ДОСТИГНУТА</bold></#4ade80>"
+route-started: "<#8fe9f5>✔</#8fe9f5> <gray>Навигация к</gray> <white><bold>{name}</bold></white> <dark_gray>начата · осталось</dark_gray> <#8fc6ff><bold>{distance}</bold></#8fc6ff>"
+route-stopped: "<#8fe9f5>✔</#8fe9f5> <gray>Навигация остановлена.</gray>"
+no-active-route: "<#3f86ff>✖ У вас нет активной навигации.</#3f86ff>"
+arrival: "<#8fe9f5><bold>✔ ЦЕЛЬ ДОСТИГНУТА</bold></#8fe9f5>"
 
-# --- Подсказки ---
-hint-straight: "<#4ade80><bold>↑ Идите прямо</bold></#4ade80>"
-hint-slight-right: "<#22d3ee><bold>↗ Слегка направо</bold></#22d3ee>"
-hint-right: "<#38bdf8><bold>→ Поверните направо</bold></#38bdf8>"
-hint-sharp-right: "<#818cf8><bold>↘ Резко направо</bold></#818cf8>"
-hint-back: "<#f87171><bold>↩ Развернитесь</bold></#f87171>"
-hint-sharp-left: "<#818cf8><bold>↙ Резко налево</bold></#818cf8>"
-hint-left: "<#38bdf8><bold>← Поверните налево</bold></#38bdf8>"
-hint-slight-left: "<#22d3ee><bold>↖ Слегка налево</bold></#22d3ee>"
+# --- Подсказки: та же синяя лестница, от светлого к тёмному ---
+hint-straight: "<#8fe9f5><bold>↑ Идите прямо</bold></#8fe9f5>"
+hint-slight-right: "<#8fc6ff><bold>↗ Слегка направо</bold></#8fc6ff>"
+hint-right: "<#66aaff><bold>→ Поверните направо</bold></#66aaff>"
+hint-sharp-right: "<#4fd1e0><bold>↘ Резко направо</bold></#4fd1e0>"
+hint-back: "<#3f86ff><bold>↩ Развернитесь</bold></#3f86ff>"
+hint-sharp-left: "<#4fd1e0><bold>↙ Резко налево</bold></#4fd1e0>"
+hint-left: "<#66aaff><bold>← Поверните налево</bold></#66aaff>"
+hint-slight-left: "<#8fc6ff><bold>↖ Слегка налево</bold></#8fc6ff>"
 
 # --- Журналирование ---
-log-enabled: "<#4ade80>✔</#4ade80> <gray>Подсказки в чате включены.</gray>"
-log-disabled: "<#4ade80>✔</#4ade80> <gray>Подсказки в чате выключены.</gray>"
+log-enabled: "<#8fe9f5>✔</#8fe9f5> <gray>Подсказки в чате включены.</gray>"
+log-disabled: "<#8fe9f5>✔</#8fe9f5> <gray>Подсказки в чате выключены.</gray>"
 
 # --- Поиск ---
-search-header: "<bold><gradient:#a855f7:#f472b6>═══ ПОИСК ({count}) ═══</gradient></bold>"
-search-no-results: "<#f87171>✖ По запросу <white><bold>{query}</bold></white> ничего не найдено.</#f87171>"
-search-entry: "<#c084fc>•</#c084fc> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#f472b6><bold>{match}%</bold></#f472b6>"
+search-header: "<bold><gradient:#2464c8:#8fe9f5>═══ ПОИСК ({count}) ═══</gradient></bold>"
+search-no-results: "<#3f86ff>✖ По запросу <white><bold>{query}</bold></white> ничего не найдено.</#3f86ff>"
+search-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff><bold>{match}%</bold></#8fc6ff>"
 
 # --- Прочее ---
-reloaded: "<#4ade80>✔</#4ade80> <gray>Конфигурация HahGps перезагружена.</gray>"
+reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>Конфигурация HahGps перезагружена.</gray>"
 loading-data: "<gray><italic>Загрузка данных…</italic></gray>"
-error-occurred: "<#f87171>✖ Произошла ошибка:</#f87171> <white>{error}</white>"
-world-not-found: "<#f87171>✖ Мир <white><bold>{world}</bold></white> не найден.</#f87171>"
+error-occurred: "<#3f86ff>✖ Произошла ошибка:</#3f86ff> <white>{error}</white>"
+world-not-found: "<#3f86ff>✖ Мир <white><bold>{world}</bold></white> не найден.</#3f86ff>"
 # ВАЖНО: distance-format уходит в BossBar как обычный текст — без MiniMessage-тегов
 distance-format: "{value} м"
 distance-format-km: "{value} км"
 
 # --- Помощь ---
-help-header: "<bold><gradient:#3b82f6:#22d3ee>═══ КОМАНДЫ GPS ═══</gradient></bold>"
-help-entry: "<#38bdf8><bold>{usage}</bold></#38bdf8> <dark_gray>──</dark_gray> <gray><italic>{description}</italic></gray>"
+help-header: "<bold><gradient:#2464c8:#8fe9f5>═══ КОМАНДЫ GPS ═══</gradient></bold>"
+help-entry: "<#8fc6ff><bold>{usage}</bold></#8fc6ff> <dark_gray>──</dark_gray> <gray><italic>{description}</italic></gray>"
 help-menu: "Открыть главное меню"
 help-point: "Управление точками"
 help-category: "Управление категориями"
@@ -117,66 +124,66 @@ help-visual: "Визуализация графа дорог"
 # --- Обновления (/gps update) ---
 update-checking: "<gray><italic>Проверяю релизы…</italic></gray>"
 update-downloading: "<gray><italic>Скачиваю новую версию…</italic></gray>"
-update-nothing-to-apply: "<#f87171>✖ Применять нечего — сначала подготовьте обновление:</#f87171> <bold><white>/gps update install</white></bold>"
-update-hotswap-failed: "<#f87171>✖ Горячая подмена не удалась:</#f87171> <white>{reason}</white>"
-update-reloaded: "<#4ade80>✔</#4ade80> <gray>Настройки обновления перечитаны.</gray>"
+update-nothing-to-apply: "<#3f86ff>✖ Применять нечего — сначала подготовьте обновление:</#3f86ff> <bold><white>/gps update install</white></bold>"
+update-hotswap-failed: "<#3f86ff>✖ Горячая подмена не удалась:</#3f86ff> <white>{reason}</white>"
+update-reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>Настройки обновления перечитаны.</gray>"
 
-# --- Оповещения об обновлении (группам из обновление.группы-оповещения) ---
-update-available: "<#fbbf24><bold>⬆ Доступно обновление</bold></#fbbf24> <font:minecraft:uniform><white>{version}</white></font> <dark_gray>·</dark_gray> <gray>вышло</gray> <font:minecraft:uniform><white>{date}</white></font>"
+# --- Оповещения об обновлении (только группам из обновление.группы-оповещения) ---
+update-available: "<#8fe9f5><bold>⬆ Доступно обновление</bold></#8fe9f5> <font:minecraft:uniform><white>{version}</white></font> <dark_gray>·</dark_gray> <gray>вышло</gray> <font:minecraft:uniform><white>{date}</white></font>"
 update-whats-new: "<gray>Что нового:</gray> <white><italic>{notes}</italic></white>"
 update-downloading-now: "<gray><italic>Скачиваю обновление…</italic></gray>"
-update-staged: "<#4ade80>✔</#4ade80> <gray>Обновление</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>скачано и проверено — готово к установке.</gray>"
-update-installed: "<#4ade80>✔</#4ade80> <gray>Обновление</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>успешно установлено — сервер не перезапускался.</gray>"
-update-failed: "<#f87171>✖ Обновление не удалось:</#f87171> <white>{error}</white>"
+update-staged: "<#8fe9f5>✔</#8fe9f5> <gray>Обновление</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>скачано и проверено — готово к установке.</gray>"
+update-installed: "<#8fe9f5>✔</#8fe9f5> <gray>Обновление</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>успешно установлено — сервер не перезапускался.</gray>"
+update-failed: "<#3f86ff>✖ Обновление не удалось:</#3f86ff> <white>{error}</white>"
 
-# --- Ввод в чате ---
-input-category-create: "<#c084fc>→</#c084fc> <gray>Напиши название новой категории в чат:</gray>"
-input-category-delete: "<#c084fc>→</#c084fc> <gray>Напиши название категории, которую нужно удалить:</gray>"
-input-rate: "<#c084fc>→</#c084fc> <gray>Оцени точку от</gray> <#fbbf24><bold>1</bold></#fbbf24> <gray>до</gray> <#fbbf24><bold>10</bold></#fbbf24> <dark_gray>— напиши число в чат:</dark_gray>"
-input-search: "<#c084fc>→</#c084fc> <gray>Напиши поисковый запрос в чат:</gray>"
+# --- Ввод в чат ---
+input-category-create: "<#66aaff>→</#66aaff> <gray>Напиши название новой категории в чат:</gray>"
+input-category-delete: "<#66aaff>→</#66aaff> <gray>Напиши название категории, которую нужно удалить:</gray>"
+input-rate: "<#66aaff>→</#66aaff> <gray>Оцени точку от</gray> <#8fc6ff><bold>1</bold></#8fc6ff> <gray>до</gray> <#8fc6ff><bold>10</bold></#8fc6ff> <dark_gray>— напиши число в чат:</dark_gray>"
+input-search: "<#66aaff>→</#66aaff> <gray>Напиши поисковый запрос в чат:</gray>"
 
-# --- GUI ---
+# --- GUI: все кнопки одного тона, без разноцветья по разделам ---
 gui:
-  main-menu: "<#818cf8>GPS — Главное меню</#818cf8>"
-  my-points: "<#818cf8>Мои точки</#818cf8>"
-  categories: "<#4ade80>Категории</#4ade80>"
-  map: "<#22d3ee>Карта</#22d3ee>"
-  search: "<#c084fc>Поиск</#c084fc>"
-  settings: "<#f472b6>Настройки</#f472b6>"
-  back: "<#818cf8>← Назад</#818cf8>"
-  close: "<#f87171>✖ Закрыть</#f87171>"
-  next-page: "<#fcd34d>→ Следующая страница</#fcd34d>"
-  prev-page: "<#fcd34d>← Предыдущая страница</#fcd34d>"
-  page-info: "<gray>Страница</gray> <#fcd34d><bold>{page}/{pages}</bold></#fcd34d>"
-  points-title: "<#818cf8>Мои точки</#818cf8>"
-  categories-title: "<#4ade80>Категории</#4ade80>"
-  search-title: "<#c084fc>Поиск</#c084fc>"
-  transport-title: "<#2dd4bf>Транспорт</#2dd4bf>"
-  settings-title: "<#f472b6>Настройки</#f472b6>"
-  map-title: "<#22d3ee>Карта</#22d3ee>"
-  poi-actions-title: "<#38bdf8>Точка: {name}</#38bdf8>"
-  info: "<#38bdf8>Инфо</#38bdf8>"
-  goto: "<#4ade80>Построить маршрут</#4ade80>"
-  rate: "<#fbbf24>Оценить</#fbbf24>"
-  delete: "<#f87171>Удалить</#f87171>"
-  create: "<#4ade80>Создать</#4ade80>"
-  zoom-in: "<#22d3ee>Приблизить</#22d3ee>"
-  zoom-out: "<#22d3ee>Отдалить</#22d3ee>"
-  recenter: "<#22d3ee>Центрировать на себе</#22d3ee>"
-  rating-stars: "<#fbbf24>{stars}</#fbbf24><dark_gray>{empty}</dark_gray>"
-  distance: "<#4ade80>{distance}</#4ade80>"
+  main-menu: "<#8fc6ff>GPS — Главное меню</#8fc6ff>"
+  my-points: "<#8fc6ff>Мои точки</#8fc6ff>"
+  categories: "<#8fc6ff>Категории</#8fc6ff>"
+  map: "<#8fc6ff>Карта</#8fc6ff>"
+  search: "<#8fc6ff>Поиск</#8fc6ff>"
+  settings: "<#8fc6ff>Настройки</#8fc6ff>"
+  back: "<#8fc6ff>← Назад</#8fc6ff>"
+  close: "<#3f86ff>✖ Закрыть</#3f86ff>"
+  next-page: "<#8fc6ff>→ Следующая страница</#8fc6ff>"
+  prev-page: "<#8fc6ff>← Предыдущая страница</#8fc6ff>"
+  page-info: "<gray>Страница</gray> <#8fc6ff><bold>{page}/{pages}</bold></#8fc6ff>"
+  points-title: "<#8fc6ff>Мои точки</#8fc6ff>"
+  categories-title: "<#8fc6ff>Категории</#8fc6ff>"
+  search-title: "<#8fc6ff>Поиск</#8fc6ff>"
+  transport-title: "<#8fc6ff>Транспорт</#8fc6ff>"
+  settings-title: "<#8fc6ff>Настройки</#8fc6ff>"
+  map-title: "<#8fc6ff>Карта</#8fc6ff>"
+  poi-actions-title: "<#8fc6ff>Точка: {name}</#8fc6ff>"
+  info: "<#8fc6ff>Инфо</#8fc6ff>"
+  goto: "<#8fc6ff>Построить маршрут</#8fc6ff>"
+  rate: "<#8fc6ff>Оценить</#8fc6ff>"
+  delete: "<#3f86ff>✖ Удалить</#3f86ff>"
+  create: "<#8fe9f5>✔ Создать</#8fe9f5>"
+  zoom-in: "<#8fc6ff>Приблизить</#8fc6ff>"
+  zoom-out: "<#8fc6ff>Отдалить</#8fc6ff>"
+  recenter: "<#8fc6ff>Центрировать на себе</#8fc6ff>"
+  rating-stars: "<#8fc6ff>{stars}</#8fc6ff><dark_gray>{empty}</dark_gray>"
+  distance: "<#8fc6ff>{distance}</#8fc6ff>"
   category: "<gray>{category}</gray>"
-  language: "<#f472b6>Язык:</#f472b6> <white><bold>{language}</bold></white>"
-  logging: "<#f472b6>Подсказки в чате:</#f472b6> <#4ade80><bold>{state}</bold></#4ade80>"
-  transport-foot: "<#4ade80>Пешком</#4ade80>"
-  transport-car: "<#fbbf24>Машина</#fbbf24>"
-  transport-transit: "<#22d3ee>Общественный</#22d3ee>"
-  transport-air: "<#818cf8>Авиа</#818cf8>"
-  transport-water: "<#3b82f6>Водный</#3b82f6>"
-  search-input: "<#c084fc>Введите запрос в чат</#c084fc>"
-  search-quick: "<#c084fc>Быстрый поиск</#c084fc>"
+  language: "<gray>Язык:</gray> <white><bold>{language}</bold></white>"
+  logging: "<gray>Подсказки в чате:</gray> <#8fc6ff><bold>{state}</bold></#8fc6ff>"
+  transport-foot: "<#8fc6ff>Пешком</#8fc6ff>"
+  transport-car: "<#8fc6ff>Машина</#8fc6ff>"
+  transport-transit: "<#8fc6ff>Общественный</#8fc6ff>"
+  transport-air: "<#8fc6ff>Авиа</#8fc6ff>"
+  transport-water: "<#8fc6ff>Водный</#8fc6ff>"
+  search-input: "<#66aaff>→ Введите запрос в чат</#66aaff>"
+  search-quick: "<#8fc6ff>Быстрый поиск</#8fc6ff>"
   search-result-type: "<gray>Точка</gray>"
-  map-scale: "<#22d3ee>Масштаб карты</#22d3ee>"
+  map-scale: "<#8fc6ff>Масштаб карты</#8fc6ff>"
   # Значения без разметки: подставляются как {state} и экранируются
   state-on: "Вкл"
   state-off: "Выкл"
@@ -193,8 +200,8 @@ gui:
   lore-search: "<gray><italic>Поиск точек</italic></gray>"
   lore-settings: "<gray><italic>Настройки плагина</italic></gray>"
   lore-category-count: "<gray>Точек: <white><bold>{count}</bold></white></gray>"
-  lore-map-closed: "<#f87171><italic>Карта не открыта</italic></#f87171>"
-  lore-distance: "<#4ade80>{distance}</#4ade80>"
+  lore-map-closed: "<#3f86ff><italic>Карта не открыта</italic></#3f86ff>"
+  lore-distance: "<#8fc6ff>{distance}</#8fc6ff>"
   lore-search-start: "<gray><italic>Нажмите, чтобы начать поиск</italic></gray>"
   lore-search-name: "<gray><italic>По названию точки</italic></gray>"
   lore-search-result: "<gray>Совпадение: <white><bold>{percent}%</bold></white></gray>"
@@ -211,8 +218,8 @@ gui:
   lore-transport-air: "<gray><italic>Перелёт по прямой — быстро</italic></gray>"
   lore-transport-water: "<gray><italic>По рекам и водоёмам</italic></gray>"
 
-edge-connected: "<#4ade80>✔</#4ade80> <gray>Ребро</gray> <white><bold>{id1} → {id2}</bold></white> <dark_gray>создано.</dark_gray>"
-edge-not-found: "<#f87171>✖ Ребро не найдено.</#f87171>"
-edge-updated: "<#4ade80>✔</#4ade80> <gray>Ребро обновлено.</gray>"
-visual-enabled: "<#4ade80>✔</#4ade80> <gray>Визуализация</gray> <white><bold>{type}</bold></white> <dark_gray>включена.</dark_gray>"
-visual-disabled: "<#4ade80>✔</#4ade80> <gray>Визуализация выключена.</gray>"
+edge-connected: "<#8fe9f5>✔</#8fe9f5> <gray>Ребро</gray> <white><bold>{id1} → {id2}</bold></white> <dark_gray>создано.</dark_gray>"
+edge-not-found: "<#3f86ff>✖ Ребро не найдено.</#3f86ff>"
+edge-updated: "<#8fe9f5>✔</#8fe9f5> <gray>Ребро обновлено.</gray>"
+visual-enabled: "<#8fe9f5>✔</#8fe9f5> <gray>Визуализация</gray> <white><bold>{type}</bold></white> <dark_gray>включена.</dark_gray>"
+visual-disabled: "<#8fe9f5>✔</#8fe9f5> <gray>Визуализация выключена.</gray>"

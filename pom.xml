@@ -6,14 +6,23 @@
 
     <groupId>ru.hahgps</groupId>
     <artifactId>hahgps</artifactId>
-    <version>1.0.6</version>
+    <version>1.0.7</version>
     <packaging>jar</packaging>
 
     <name>HahGps</name>
     <description>GPS navigation plugin for PaperMC</description>
 
     <properties>
-        <java.version>21</java.version>
+        <!--
+            Байт-код собирается под Java 17 (class file major 61), поэтому один и тот же
+            jar запускается на любой серверной JVM новее 17: Java 17, 21, 25 и далее.
+            Ставить выше нельзя: major 65 (Java 21) падает с UnsupportedClassVersionError
+            на любой JVM младше 21. Локальная/CI-JDK может быть любой новее 17 —
+            важна только опция release, а не версия JDK, на которой идёт сборка.
+            Paper 1.21.11 сам по себе требует Java 21 — это требование сервера,
+            а не нашего плагина.
+        -->
+        <java.version>17</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <paper.version>1.21.11-R0.1-SNAPSHOT</paper.version>
     </properties>
@@ -55,6 +64,24 @@
     <build>
         <finalName>hahgps-${project.version}</finalName>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.2</version>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <!--
+                                Имя и версия дублируются в MANIFEST.MF: по ним видно,
+                                какой именно файл лежит в plugins/ (в логах Paper при
+                                конфликте видно только plugin.yml, а он может быть старым).
+                            -->
+                            <Implementation-Title>HahGps</Implementation-Title>
+                            <Implementation-Version>${project.version}</Implementation-Version>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>

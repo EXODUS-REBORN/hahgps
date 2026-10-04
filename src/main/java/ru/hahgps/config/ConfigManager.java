@@ -87,6 +87,14 @@ public class ConfigManager {
         return config.getBoolean("navigation.show-arrow", true);
     }
 
+    /**
+     * HUD ItemsAdder рисует картинку поверх экрана — по умолчанию выключен,
+     * всё направление показывает боссбар вверху.
+     */
+    public boolean isHudEnabled() {
+        return config.getBoolean("navigation.hud", false);
+    }
+
     public String getMapZoom() {
         return config.getString("map.zoom", "CLOSE");
     }

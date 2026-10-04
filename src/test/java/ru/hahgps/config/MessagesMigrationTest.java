@@ -35,7 +35,7 @@ class MessagesMigrationTest {
     @Test
     void cleanStringsAreUntouched() {
         String clean = "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
-                + "<#f87171>Ошибка</#f87171> <white>Значение</white>";
+                + "<#3f86ff>Ошибка</#3f86ff> <white>Значение</white>";
         assertEquals(clean, MessagesManager.remapPalette(clean));
     }
 }

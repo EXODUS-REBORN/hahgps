@@ -1,6 +1,5 @@
 package ru.hahgps.service;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.boss.BarColor;
@@ -24,7 +23,6 @@ public class NavigationService {
     private final HahGpsPlugin plugin;
     private final ConfigManager config;
     private final MessagesManager messages;
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     private final Map<UUID, NavigationSession> sessions = new ConcurrentHashMap<>();
     private final Map<UUID, BossBar> bossBars = new ConcurrentHashMap<>();
@@ -81,6 +79,13 @@ public class NavigationService {
         bar.setProgress(1.0f);
         bar.addPlayer(player);
         bossBars.put(player.getUniqueId(), bar);
+
+        // Гарантируем, что по центру экрана ничего не висит от прошлой навигации
+        player.sendActionBar(Component.empty());
+        HudService previousHud = plugin.getHudService();
+        if (previousHud != null) {
+            previousHud.clearHud(player);
+        }
     }
 
 
@@ -160,23 +165,19 @@ public class NavigationService {
         Location target = session.getTarget();
         Location playerLoc = player.getLocation();
         String transportIcon = getTransportIcon(session.getTransport());
-        String targetName = session.getTargetName() == null ? "?" : session.getTargetName();
+        String targetName = session.getTargetName() == null ? "?"
+                : ru.hahgps.gui.GuiTheme.clipPlain(session.getTargetName(), ru.hahgps.gui.GuiTheme.NAME_MAX);
 
-
-
-        String targetNameMm = ru.hahgps.gui.GuiTheme.clipPlain(targetName, ru.hahgps.gui.GuiTheme.NAME_MAX)
-                .replace("\\", "\\\\")
-                .replace("<", "\\<");
-
-
+        // Указатель живёт ТОЛЬКО в боссбаре вверху экрана. ActionBar (центр/низ
+        // экрана) чистится один раз при старте и при остановке — каждый тик
+        // его трогать незачем, это ещё и затирает чужие плагины.
 
         if (target == null || target.getWorld() == null || playerLoc.getWorld() == null
                 || !playerLoc.getWorld().equals(target.getWorld())) {
             BossBar crossWorldBar = bossBars.get(player.getUniqueId());
             if (crossWorldBar != null) {
-                crossWorldBar.setTitle(transportIcon + " " + targetName);
+                crossWorldBar.setTitle(title("⚠", transportIcon, targetName, ""));
             }
-            player.sendActionBar(miniMessage.deserialize("<#38bdf8>" + targetNameMm));
             return;
         }
 
@@ -197,28 +198,16 @@ public class NavigationService {
 
         BossBar bar = bossBars.get(player.getUniqueId());
         if (bar != null) {
-
-
-            bar.setTitle(transportIcon + " " + targetName + " " + arrow + " "
-                    + LocationUtil.formatDistance(distanceToTarget));
+            bar.setTitle(title(arrow, transportIcon, targetName,
+                    LocationUtil.formatDistance(distanceToTarget)));
             float progress = session.getTotalDistance() > 0
                     ? (float) Math.max(0.0, Math.min(1.0, distanceToTarget / session.getTotalDistance()))
                     : 0.0f;
             bar.setProgress(progress);
         }
 
-
-
-        Component hotbarText = miniMessage.deserialize(
-                "<#38bdf8>" + transportIcon + "</#38bdf8> <white><bold>" + targetNameMm + "</bold></white>"
-                        + " <dark_gray>|</dark_gray> "
-                        + "<#4ade80><bold>" + LocationUtil.formatDistance(distanceToTarget) + "</bold></#4ade80>"
-                        + " <dark_gray>|</dark_gray> "
-                        + "<#fbbf24>" + (int) distanceToTarget + " m</#fbbf24>");
-        player.sendActionBar(hotbarText);
-
         HudService hud = plugin.getHudService();
-        if (hud != null) {
+        if (hud != null && config.isHudEnabled()) {
             hud.updateHud(player, session.getTransport(), targetName, distanceToTarget);
         }
 
@@ -242,6 +231,20 @@ public class NavigationService {
             case AIR -> "🚁";
             case WATER -> "🚢";
         };
+    }
+
+    /**
+     * Строка боссбара — единственное место, где показывается направление:
+     * {@code стрелка + транспорт + цель + расстояние}.
+     * Порядок именно такой: стрелка первая, чтобы она читалась сразу.
+     */
+    private String title(String arrow, String transportIcon, String targetName, String distance) {
+        StringBuilder sb = new StringBuilder(48);
+        if (arrow != null && !arrow.isEmpty()) sb.append(arrow).append(' ');
+        if (transportIcon != null && !transportIcon.isEmpty()) sb.append(transportIcon).append(' ');
+        if (targetName != null && !targetName.isEmpty()) sb.append(targetName);
+        if (distance != null && !distance.isEmpty()) sb.append(' ').append(distance);
+        return sb.toString().trim();
     }
 
     private BarColor parseColor(String name) {

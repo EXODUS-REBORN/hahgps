@@ -24,6 +24,41 @@ jobs:
       - name: Сборка
         run: mvn -B --no-transfer-progress package
 
+      # В plugins/ нельзя заливать два jar с одной парой «имя + версия» из plugin.yml:
+      # Paper отказывается грузить второй (duplicate plugin identifier). Проверяем,
+      # что в собранном файле идентичность ровно одна и совпадает с pom.xml.
+      - name: Идентичность плагина в jar совпадает с pom.xml
+        run: |
+          set -euo pipefail
+          VERSION="$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          JAR="target/hahgps-${VERSION}.jar"
+          YML="$(unzip -p "$JAR" plugin.yml)"
+          NAME="$(echo "$YML" | sed -n 's/^name: *//p' | tr -d "'\r")"
+          INNER="$(echo "$YML" | sed -n 's/^version: *//p' | tr -d "'\r")"
+          echo "файл: $JAR, внутри: $NAME $INNER"
+          if [ "$INNER" != "$VERSION" ]; then
+            echo "::error::В $JAR версия '$INNER', а в pom.xml '$VERSION'. Плагин не будет грузиться рядом со старым jar."
+            exit 1
+          fi
+
+      # --release 17 в pom.xml: major 61 — jar должен запускаться на любой JVM новее 17.
+      - name: Байт-код не выше Java 17 (major 61)
+        run: |
+          set -euo pipefail
+          VERSION="$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          JAR="target/hahgps-${VERSION}.jar"
+          unzip -Z1 "$JAR" | grep '^ru/hahgps/.*\.class$' > /tmp/classes.txt
+          fail=0
+          while read -r c; do
+            ver="$(unzip -p "$JAR" "$c" | od -An -tu1 -N8 | awk '{print $7*256+$8}')"
+            if [ "$ver" -gt 61 ]; then
+              echo "::error::$c major=$ver — класс собран новее Java 17, упадёт с UnsupportedClassVersionError"
+              fail=1
+            fi
+          done < /tmp/classes.txt
+          echo "проверено классов: $(wc -l < /tmp/classes.txt)"
+          exit $fail
+
       - name: Jar артефактом
         uses: actions/upload-artifact@v4
         with:

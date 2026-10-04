@@ -60,7 +60,7 @@ public final class LocationUtil {
                 return null;
             }
             String result = messages.get(key, "value", value);
-            if (result == null || result.startsWith("<red>Missing:")) {
+            if (result == null || result.startsWith("<#3f86ff>Missing:")) {
                 return null;
             }
             return result;

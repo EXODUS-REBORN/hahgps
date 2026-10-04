@@ -18,17 +18,17 @@ class GuiThemeTextTest {
     @Test
     void legacyCodesBecomePaletteTags() {
         assertEquals("<#4fd1e0>Заголовок", GuiTheme.legacyToMini("§6Заголовок"));
-        assertEquals("<blue>Назад", GuiTheme.legacyToMini("§9Назад"));
+        assertEquals("<#1d51a8>Назад", GuiTheme.legacyToMini("§9Назад"));
         assertEquals("<white>знач", GuiTheme.legacyToMini("§fзнач"));
         assertEquals("<gray>пояснение", GuiTheme.legacyToMini("§7пояснение"));
-        assertEquals("<red>ошибка", GuiTheme.legacyToMini("§cошибка"));
+        assertEquals("<#3f86ff>ошибка", GuiTheme.legacyToMini("§cошибка"));
 
         assertEquals("<#8fc6ff>X", GuiTheme.legacyToMini("§aX"));
         assertEquals("<#8fe9f5>X", GuiTheme.legacyToMini("§eX"));
         assertEquals("<#66aaff>X", GuiTheme.legacyToMini("§dX"));
         assertEquals("<#3f86ff>X", GuiTheme.legacyToMini("§2X"));
         assertEquals("<#2464c8>X", GuiTheme.legacyToMini("§5X"));
-        assertEquals("<red>X", GuiTheme.legacyToMini("§4X"));
+        assertEquals("<#3f86ff>X", GuiTheme.legacyToMini("§4X"));
     }
 
     @Test
@@ -132,9 +132,9 @@ class GuiThemeTextTest {
 
     @Test
     void clipMiniClosesTagsAndStaysInsideTheBox() {
-        String clipped = GuiTheme.clipMini("<#22d3ee><bold>Очень длинное название точки</bold></#22d3ee>", 10);
-        assertTrue(clipped.startsWith("<#22d3ee><bold>"), clipped);
-        assertTrue(clipped.endsWith("</bold></#22d3ee>"), "теги не закрыты: " + clipped);
+        String clipped = GuiTheme.clipMini("<#8fc6ff><bold>Очень длинное название точки</bold></#8fc6ff>", 10);
+        assertTrue(clipped.startsWith("<#8fc6ff><bold>"), clipped);
+        assertTrue(clipped.endsWith("</bold></#8fc6ff>"), "теги не закрыты: " + clipped);
         String plainClipped = plain(GuiTheme.safe(clipped));
         assertTrue(plainClipped.endsWith("…"), "нет троеточия: " + plainClipped);
         assertTrue(plainClipped.length() <= 11, "не обрезано: " + plainClipped);
@@ -145,12 +145,37 @@ class GuiThemeTextTest {
 
 
     @Test
-    void paletteContainsTheFullRgbRange() {
-        assertTrue(GuiTheme.PALETTE.length >= 20, "палитра слишком бедная: " + GuiTheme.PALETTE.length);
-        assertTrue(java.util.Arrays.asList(GuiTheme.PALETTE).contains(GuiTheme.GREEN));
-        assertTrue(java.util.Arrays.asList(GuiTheme.PALETTE).contains(GuiTheme.RED));
-        assertTrue(java.util.Arrays.asList(GuiTheme.PALETTE).contains(GuiTheme.AMBER));
-        assertTrue(java.util.Arrays.asList(GuiTheme.PALETTE).contains(GuiTheme.PURPLE));
+    void paletteIsASingleBlueLine() {
+        assertTrue(java.util.Arrays.equals(GuiTheme.TONES, GuiTheme.PALETTE),
+                "палитра разошлась с синей линейкой: " + String.join(",", GuiTheme.PALETTE));
+
+        for (String tone : GuiTheme.PALETTE) {
+            assertTrue(tone.matches("#[0-9a-f]{6}"), "тон вне RGB-формата: " + tone);
+            int r = Integer.parseInt(tone.substring(1, 3), 16);
+            int g = Integer.parseInt(tone.substring(3, 5), 16);
+            int b = Integer.parseInt(tone.substring(5, 7), 16);
+            assertTrue(b >= g && g >= r, "тон ушёл в не-синий: " + tone);
+        }
+
+        for (String foreign : new String[]{"#4ade80", "#22c55e", "#a3e635", "#f87171", "#ef4444",
+                "#fb923c", "#f97316", "#fbbf24", "#fcd34d", "#c084fc", "#a855f7", "#f472b6",
+                "#2dd4bf", "#38bdf8", "#818cf8", "#22d3ee", "#3b82f6"}) {
+            assertFalse(java.util.Arrays.asList(GuiTheme.PALETTE).contains(foreign),
+                    "в палитру вернулся чужой оттенок: " + foreign);
+        }
+    }
+
+
+    @Test
+    void semanticTonesBelongToThePalette() {
+        for (String tone : new String[]{GuiTheme.OK, GuiTheme.INFO, GuiTheme.VALUE,
+                GuiTheme.STEP, GuiTheme.ERR}) {
+            assertTrue(java.util.Arrays.asList(GuiTheme.PALETTE).contains(tone),
+                    "служебный тон вне палитры: " + tone);
+        }
+        assertEquals("<" + GuiTheme.OK + ">✔</" + GuiTheme.OK + ">", GuiTheme.OK_MARK);
+        assertEquals("<" + GuiTheme.ERR + ">✖</" + GuiTheme.ERR + ">", GuiTheme.ERR_MARK);
+        assertEquals("<" + GuiTheme.INFO + ">→</" + GuiTheme.INFO + ">", GuiTheme.PROMPT_MARK);
     }
 
 

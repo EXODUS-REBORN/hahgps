@@ -22,7 +22,7 @@ public class UpdateCommand implements SubCommand {
 
     private static final String TEXT = "<white>";
 
-    private static final String ACCENT = "<#fbbf24>";
+    private static final String ACCENT = "<#8fc6ff>";
 
     @Override
     public String name() {

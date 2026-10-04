@@ -11,7 +11,7 @@ import java.util.Map;
 public class MessagesManager {
 
 
-    public static final int PALETTE_VERSION = 4;
+    public static final int PALETTE_VERSION = 5;
 
     private final HahGpsPlugin plugin;
     private volatile YamlConfiguration messages;
@@ -152,7 +152,7 @@ public class MessagesManager {
             if (raw == null && def != null) {
                 raw = def.getString(key, null);
             }
-            if (raw == null) raw = "<red>Missing: " + key;
+            if (raw == null) raw = "<#3f86ff>Missing: " + key;
             cache.put(key, raw);
         }
         return format(raw, args);

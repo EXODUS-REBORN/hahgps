@@ -111,7 +111,7 @@ class MessagesPaletteTest {
             for (String[] kv : parse(file)) {
                 if ("palette-version".equals(kv[0])) {
                     found = true;
-                    assertEquals("4", kv[1].trim(), lang + ": устаревшая схема палитры");
+                    assertEquals("5", kv[1].trim(), lang + ": устаревшая схема палитры");
                 }
             }
             assertTrue(found, lang + ": нет ключа palette-version");
@@ -141,6 +141,46 @@ class MessagesPaletteTest {
                             lang + " " + key + ": именованный цвет <" + name + "> — используй RGB-хекс из палитры");
                     assertTrue(ALLOWED.contains(name) || name.matches("#[0-9a-fA-F]{6}"),
                             lang + " " + key + ": неизвестный тег <" + name + ">");
+                }
+            }
+        }
+    }
+
+    /**
+     * ОДИН ШАБЛОН: в текстах только синие тона (b >= g >= r).
+     * Зелёные/красные/золотые/фиолетовые оттенки запрещены —
+     * иначе плагин снова «раскрасится» по разным углам.
+     */
+    @Test
+    void everyMessageStaysInTheBlueHue() throws IOException {
+        for (String lang : List.of("ru", "en")) {
+            for (String[] kv : parse(RESOURCES.resolve("messages_" + lang + ".yml"))) {
+                Matcher hex = HEX.matcher(kv[1]);
+                while (hex.find()) {
+                    String tone = hex.group().toLowerCase();
+                    int r = Integer.parseInt(tone.substring(1, 3), 16);
+                    int g = Integer.parseInt(tone.substring(3, 5), 16);
+                    int b = Integer.parseInt(tone.substring(5, 7), 16);
+                    assertTrue(b >= g && g >= r,
+                            lang + " " + kv[0] + ": оттенок " + tone + " вне синей линейки");
+                }
+            }
+        }
+    }
+
+    /** Все кнопки меню — из тех же четырёх тонов, без радуги по разделам. */
+    @Test
+    void guiButtonsShareTheSameTones() throws IOException {
+        Set<String> allowed = Set.of(
+                GuiTheme.OK, GuiTheme.VALUE, GuiTheme.ERR, GuiTheme.INFO);
+        for (String lang : List.of("ru", "en")) {
+            for (String[] kv : parse(RESOURCES.resolve("messages_" + lang + ".yml"))) {
+                if (!kv[0].startsWith("gui.")) continue;
+                Matcher hex = HEX.matcher(kv[1]);
+                while (hex.find()) {
+                    assertTrue(allowed.contains(hex.group().toLowerCase()),
+                            lang + " " + kv[0] + ": кнопка использует тон " + hex.group()
+                                    + " вне общего шаблона");
                 }
             }
         }
@@ -251,16 +291,16 @@ class MessagesPaletteTest {
                     String trimmed = line.trim();
 
                     if (plain.startsWith("✔")) {
-                        assertTrue(trimmed.startsWith("<#4ade80>✔") || trimmed.startsWith("<#4ade80><bold>✔"),
-                                lang + " " + key + ": успех должен начинаться с <#4ade80>✔: '" + trimmed + "'");
+                        assertTrue(trimmed.startsWith("<#8fe9f5>✔") || trimmed.startsWith("<#8fe9f5><bold>✔"),
+                                lang + " " + key + ": успех должен начинаться с <#8fe9f5>✔: '" + trimmed + "'");
                     }
                     if (plain.startsWith("✖")) {
-                        assertTrue(trimmed.startsWith("<#f87171>✖") || trimmed.startsWith("<#f87171><bold>✖"),
-                                lang + " " + key + ": ошибка должна начинаться с <#f87171>✖: '" + trimmed + "'");
+                        assertTrue(trimmed.startsWith("<#3f86ff>✖") || trimmed.startsWith("<#3f86ff><bold>✖"),
+                                lang + " " + key + ": ошибка должна начинаться с <#3f86ff>✖: '" + trimmed + "'");
                     }
                     if (plain.startsWith("→") && key.startsWith("input-")) {
-                        assertTrue(trimmed.startsWith("<#c084fc>→") || trimmed.startsWith("<#c084fc><bold>→"),
-                                lang + " " + key + ": подсказка должна начинаться с <#c084fc>→: '" + trimmed + "'");
+                        assertTrue(trimmed.startsWith("<#66aaff>→") || trimmed.startsWith("<#66aaff><bold>→"),
+                                lang + " " + key + ": подсказка должна начинаться с <#66aaff>→: '" + trimmed + "'");
                     }
                     if (key.startsWith("hint-")) {
                         assertTrue(trimmed.startsWith("<#") && trimmed.contains("<bold>"),

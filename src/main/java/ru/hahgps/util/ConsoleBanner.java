@@ -41,14 +41,13 @@ public final class ConsoleBanner {
                 + " <dark_gray>•</dark_gray> <gray>карта:</gray> <white>/gps map</white>"
                 + " <dark_gray>•</dark_gray> <gray>справка:</gray> <white>/gps help</white>", logger);
         send(plugin, " <dark_gray>└</dark_gray> <gray>палитра:</gray> "
-                + "<#3f86ff>синий</#3f86ff> <dark_gray>•</dark_gray> "
-                + "<#8fe9f5>голубой</#8fe9f5> <dark_gray>•</dark_gray> "
+                + "<#14397e>тёмно-синий</#14397e> <dark_gray>•</dark_gray> "
+                + "<#2464c8>синий</#2464c8> <dark_gray>•</dark_gray> "
+                + "<#3f86ff>ярко-синий</#3f86ff> <dark_gray>•</dark_gray> "
+                + "<#66aaff>голубой</#66aaff> <dark_gray>•</dark_gray> "
+                + "<#8fc6ff>светло-синий</#8fc6ff> <dark_gray>•</dark_gray> "
                 + "<#4fd1e0>бирюза</#4fd1e0> <dark_gray>•</dark_gray> "
-                + "<#4ade80>зелёный</#4ade80> <dark_gray>•</dark_gray> "
-                + "<#fbbf24>золото</#fbbf24> <dark_gray>•</dark_gray> "
-                + "<#fb923c>оранжевый</#fb923c> <dark_gray>•</dark_gray> "
-                + "<#c084fc>фиолетовый</#c084fc> <dark_gray>•</dark_gray> "
-                + "<#f87171>красный</#f87171>", logger);
+                + "<#8fe9f5>лёд</#8fe9f5>", logger);
     }
 
     private static void send(HahGpsPlugin plugin, String mini, Logger logger) {

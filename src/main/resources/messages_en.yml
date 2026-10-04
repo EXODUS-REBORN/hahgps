@@ -1,24 +1,31 @@
 # ============================================================
 #  HahGps — messages (English)
 #
-#  Colors — the RGB palette GuiTheme.PALETTE: texts use dozens
-#  of shades (blue, cyan, green, gold, orange, purple, pink,
-#  red), not just 3–4 colors.
-#  Neutrals: <white> — values, <gray> — labels,
-#  <dark_gray> — separators.
+#  ONE TEMPLATE: the blue line of GuiTheme.PALETTE plus neutrals.
+#  No green, red, gold, orange, purple or pink anywhere in texts —
+#  everything is distinguished by a shade of blue.
+#  Values — <white><bold>, labels — <gray>, separators —
+#  <dark_gray>, soft notes — <italic>.
+#
+#  Semantic tones (all from the blue line):
+#    #8fe9f5 — ✔ success (the lightest tone)
+#    #8fc6ff — values and button names
+#    #66aaff — → prompts and hints
+#    #4fd1e0 — "sharp turn" hints
+#    #3f86ff — ✖ errors (the darkest tone, bold)
+#
+#  Line templates (the same for every message):
+#    success — <#8fe9f5>✔</#8fe9f5> <gray>text</gray> <white><bold>value</bold></white>
+#    error   — <#3f86ff>✖ text <white><bold>value</bold></white></#3f86ff>
+#    prompt  — <#66aaff>→</#66aaff> <gray>text</gray>
+#    header  — <bold><gradient:#2464c8:#8fe9f5>═══ TITLE ═══</gradient></bold>
 #
 #  Font and size: regular text uses the default Minecraft font.
 #  Size variation (the uniform micro font) is used ONLY for
 #  time and versions: <font:minecraft:uniform>…</font>
 #  around {date} and {version}.
 #  Emphasis comes from decorations: <bold> — headers and values,
-#  <italic> — hints, <underlined>/<strikethrough> — accents.
-#
-#  Message templates (same for every message):
-#    success — <#4ade80>✔</#4ade80> <gray>text</gray> <white>value</white>
-#    error   — <#f87171>✖ text <white>value</white></#f87171>
-#    prompt  — <#c084fc>→</#c084fc> <gray>text</gray>
-#    header  — <bold><gradient:…>═══ TITLE ═══</gradient></bold>
+#  <italic> — hints.
 #
 #  Texts never overflow windows or tooltips: names and labels
 #  are clipped by the code (GuiTheme.clipPlain/clipMini).
@@ -27,79 +34,79 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Palette schema version: a mismatch replaces the file with the bundled one (old -> .bak)
-palette-version: 4
+palette-version: 5
 
-no-permission: "<#f87171>✖ You don't have permission to run this command.</#f87171>"
-player-only: "<#f87171>✖ This command is for players only.</#f87171>"
-usage: "<#f87171>✖ Usage:</#f87171> <bold><white>{usage}</white></bold>"
-invalid-args: "<#f87171>✖ Invalid arguments.</#f87171> <gray>Usage:</gray> <bold><white>{usage}</white></bold>"
+no-permission: "<#3f86ff>✖ You don't have permission to run this command.</#3f86ff>"
+player-only: "<#3f86ff>✖ This command is for players only.</#3f86ff>"
+usage: "<#3f86ff>✖ Usage:</#3f86ff> <bold><white>{usage}</white></bold>"
+invalid-args: "<#3f86ff>✖ Invalid arguments.</#3f86ff> <gray>Usage:</gray> <bold><white>{usage}</white></bold>"
 
 # --- Points ---
-point-created: "<#4ade80>✔</#4ade80> <gray>Point</gray> <white><bold>{name}</bold></white> <dark_gray>created.</dark_gray>"
-point-deleted: "<#4ade80>✔</#4ade80> <gray>Point</gray> <white><bold>{name}</bold></white> <dark_gray>deleted.</dark_gray>"
-point-not-found: "<#f87171>✖ Point <white><bold>{name}</bold></white> not found.</#f87171>"
-point-exists: "<#f87171>✖ A point named <white><bold>{name}</bold></white> already exists.</#f87171>"
+point-created: "<#8fe9f5>✔</#8fe9f5> <gray>Point</gray> <white><bold>{name}</bold></white> <dark_gray>created.</dark_gray>"
+point-deleted: "<#8fe9f5>✔</#8fe9f5> <gray>Point</gray> <white><bold>{name}</bold></white> <dark_gray>deleted.</dark_gray>"
+point-not-found: "<#3f86ff>✖ Point <white><bold>{name}</bold></white> not found.</#3f86ff>"
+point-exists: "<#3f86ff>✖ A point named <white><bold>{name}</bold></white> already exists.</#3f86ff>"
 point-info: |
   <bold><gradient:#2464c8:#8fe9f5>════════ POINT ════════</gradient></bold>
   <gray>Name:</gray> <white><bold>{name}</bold></white>
-  <gray>Category:</gray> <#22d3ee>{category}</#22d3ee>
-  <gray>Coordinates:</gray> <#22d3ee><bold>{x}, {y}, {z}</bold></#22d3ee>
+  <gray>Category:</gray> <#8fc6ff>{category}</#8fc6ff>
+  <gray>Coordinates:</gray> <#8fc6ff><bold>{x}, {y}, {z}</bold></#8fc6ff>
   <gray>World:</gray> <white>{world}</white>
-  <gray>Rating:</gray> <#fbbf24><bold>{rating}/10</bold></#fbbf24> <dark_gray>·</dark_gray> <gray>votes:</gray> <white>{votes}</white>
+  <gray>Rating:</gray> <#8fc6ff><bold>{rating}/10</bold></#8fc6ff> <dark_gray>·</dark_gray> <gray>votes:</gray> <white>{votes}</white>
   <gray>Author:</gray> <white>{author}</white>
   <gray>Created:</gray> <font:minecraft:uniform><white>{date}</white></font>
   <gray>Description:</gray> <white><italic>{description}</italic></white>
-point-rated: "<#4ade80>✔</#4ade80> <gray>You rated</gray> <white><bold>{name}</bold></white> <dark_gray>—</dark_gray> <#fbbf24><bold>{rating}</bold></#fbbf24><gray>/10</gray>"
-invalid-rating: "<#f87171>✖ Rating must be between <bold>1</bold> and <bold>10</bold>.</#f87171>"
+point-rated: "<#8fe9f5>✔</#8fe9f5> <gray>You rated</gray> <white><bold>{name}</bold></white> <dark_gray>—</dark_gray> <#8fc6ff><bold>{rating}</bold></#8fc6ff><gray>/10</gray>"
+invalid-rating: "<#3f86ff>✖ Rating must be between <bold>1</bold> and <bold>10</bold>.</#3f86ff>"
 point-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ POINTS ({count}) ═══</gradient></bold>"
-point-list-entry: "<#22d3ee>•</#22d3ee> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>{category}</gray> <dark_gray>|</dark_gray> <#fbbf24>★ {rating}</#fbbf24> <dark_gray>|</dark_gray> <#4ade80>{distance}</#4ade80>"
+point-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>{category}</gray> <dark_gray>|</dark_gray> <#8fc6ff>★ {rating}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff>"
 
 # --- Categories ---
-category-created: "<#4ade80>✔</#4ade80> <gray>Category</gray> <white><bold>{name}</bold></white> <dark_gray>created.</dark_gray>"
-category-deleted: "<#4ade80>✔</#4ade80> <gray>Category</gray> <white><bold>{name}</bold></white> <dark_gray>deleted.</dark_gray>"
-category-not-found: "<#f87171>✖ Category <white><bold>{name}</bold></white> not found.</#f87171>"
-category-exists: "<#f87171>✖ A category with that name already exists.</#f87171>"
-cannot-delete-default: "<#f87171>✖ Cannot delete a default category.</#f87171>"
-category-list-header: "<bold><gradient:#22c55e:#a3e635>═══ CATEGORIES ({count}) ═══</gradient></bold>"
-category-list-entry: "<#4ade80>•</#4ade80> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>points:</gray> <#a3e635><bold>{count}</bold></#a3e635>"
+category-created: "<#8fe9f5>✔</#8fe9f5> <gray>Category</gray> <white><bold>{name}</bold></white> <dark_gray>created.</dark_gray>"
+category-deleted: "<#8fe9f5>✔</#8fe9f5> <gray>Category</gray> <white><bold>{name}</bold></white> <dark_gray>deleted.</dark_gray>"
+category-not-found: "<#3f86ff>✖ Category <white><bold>{name}</bold></white> not found.</#3f86ff>"
+category-exists: "<#3f86ff>✖ A category with that name already exists.</#3f86ff>"
+cannot-delete-default: "<#3f86ff>✖ Cannot delete a default category.</#3f86ff>"
+category-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ CATEGORIES ({count}) ═══</gradient></bold>"
+category-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>points:</gray> <#8fc6ff><bold>{count}</bold></#8fc6ff>"
 
 # --- Routes & navigation ---
-route-started: "<#4ade80>✔</#4ade80> <gray>Navigation to</gray> <white><bold>{name}</bold></white> <dark_gray>started · remaining</dark_gray> <#fb923c><bold>{distance}</bold></#fb923c>"
-route-stopped: "<#4ade80>✔</#4ade80> <gray>Navigation stopped.</gray>"
-no-active-route: "<#f87171>✖ You have no active navigation.</#f87171>"
-arrival: "<#4ade80><bold>✔ DESTINATION REACHED</bold></#4ade80>"
+route-started: "<#8fe9f5>✔</#8fe9f5> <gray>Navigation to</gray> <white><bold>{name}</bold></white> <dark_gray>started · remaining</dark_gray> <#8fc6ff><bold>{distance}</bold></#8fc6ff>"
+route-stopped: "<#8fe9f5>✔</#8fe9f5> <gray>Navigation stopped.</gray>"
+no-active-route: "<#3f86ff>✖ You have no active navigation.</#3f86ff>"
+arrival: "<#8fe9f5><bold>✔ DESTINATION REACHED</bold></#8fe9f5>"
 
-# --- Hints ---
-hint-straight: "<#4ade80><bold>↑ Go straight</bold></#4ade80>"
-hint-slight-right: "<#22d3ee><bold>↗ Slightly right</bold></#22d3ee>"
-hint-right: "<#38bdf8><bold>→ Turn right</bold></#38bdf8>"
-hint-sharp-right: "<#818cf8><bold>↘ Sharp right</bold></#818cf8>"
-hint-back: "<#f87171><bold>↩ Turn around</bold></#f87171>"
-hint-sharp-left: "<#818cf8><bold>↙ Sharp left</bold></#818cf8>"
-hint-left: "<#38bdf8><bold>← Turn left</bold></#38bdf8>"
-hint-slight-left: "<#22d3ee><bold>↖ Slightly left</bold></#22d3ee>"
+# --- Hints: the same blue ladder, from light to dark ---
+hint-straight: "<#8fe9f5><bold>↑ Go straight</bold></#8fe9f5>"
+hint-slight-right: "<#8fc6ff><bold>↗ Slightly right</bold></#8fc6ff>"
+hint-right: "<#66aaff><bold>→ Turn right</bold></#66aaff>"
+hint-sharp-right: "<#4fd1e0><bold>↘ Sharp right</bold></#4fd1e0>"
+hint-back: "<#3f86ff><bold>↩ Turn around</bold></#3f86ff>"
+hint-sharp-left: "<#4fd1e0><bold>↙ Sharp left</bold></#4fd1e0>"
+hint-left: "<#66aaff><bold>← Turn left</bold></#66aaff>"
+hint-slight-left: "<#8fc6ff><bold>↖ Slightly left</bold></#8fc6ff>"
 
 # --- Logging ---
-log-enabled: "<#4ade80>✔</#4ade80> <gray>Chat hints enabled.</gray>"
-log-disabled: "<#4ade80>✔</#4ade80> <gray>Chat hints disabled.</gray>"
+log-enabled: "<#8fe9f5>✔</#8fe9f5> <gray>Chat hints enabled.</gray>"
+log-disabled: "<#8fe9f5>✔</#8fe9f5> <gray>Chat hints disabled.</gray>"
 
 # --- Search ---
-search-header: "<bold><gradient:#a855f7:#f472b6>═══ SEARCH ({count}) ═══</gradient></bold>"
-search-no-results: "<#f87171>✖ Nothing found for <white><bold>{query}</bold></white>.</#f87171>"
-search-entry: "<#c084fc>•</#c084fc> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#f472b6><bold>{match}%</bold></#f472b6>"
+search-header: "<bold><gradient:#2464c8:#8fe9f5>═══ SEARCH ({count}) ═══</gradient></bold>"
+search-no-results: "<#3f86ff>✖ Nothing found for <white><bold>{query}</bold></white>.</#3f86ff>"
+search-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff><bold>{match}%</bold></#8fc6ff>"
 
 # --- Misc ---
-reloaded: "<#4ade80>✔</#4ade80> <gray>HahGps configuration reloaded.</gray>"
+reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>HahGps configuration reloaded.</gray>"
 loading-data: "<gray><italic>Loading data…</italic></gray>"
-error-occurred: "<#f87171>✖ An error occurred:</#f87171> <white>{error}</white>"
-world-not-found: "<#f87171>✖ World <white><bold>{world}</bold></white> not found.</#f87171>"
+error-occurred: "<#3f86ff>✖ An error occurred:</#3f86ff> <white>{error}</white>"
+world-not-found: "<#3f86ff>✖ World <white><bold>{world}</bold></white> not found.</#3f86ff>"
 # NOTE: distance-format goes into the BossBar as plain text — no MiniMessage tags
 distance-format: "{value} m"
 distance-format-km: "{value} km"
 
 # --- Help ---
-help-header: "<bold><gradient:#3b82f6:#22d3ee>═══ GPS COMMANDS ═══</gradient></bold>"
-help-entry: "<#38bdf8><bold>{usage}</bold></#38bdf8> <dark_gray>──</dark_gray> <gray><italic>{description}</italic></gray>"
+help-header: "<bold><gradient:#2464c8:#8fe9f5>═══ GPS COMMANDS ═══</gradient></bold>"
+help-entry: "<#8fc6ff><bold>{usage}</bold></#8fc6ff> <dark_gray>──</dark_gray> <gray><italic>{description}</italic></gray>"
 help-menu: "Open the main menu"
 help-point: "Manage points"
 help-category: "Manage categories"
@@ -117,66 +124,66 @@ help-visual: "Visualize the road graph"
 # --- Updates (/gps update) ---
 update-checking: "<gray><italic>Checking releases…</italic></gray>"
 update-downloading: "<gray><italic>Downloading a new version…</italic></gray>"
-update-nothing-to-apply: "<#f87171>✖ Nothing to apply — download an update first:</#f87171> <bold><white>/gps update install</white></bold>"
-update-hotswap-failed: "<#f87171>✖ Hot swap failed:</#f87171> <white>{reason}</white>"
-update-reloaded: "<#4ade80>✔</#4ade80> <gray>Update settings reloaded.</gray>"
+update-nothing-to-apply: "<#3f86ff>✖ Nothing to apply — download an update first:</#3f86ff> <bold><white>/gps update install</white></bold>"
+update-hotswap-failed: "<#3f86ff>✖ Hot swap failed:</#3f86ff> <white>{reason}</white>"
+update-reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>Update settings reloaded.</gray>"
 
-# --- Update announcements (to groups from обновление.группы-оповещения) ---
-update-available: "<#fbbf24><bold>⬆ Update available</bold></#fbbf24> <font:minecraft:uniform><white>{version}</white></font> <dark_gray>·</dark_gray> <gray>released</gray> <font:minecraft:uniform><white>{date}</white></font>"
+# --- Update announcements (only to groups from обновление.группы-оповещения) ---
+update-available: "<#8fe9f5><bold>⬆ Update available</bold></#8fe9f5> <font:minecraft:uniform><white>{version}</white></font> <dark_gray>·</dark_gray> <gray>released</gray> <font:minecraft:uniform><white>{date}</white></font>"
 update-whats-new: "<gray>What's new:</gray> <white><italic>{notes}</italic></white>"
 update-downloading-now: "<gray><italic>Downloading update…</italic></gray>"
-update-staged: "<#4ade80>✔</#4ade80> <gray>Update</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>downloaded and verified — ready to install.</gray>"
-update-installed: "<#4ade80>✔</#4ade80> <gray>Update</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>installed successfully — the server was not restarted.</gray>"
-update-failed: "<#f87171>✖ Update failed:</#f87171> <white>{error}</white>"
+update-staged: "<#8fe9f5>✔</#8fe9f5> <gray>Update</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>downloaded and verified — ready to install.</gray>"
+update-installed: "<#8fe9f5>✔</#8fe9f5> <gray>Update</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>installed successfully — the server was not restarted.</gray>"
+update-failed: "<#3f86ff>✖ Update failed:</#3f86ff> <white>{error}</white>"
 
 # --- Chat input ---
-input-category-create: "<#c084fc>→</#c084fc> <gray>Type the new category name in chat:</gray>"
-input-category-delete: "<#c084fc>→</#c084fc> <gray>Type the category name to delete in chat:</gray>"
-input-rate: "<#c084fc>→</#c084fc> <gray>Rate the point from</gray> <#fbbf24><bold>1</bold></#fbbf24> <gray>to</gray> <#fbbf24><bold>10</bold></#fbbf24> <dark_gray>— type a number in chat:</dark_gray>"
-input-search: "<#c084fc>→</#c084fc> <gray>Type a search query in chat:</gray>"
+input-category-create: "<#66aaff>→</#66aaff> <gray>Type the new category name in chat:</gray>"
+input-category-delete: "<#66aaff>→</#66aaff> <gray>Type the category name to delete in chat:</gray>"
+input-rate: "<#66aaff>→</#66aaff> <gray>Rate the point from</gray> <#8fc6ff><bold>1</bold></#8fc6ff> <gray>to</gray> <#8fc6ff><bold>10</bold></#8fc6ff> <dark_gray>— type a number in chat:</dark_gray>"
+input-search: "<#66aaff>→</#66aaff> <gray>Type a search query in chat:</gray>"
 
-# --- GUI ---
+# --- GUI: every button in one tone, no rainbow per section ---
 gui:
-  main-menu: "<#818cf8>GPS — Main menu</#818cf8>"
-  my-points: "<#818cf8>My points</#818cf8>"
-  categories: "<#4ade80>Categories</#4ade80>"
-  map: "<#22d3ee>Map</#22d3ee>"
-  search: "<#c084fc>Search</#c084fc>"
-  settings: "<#f472b6>Settings</#f472b6>"
-  back: "<#818cf8>← Back</#818cf8>"
-  close: "<#f87171>✖ Close</#f87171>"
-  next-page: "<#fcd34d>→ Next page</#fcd34d>"
-  prev-page: "<#fcd34d>← Previous page</#fcd34d>"
-  page-info: "<gray>Page</gray> <#fcd34d><bold>{page}/{pages}</bold></#fcd34d>"
-  points-title: "<#818cf8>My points</#818cf8>"
-  categories-title: "<#4ade80>Categories</#4ade80>"
-  search-title: "<#c084fc>Search</#c084fc>"
-  transport-title: "<#2dd4bf>Transport</#2dd4bf>"
-  settings-title: "<#f472b6>Settings</#f472b6>"
-  map-title: "<#22d3ee>Map</#22d3ee>"
-  poi-actions-title: "<#38bdf8>Point: {name}</#38bdf8>"
-  info: "<#38bdf8>Info</#38bdf8>"
-  goto: "<#4ade80>Build route</#4ade80>"
-  rate: "<#fbbf24>Rate</#fbbf24>"
-  delete: "<#f87171>Delete</#f87171>"
-  create: "<#4ade80>Create</#4ade80>"
-  zoom-in: "<#22d3ee>Zoom in</#22d3ee>"
-  zoom-out: "<#22d3ee>Zoom out</#22d3ee>"
-  recenter: "<#22d3ee>Recenter on me</#22d3ee>"
-  rating-stars: "<#fbbf24>{stars}</#fbbf24><dark_gray>{empty}</dark_gray>"
-  distance: "<#4ade80>{distance}</#4ade80>"
+  main-menu: "<#8fc6ff>GPS — Main menu</#8fc6ff>"
+  my-points: "<#8fc6ff>My points</#8fc6ff>"
+  categories: "<#8fc6ff>Categories</#8fc6ff>"
+  map: "<#8fc6ff>Map</#8fc6ff>"
+  search: "<#8fc6ff>Search</#8fc6ff>"
+  settings: "<#8fc6ff>Settings</#8fc6ff>"
+  back: "<#8fc6ff>← Back</#8fc6ff>"
+  close: "<#3f86ff>✖ Close</#3f86ff>"
+  next-page: "<#8fc6ff>→ Next page</#8fc6ff>"
+  prev-page: "<#8fc6ff>← Previous page</#8fc6ff>"
+  page-info: "<gray>Page</gray> <#8fc6ff><bold>{page}/{pages}</bold></#8fc6ff>"
+  points-title: "<#8fc6ff>My points</#8fc6ff>"
+  categories-title: "<#8fc6ff>Categories</#8fc6ff>"
+  search-title: "<#8fc6ff>Search</#8fc6ff>"
+  transport-title: "<#8fc6ff>Transport</#8fc6ff>"
+  settings-title: "<#8fc6ff>Settings</#8fc6ff>"
+  map-title: "<#8fc6ff>Map</#8fc6ff>"
+  poi-actions-title: "<#8fc6ff>Point: {name}</#8fc6ff>"
+  info: "<#8fc6ff>Info</#8fc6ff>"
+  goto: "<#8fc6ff>Build route</#8fc6ff>"
+  rate: "<#8fc6ff>Rate</#8fc6ff>"
+  delete: "<#3f86ff>✖ Delete</#3f86ff>"
+  create: "<#8fe9f5>✔ Create</#8fe9f5>"
+  zoom-in: "<#8fc6ff>Zoom in</#8fc6ff>"
+  zoom-out: "<#8fc6ff>Zoom out</#8fc6ff>"
+  recenter: "<#8fc6ff>Recenter on me</#8fc6ff>"
+  rating-stars: "<#8fc6ff>{stars}</#8fc6ff><dark_gray>{empty}</dark_gray>"
+  distance: "<#8fc6ff>{distance}</#8fc6ff>"
   category: "<gray>{category}</gray>"
-  language: "<#f472b6>Language:</#f472b6> <white><bold>{language}</bold></white>"
-  logging: "<#f472b6>Chat hints:</#f472b6> <#4ade80><bold>{state}</bold></#4ade80>"
-  transport-foot: "<#4ade80>On foot</#4ade80>"
-  transport-car: "<#fbbf24>Car</#fbbf24>"
-  transport-transit: "<#22d3ee>Transit</#22d3ee>"
-  transport-air: "<#818cf8>Air</#818cf8>"
-  transport-water: "<#3b82f6>Water</#3b82f6>"
-  search-input: "<#c084fc>Type a query in chat</#c084fc>"
-  search-quick: "<#c084fc>Quick search</#c084fc>"
+  language: "<gray>Language:</gray> <white><bold>{language}</bold></white>"
+  logging: "<gray>Chat hints:</gray> <#8fc6ff><bold>{state}</bold></#8fc6ff>"
+  transport-foot: "<#8fc6ff>On foot</#8fc6ff>"
+  transport-car: "<#8fc6ff>Car</#8fc6ff>"
+  transport-transit: "<#8fc6ff>Transit</#8fc6ff>"
+  transport-air: "<#8fc6ff>Air</#8fc6ff>"
+  transport-water: "<#8fc6ff>Water</#8fc6ff>"
+  search-input: "<#66aaff>→ Type a query in chat</#66aaff>"
+  search-quick: "<#8fc6ff>Quick search</#8fc6ff>"
   search-result-type: "<gray>Point</gray>"
-  map-scale: "<#22d3ee>Map scale</#22d3ee>"
+  map-scale: "<#8fc6ff>Map scale</#8fc6ff>"
   # Plain values without markup: substituted as {state} and escaped
   state-on: "On"
   state-off: "Off"
@@ -193,8 +200,8 @@ gui:
   lore-search: "<gray><italic>Search points</italic></gray>"
   lore-settings: "<gray><italic>Plugin settings</italic></gray>"
   lore-category-count: "<gray>Points: <white><bold>{count}</bold></white></gray>"
-  lore-map-closed: "<#f87171><italic>Map is not open</italic></#f87171>"
-  lore-distance: "<#4ade80>{distance}</#4ade80>"
+  lore-map-closed: "<#3f86ff><italic>Map is not open</italic></#3f86ff>"
+  lore-distance: "<#8fc6ff>{distance}</#8fc6ff>"
   lore-search-start: "<gray><italic>Click to start a search</italic></gray>"
   lore-search-name: "<gray><italic>Search by point name</italic></gray>"
   lore-search-result: "<gray>Match: <white><bold>{percent}%</bold></white></gray>"
@@ -211,8 +218,8 @@ gui:
   lore-transport-air: "<gray><italic>Direct flight — fast</italic></gray>"
   lore-transport-water: "<gray><italic>Along rivers and water</italic></gray>"
 
-edge-connected: "<#4ade80>✔</#4ade80> <gray>Edge</gray> <white><bold>{id1} → {id2}</bold></white> <dark_gray>created.</dark_gray>"
-edge-not-found: "<#f87171>✖ Edge not found.</#f87171>"
-edge-updated: "<#4ade80>✔</#4ade80> <gray>Edge updated.</gray>"
-visual-enabled: "<#4ade80>✔</#4ade80> <gray>Visualization</gray> <white><bold>{type}</bold></white> <dark_gray>enabled.</dark_gray>"
-visual-disabled: "<#4ade80>✔</#4ade80> <gray>Visualization disabled.</gray>"
+edge-connected: "<#8fe9f5>✔</#8fe9f5> <gray>Edge</gray> <white><bold>{id1} → {id2}</bold></white> <dark_gray>created.</dark_gray>"
+edge-not-found: "<#3f86ff>✖ Edge not found.</#3f86ff>"
+edge-updated: "<#8fe9f5>✔</#8fe9f5> <gray>Edge updated.</gray>"
+visual-enabled: "<#8fe9f5>✔</#8fe9f5> <gray>Visualization</gray> <white><bold>{type}</bold></white> <dark_gray>enabled.</dark_gray>"
+visual-disabled: "<#8fe9f5>✔</#8fe9f5> <gray>Visualization disabled.</gray>"

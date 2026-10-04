@@ -73,6 +73,7 @@ public final class UpdaterService {
         hotApply = cfg.getBoolean("обновление.горячее-обновление", true);
 
         announcer.setGroups(cfg.getStringList("обновление.группы-оповещения"));
+        announcer.setPlayers(cfg.getStringList("обновление.игроки-оповещения"));
         String custom = String.valueOf(cfg.getString("обновление.адрес-api", API)).trim();
         api = custom.isEmpty() ? API : custom.replaceAll("/+$", "");
         token = readToken();
@@ -827,6 +828,8 @@ public final class UpdaterService {
                         ? "не было" : HotSwap.lastResult()));
         out.add("Оповещение об обновлении: группы " + String.join(", ", announcer.groups())
                 + " (обновление.группы-оповещения)");
+        out.add("Оповещение об обновлении: игроки " + String.join(", ", announcer.players())
+                + " (обновление.игроки-оповещения)");
         out.add(hasToken()
                 ? "Токен доступа: есть (" + tokenSource + ")"
                 : "Токен доступа: нет");
