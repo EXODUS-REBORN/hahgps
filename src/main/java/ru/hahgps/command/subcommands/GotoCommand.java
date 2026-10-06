@@ -41,6 +41,11 @@ public class GotoCommand implements SubCommand {
                         "usage", usage()));
                 return;
             }
+            if (!plugin.getConfigManager().isTransportAvailable(transport.getKey())) {
+                player.sendMessage(plugin.getMessages().getPrefixed("transport-disabled",
+                        "transport", transport.getKey()));
+                return;
+            }
         }
         final TransportType finalTransport = transport;
         plugin.getPoiService().loadPoiWithRating(name).whenComplete((poi, error) -> {

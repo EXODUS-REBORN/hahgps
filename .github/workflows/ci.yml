@@ -22,7 +22,7 @@ jobs:
           cache: maven
 
       - name: Сборка
-        run: mvn -B --no-transfer-progress package
+        run: ./mvnw -B --no-transfer-progress package
 
       # В plugins/ нельзя заливать два jar с одной парой «имя + версия» из plugin.yml:
       # Paper отказывается грузить второй (duplicate plugin identifier). Проверяем,
@@ -30,7 +30,7 @@ jobs:
       - name: Идентичность плагина в jar совпадает с pom.xml
         run: |
           set -euo pipefail
-          VERSION="$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          VERSION="$(./mvnw -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
           JAR="target/hahgps-${VERSION}.jar"
           YML="$(unzip -p "$JAR" plugin.yml)"
           NAME="$(echo "$YML" | sed -n 's/^name: *//p' | tr -d "'\r")"
@@ -45,7 +45,7 @@ jobs:
       - name: Байт-код не выше Java 17 (major 61)
         run: |
           set -euo pipefail
-          VERSION="$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          VERSION="$(./mvnw -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
           JAR="target/hahgps-${VERSION}.jar"
           unzip -Z1 "$JAR" | grep '^ru/hahgps/.*\.class$' > /tmp/classes.txt
           fail=0

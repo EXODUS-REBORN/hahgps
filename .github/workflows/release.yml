@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          POM="v$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          POM="v$(./mvnw -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
           echo "тег: $TAG, версия в pom.xml: $POM"
           if [ "$TAG" != "$POM" ]; then
             echo "::error::Тег $TAG не совпадает с версией в pom.xml ($POM). Исправь <version> в pom.xml и переставь тег."
@@ -49,12 +49,12 @@ jobs:
           fi
 
       - name: Сборка
-        run: mvn -B --no-transfer-progress package
+        run: ./mvnw -B --no-transfer-progress package
 
       - name: Токен сборки внутри jar
         run: |
           set -euo pipefail
-          VERSION="$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          VERSION="$(./mvnw -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
           JAR="target/hahgps-${VERSION}.jar"
           unzip -l "$JAR" | grep -q "hahtojer.token" || {
             echo "::error::В $JAR нет hahtojer.token — автообновление откажется ставить такой файл."
@@ -66,7 +66,7 @@ jobs:
       - name: Идентичность плагина совпадает с pom.xml
         run: |
           set -euo pipefail
-          VERSION="$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          VERSION="$(./mvnw -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
           JAR="target/hahgps-${VERSION}.jar"
           YML="$(unzip -p "$JAR" plugin.yml)"
           INNER="$(echo "$YML" | sed -n 's/^version: *//p' | tr -d "'\r")"
@@ -83,7 +83,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          VERSION="$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          VERSION="$(./mvnw -B -q -DforceStdout help:evaluate -Dexpression=project.version)"
           # Имя файла берём по версии из pom.xml, а не «первый попавшийся»:
           # иначе в релиз может уехать посторонний jar, случайно лежащий в target/.
           JAR="target/hahgps-${VERSION}.jar"

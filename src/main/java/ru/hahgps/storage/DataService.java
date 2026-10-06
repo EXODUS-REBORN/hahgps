@@ -1,11 +1,8 @@
 package ru.hahgps.storage;
 import ru.hahgps.model.Category;
-import ru.hahgps.model.GraphNode;
 import ru.hahgps.model.Poi;
-import ru.hahgps.model.RoadGraph;
 import ru.hahgps.model.Route;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import ru.hahgps.HahGpsPlugin;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +14,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
 
+/**
+ * Асинхронная обёртка над хранилищем плюс кэш категорий и точек.
+ *
+ * Кэш существует для того, чтобы команды, GUI и карта не били в БД на каждое
+ * открытие (кэш читается через {@code getCachedPois}/{@code getCachedCategories}).
+ * Каждое обращение к провайдеру уходит в собственный пул из двух потоков: главный
+ * поток сервера на SQL не ходит никогда.
+ */
 public class DataService {
 
     private final HahGpsPlugin plugin;
@@ -25,12 +30,9 @@ public class DataService {
 
     private final Map<Integer, Category> categoryCache = new ConcurrentHashMap<>();
     private final Map<String, Category> categoryByName = new ConcurrentHashMap<>();
-
-
     private final Map<Integer, Poi> poiCache = new ConcurrentHashMap<>();
 
     private final List<Route> routeCache = new ArrayList<>();
-    private volatile RoadGraph roadGraph = new RoadGraph();
 
     public DataService(HahGpsPlugin plugin, StorageProvider provider) {
         this.plugin = plugin;
@@ -43,15 +45,13 @@ public class DataService {
     }
 
     public CompletableFuture<Void> loadCache() {
-
-
         return CompletableFuture.runAsync(() -> {
             List<Category> categories = provider.getCategories();
             categoryCache.clear();
             categoryByName.clear();
             for (Category c : categories) {
                 categoryCache.put(c.getId(), c);
-                categoryByName.put(c.getName().toLowerCase(), c);
+                categoryByName.put(c.getName().toLowerCase(java.util.Locale.ROOT), c);
             }
 
             List<Poi> pois = provider.getPois();
@@ -65,32 +65,7 @@ public class DataService {
                 routeCache.clear();
                 routeCache.addAll(routes);
             }
-            rebuildGraph();
         }, executor);
-    }
-
-    public synchronized void rebuildGraph() {
-        RoadGraph graph = new RoadGraph();
-        int nodeId = 1;
-        synchronized (routeCache) {
-            for (Route route : routeCache) {
-                GraphNode prev = null;
-                for (Location loc : route.getNodes()) {
-                    GraphNode node = new GraphNode(nodeId++, loc);
-                    graph.addNode(node);
-                    if (prev != null) {
-                        graph.addEdge(prev, node, java.util.EnumSet.of(
-                                ru.hahgps.model.TransportType.FOOT, ru.hahgps.model.TransportType.CAR));
-                    }
-                    prev = node;
-                }
-            }
-        }
-        this.roadGraph = graph;
-    }
-
-    public RoadGraph getRoadGraph() {
-        return roadGraph;
     }
 
     public Category getCachedCategory(int id) {
@@ -98,13 +73,12 @@ public class DataService {
     }
 
     public Category getCachedCategoryByName(String name) {
-        return categoryByName.get(name.toLowerCase());
+        return name == null ? null : categoryByName.get(name.toLowerCase(java.util.Locale.ROOT));
     }
 
     public List<Category> getCachedCategories() {
         return new ArrayList<>(categoryCache.values());
     }
-
 
     public List<Poi> getCachedPois() {
         List<Poi> out = new ArrayList<>(poiCache.values());
@@ -139,7 +113,7 @@ public class DataService {
             Category c = provider.createCategory(name, defaultCategory);
             if (c != null) {
                 categoryCache.put(c.getId(), c);
-                categoryByName.put(c.getName().toLowerCase(), c);
+                categoryByName.put(c.getName().toLowerCase(java.util.Locale.ROOT), c);
             }
             return c;
         });
@@ -150,10 +124,14 @@ public class DataService {
             boolean result = provider.deleteCategory(id);
             Category removed = categoryCache.remove(id);
             if (removed != null) {
-                categoryByName.remove(removed.getName().toLowerCase());
+                categoryByName.remove(removed.getName().toLowerCase(java.util.Locale.ROOT));
             }
             return result;
         });
+    }
+
+    public CompletableFuture<Integer> countPoisInCategory(int categoryId) {
+        return async(() -> provider.countPoisInCategory(categoryId));
     }
 
     public CompletableFuture<List<Category>> getCategories() {
@@ -222,16 +200,20 @@ public class DataService {
         return async(() -> provider.getRatings(poiId));
     }
 
+    /** Все оценки одним запросом вместо N+1 при построении списка точек. */
+    public CompletableFuture<Map<Integer, Map<UUID, Integer>>> getAllRatings() {
+        return async(provider::getAllRatings);
+    }
+
     public CompletableFuture<Route> createRoute(Route route) {
         return async(() -> {
-            Route r = provider.createRoute(route);
-            if (r != null) {
+            Route created = provider.createRoute(route);
+            if (created != null) {
                 synchronized (routeCache) {
-                    routeCache.add(r);
+                    routeCache.add(created);
                 }
-                rebuildGraph();
             }
-            return r;
+            return created;
         });
     }
 
@@ -241,12 +223,16 @@ public class DataService {
             synchronized (routeCache) {
                 routeCache.removeIf(r -> r.getId() == id);
             }
-            rebuildGraph();
             return result;
         });
     }
 
     public CompletableFuture<List<Route>> getRoutes() {
+        synchronized (routeCache) {
+            if (!routeCache.isEmpty()) {
+                return CompletableFuture.completedFuture(new ArrayList<>(routeCache));
+            }
+        }
         return async(provider::getRoutes);
     }
 
@@ -256,16 +242,18 @@ public class DataService {
 
     public void runSync(Runnable runnable) {
         if (!plugin.isEnabled()) {
-
             return;
         }
         try {
-            Bukkit.getScheduler().runTask(plugin, runnable);
+            if (Bukkit.isPrimaryThread()) {
+                runnable.run();
+            } else {
+                Bukkit.getScheduler().runTask(plugin, runnable);
+            }
         } catch (Throwable t) {
             plugin.getLogger().log(Level.FINE, "HahGps: не удалось выйти на главный поток", t);
         }
     }
-
 
     public void shutdown() {
         executor.shutdown();

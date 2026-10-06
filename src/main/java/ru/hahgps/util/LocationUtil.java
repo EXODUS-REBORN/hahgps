@@ -56,14 +56,10 @@ public final class LocationUtil {
         try {
             HahGpsPlugin plugin = HahGpsPlugin.getInstance();
             MessagesManager messages = plugin != null ? plugin.getMessages() : null;
-            if (messages == null) {
+            if (messages == null || !messages.has(key)) {
                 return null;
             }
-            String result = messages.get(key, "value", value);
-            if (result == null || result.startsWith("<#3f86ff>Missing:")) {
-                return null;
-            }
-            return result;
+            return messages.get(key, "value", value);
         } catch (Throwable t) {
             return null;
         }

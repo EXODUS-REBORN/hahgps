@@ -143,6 +143,23 @@ public class MessagesManager {
         return language;
     }
 
+    /**
+     * Есть ли ключ в файле или во встроенном эталоне. Заменяет проверку по
+     * строке «Missing: …»: раньше вызывающий код угадывал отсутствие перевода
+     * через startsWith по тексту заглушки.
+     */
+    public boolean has(String key) {
+        if (key == null) {
+            return false;
+        }
+        YamlConfiguration cfg = messages;
+        if (cfg != null && cfg.contains(key)) {
+            return true;
+        }
+        YamlConfiguration def = defaults;
+        return def != null && def.contains(key);
+    }
+
     public String get(String key, String... args) {
         String raw = cache.get(key);
         if (raw == null) {

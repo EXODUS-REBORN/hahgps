@@ -46,4 +46,21 @@ class UpdaterServiceTest {
         assertTrue(UpdaterService.isNewer("v1.0.5", "1.0.4"));
         assertEquals("1.0.5", UpdaterService.normalizeVersion("v1.0.5"));
     }
+
+    @Test
+    void tokenFileCannotEscapePluginFolder() {
+        java.io.File base = new java.io.File(System.getProperty("java.io.tmpdir"), "hahgps-test");
+
+        assertEquals("github-token.txt",
+                UpdaterService.tokenPath(base, "github-token.txt").getFileName().toString());
+        assertEquals("key.txt",
+                UpdaterService.tokenPath(base, "keys/key.txt").getFileName().toString(),
+                "вложенный путь внутри папки плагина разрешён");
+        assertEquals(null, UpdaterService.tokenPath(base, "../../server.properties"),
+                "выход из папки плагина запрещён");
+        assertEquals(null, UpdaterService.tokenPath(base, "../secrets/token.txt"),
+                "выход из папки плагина запрещён");
+        assertEquals(null, UpdaterService.tokenPath(base, "   "));
+        assertEquals(null, UpdaterService.tokenPath(null, "github-token.txt"));
+    }
 }

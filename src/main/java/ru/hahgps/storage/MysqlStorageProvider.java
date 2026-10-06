@@ -31,12 +31,16 @@ public class MysqlStorageProvider extends AbstractSqlStorageProvider {
     }
 
     private Connection newConnection() throws SQLException {
-
-
-        String url = "jdbc:mysql://" + host + ":" + port + "/" + database +
-                "?useSSL=" + useSsl + "&allowPublicKeyRetrieval=true&serverTimezone=UTC" +
-                "&connectTimeout=5000&socketTimeout=30000";
-        return DriverManager.getConnection(url, username, password);
+        StringBuilder url = new StringBuilder(160)
+                .append("jdbc:mysql://").append(host).append(':').append(port).append('/').append(database)
+                .append("?useSSL=").append(useSsl)
+                .append("&serverTimezone=UTC")
+                .append("&connectTimeout=5000&socketTimeout=30000");
+        if (!useSsl) {
+            // Публичный ключ сервера запрашивается только при незашифрованном соединении.
+            url.append("&allowPublicKeyRetrieval=true");
+        }
+        return DriverManager.getConnection(url.toString(), username, password);
     }
 
     @Override

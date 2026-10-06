@@ -36,30 +36,23 @@ public class CategoriesGui extends GuiScreen {
                 inventory.setItem(i, GuiUtil.filler());
             }
         }
-        plugin.getCategoryService().listCategories().thenCompose(cats -> {
-            this.categories = cats;
-
-            List<java.util.concurrent.CompletableFuture<Integer>> countFutures = cats.stream()
-                    .map(c -> plugin.getDataService().getPoisByCategory(c.getId())
-                            .thenApply(List::size))
-                    .toList();
-            return java.util.concurrent.CompletableFuture.allOf(countFutures.toArray(new java.util.concurrent.CompletableFuture[0]))
-                    .thenApply(v -> countFutures.stream().map(java.util.concurrent.CompletableFuture::join).toList());
-        }).whenComplete((counts, error) -> {
+        plugin.getCategoryService().listCategories().whenComplete((cats, error) -> {
             if (error != null) {
                 reportError(error);
                 return;
             }
+            this.categories = cats == null ? List.of() : cats;
             plugin.getDataService().runSync(() -> {
                 if (!player.isOnline() || inventory == null
                         || GuiManager.getInstance().get(player) != this) {
                     return;
                 }
                 inventory.clear();
+                java.util.Map<Integer, Integer> counts = countPoisByCategory(plugin);
                 int slot = 0;
                 for (int i = 0; i < categories.size() && slot < CONTENT_SLOTS; i++) {
                     Category category = categories.get(i);
-                    int count = counts.get(i);
+                    int count = counts.getOrDefault(category.getId(), 0);
                     inventory.setItem(slot++, GuiUtil.item(Material.BOOK,
                             GuiUtil.tonedName(9, category.getName()),
                             lore("gui.lore-category-count", "count", String.valueOf(count))));
@@ -134,29 +127,27 @@ public class CategoriesGui extends GuiScreen {
                         if (name.isEmpty()) {
                             return;
                         }
-                        plugin.getDataService().getCategoryByName(name).thenCompose(found -> {
-                            if (found == null) {
-                                return java.util.concurrent.CompletableFuture.completedFuture(Boolean.FALSE);
-                            }
-                            if (found.isDefaultCategory()) {
-                                return java.util.concurrent.CompletableFuture.completedFuture(null);
-                            }
-                            return plugin.getCategoryService().deleteCategory(name);
-                        }).whenComplete((result, err) ->
+                        plugin.getCategoryService().delete(name).whenComplete((result, err) ->
                                 plugin.getDataService().runSync(() -> {
                                     if (!player.isOnline()) return;
                                     if (err != null) {
                                         player.sendMessage(plugin.getMessages().getPrefixed("error-occurred",
                                                 "error", rootMessage(err)));
-                                    } else if (result == null) {
-                                        player.sendMessage(plugin.getMessages().getPrefixed("cannot-delete-default"));
-                                    } else if (!result) {
-                                        player.sendMessage(plugin.getMessages().getPrefixed("category-not-found",
-                                                "name", name));
-                                    } else {
-                                        player.sendMessage(plugin.getMessages().getPrefixed("category-deleted",
-                                                "name", name));
-                                        new CategoriesGui(player).open();
+                                        return;
+                                    }
+                                    switch (result == null
+                                            ? ru.hahgps.service.CategoryService.DeleteResult.NOT_FOUND : result) {
+                                        case DELETED -> {
+                                            player.sendMessage(plugin.getMessages().getPrefixed(
+                                                    "category-deleted", "name", name));
+                                            new CategoriesGui(player).open();
+                                        }
+                                        case DEFAULT_CATEGORY -> player.sendMessage(plugin.getMessages()
+                                                .getPrefixed("cannot-delete-default"));
+                                        case NOT_EMPTY -> player.sendMessage(plugin.getMessages()
+                                                .getPrefixed("category-not-empty", "name", name));
+                                        case NOT_FOUND -> player.sendMessage(plugin.getMessages()
+                                                .getPrefixed("category-not-found", "name", name));
                                     }
                                 }));
                     });
@@ -169,6 +160,16 @@ public class CategoriesGui extends GuiScreen {
             new PointsListGui(player, category.getId()).open();
             GuiTheme.click(player);
         }
+    }
+
+
+    /** Точки по категориям считаем по кэшу — без запроса в БД на каждую категорию. */
+    private static java.util.Map<Integer, Integer> countPoisByCategory(HahGpsPlugin plugin) {
+        java.util.Map<Integer, Integer> counts = new java.util.HashMap<>();
+        for (ru.hahgps.model.Poi poi : plugin.getDataService().getCachedPois()) {
+            counts.merge(poi.getCategoryId(), 1, Integer::sum);
+        }
+        return counts;
     }
 
 

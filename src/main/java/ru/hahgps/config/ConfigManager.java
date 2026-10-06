@@ -62,6 +62,11 @@ public class ConfigManager {
         return config.getString("storage.mysql.password", "password");
     }
 
+    /** Шифрование соединения с MySQL: значение из конфига, а не жёсткий false. */
+    public boolean getMysqlUseSsl() {
+        return config.getBoolean("storage.mysql.use-ssl", false);
+    }
+
     public int getUpdateInterval() {
         int interval = config.getInt("navigation.update-interval", 5);
         return Math.max(1, Math.min(20, interval));
@@ -105,6 +110,10 @@ public class ConfigManager {
 
     public boolean isMapShowRoute() {
         return config.getBoolean("map.show-route", true);
+    }
+
+    public boolean isMapShowPlayers() {
+        return config.getBoolean("map.show-players", false);
     }
 
     public boolean isTransportAvailable(String key) {

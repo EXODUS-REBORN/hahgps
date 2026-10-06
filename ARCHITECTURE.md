@@ -54,17 +54,17 @@ ru.hahgps
 │   └── TransportType.java     — тип транспорта
 ├── service/                   — бизнес-логика
 │   ├── CategoryService.java   — операции с категориями
-│   ├── GraphService.java      — управление дорожным графом
+│   ├── GraphService.java      — владелец дорожного графа (copy-on-write)
 │   ├── HudService.java        — интеграция с ItemsAdder HUD
 │   ├── MapService.java        — карты и рендеринг
 │   ├── NavigationService.java — навигация и BossBar
 │   ├── Pathfinder.java        — поиск пути (A*)
 │   ├── PoiService.java        — операции с точками
-│   ├── RouteService.java      — построение маршрутов
+│   ├── RouteRecordingService.java — запись пути игрока для графа
+│   ├── RouteService.java      — построение маршрутов (свой пул потоков)
 │   ├── SearchService.java     — поиск с fuzzy-matching
-│   ├── TerrainRenderer.java   — рендеринг карты
-│   ├── VisualizationService.java — визуализация графа
-│   └── WorldGraph.java        — поиск по блокам мира
+│   ├── TerrainRenderer.java   — рендеринг карты (отменяемые задачи)
+│   └── VisualizationService.java — визуализация графа
 ├── storage/                   — слой данных
 │   ├── DataService.java       — кэш и асинхронные операции
 │   ├── StorageProvider.java   — интерфейс хранилища

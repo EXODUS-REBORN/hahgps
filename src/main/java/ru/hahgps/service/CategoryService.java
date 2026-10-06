@@ -5,6 +5,17 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 public class CategoryService {
 
+    /**
+     * Почему категорию нельзя удалить — вызывающий код показывает разные тексты,
+     * а не одно «не найдено» на все случаи.
+     */
+    public enum DeleteResult {
+        DELETED,
+        NOT_FOUND,
+        NOT_EMPTY,
+        DEFAULT_CATEGORY
+    }
+
     private final DataService dataService;
 
     public CategoryService(DataService dataService) {
@@ -15,12 +26,28 @@ public class CategoryService {
         return dataService.createCategory(name, false);
     }
 
-    public CompletableFuture<Boolean> deleteCategory(String name) {
+    /**
+     * Удаление категории с проверками: не стандартная и не занята точками.
+     * Раньше удаление проходило молча, а точки оставались со ссылкой на
+     * несуществующую категорию и пропадали из всех списков.
+     */
+    public CompletableFuture<DeleteResult> delete(String name) {
         return dataService.getCategoryByName(name).thenCompose(category -> {
             if (category == null) {
-                return CompletableFuture.completedFuture(false);
+                return CompletableFuture.completedFuture(DeleteResult.NOT_FOUND);
             }
-            return dataService.deleteCategory(category.getId());
+            if (category.isDefaultCategory()) {
+                return CompletableFuture.completedFuture(DeleteResult.DEFAULT_CATEGORY);
+            }
+            return dataService.countPoisInCategory(category.getId()).thenCompose(count -> {
+                if (count != null && count > 0) {
+                    return CompletableFuture.completedFuture(DeleteResult.NOT_EMPTY);
+                }
+                return dataService.deleteCategory(category.getId())
+                        .thenApply(deleted -> Boolean.TRUE.equals(deleted)
+                                ? DeleteResult.DELETED
+                                : DeleteResult.NOT_FOUND);
+            });
         });
     }
 
@@ -43,8 +70,6 @@ public class CategoryService {
             }
             return future;
         }).exceptionally(error -> {
-
-
             ru.hahgps.HahGpsPlugin plugin = ru.hahgps.HahGpsPlugin.getInstance();
             if (plugin != null) {
                 plugin.getLogger().log(java.util.logging.Level.WARNING,

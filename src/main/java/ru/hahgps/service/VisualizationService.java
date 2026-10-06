@@ -47,8 +47,13 @@ public class VisualizationService {
     }
 
     public void enableVisualization(Player player, TransportType type) {
-        activeVisualizations.computeIfAbsent(player.getUniqueId(),
-                k -> EnumSet.noneOf(TransportType.class)).add(type);
+        Set<TransportType> types = activeVisualizations.computeIfAbsent(player.getUniqueId(),
+                k -> EnumSet.noneOf(TransportType.class));
+        // Тот же монитор, что и в tick()/disableVisualization(): иначе тумблер
+        // и отрисовка могли править набор одновременно.
+        synchronized (types) {
+            types.add(type);
+        }
     }
 
     public void disableVisualization(Player player, TransportType type) {
@@ -114,7 +119,7 @@ public class VisualizationService {
         if (revision == cachedRevision) {
             return;
         }
-        RoadGraph graph = graphService.getRoadGraph();
+        RoadGraph graph = graphService.graph();
         List<GraphNode> nodes = graph.getNodes();
         for (TransportType type : TransportType.values()) {
             List<GraphEdge> edges = new ArrayList<>();

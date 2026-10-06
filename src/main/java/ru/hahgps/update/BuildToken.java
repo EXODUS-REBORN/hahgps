@@ -24,7 +24,12 @@ public final class BuildToken {
     }
 
     public static void verify(Path jar) throws IOException {
-        if (OWN.isEmpty()) return;
+        if (OWN.isEmpty()) {
+            // Fail-closed: без токена в собственной сборке подлинность скачанного
+            // файла проверить нечем, и «пропустить проверку» здесь нельзя.
+            throw new IOException("в этой сборке нет " + ENTRY
+                    + " — подлинность скачанного файла проверить нечем, обновление запрещено");
+        }
         String got;
         try (ZipFile zip = new ZipFile(jar.toFile(), StandardCharsets.UTF_8)) {
             got = readToken(zip);

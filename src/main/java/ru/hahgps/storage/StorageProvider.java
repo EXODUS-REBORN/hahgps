@@ -32,11 +32,17 @@ public interface StorageProvider extends AutoCloseable {
 
     List<Poi> getPoisByCategory(int categoryId);
 
+    /** Сколько точек ссылается на категорию — чтобы не оставлять их сиротами при удалении. */
+    int countPoisInCategory(int categoryId);
+
     boolean updatePoi(Poi poi);
 
     void setRating(int poiId, UUID playerId, int rating);
 
     Map<UUID, Integer> getRatings(int poiId);
+
+    /** Все оценки одним запросом: {@code poiId -> (uuid -> оценка)}. */
+    Map<Integer, Map<UUID, Integer>> getAllRatings();
 
     Route createRoute(Route route);
 

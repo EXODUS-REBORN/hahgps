@@ -20,8 +20,7 @@ storage:
     database: hahgps
     username: root
     password: password
-    # Размер пула соединений
-    pool-size: 5
+    # Шифровать соединение с MySQL (useSSL в JDBC-строке)
     use-ssl: false
 
 # ------------------------------------------------------------

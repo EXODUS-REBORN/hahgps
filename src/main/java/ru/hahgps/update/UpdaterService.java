@@ -20,12 +20,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicBoolean;
 public final class UpdaterService {
     public record Release(String tag, String version, String assetName, long assetId,
                           boolean prerelease, String publishedAt, String body) {
     }
     private static final String API = "https://api.github.com";
-    private static final String TOKEN_TEMPLATE = "github-token.example.txt";
     public static final String TOKEN_PLACEHOLDER = "ВСТАВЬ_ТОКЕН_СЮДА";
     private static final String MAIN_PLUGIN_FOLDER = "hahtojer";
     static final String JAR_PREFIX = "hahgps";
@@ -47,7 +47,7 @@ public final class UpdaterService {
     private volatile BukkitTask task;
 
     private volatile boolean active;
-    private volatile boolean busy;
+    private final AtomicBoolean busy = new AtomicBoolean();
     private volatile String lastError = "";
     private volatile long lastCheckMs;
     private volatile String latestVersion = "";
@@ -121,9 +121,8 @@ public final class UpdaterService {
     }
 
     private String readTokenFrom(File dataFolder, String fileName) {
-        if (dataFolder == null || fileName == null || fileName.isBlank()) return "";
-        Path file = dataFolder.toPath().resolve(fileName);
-        if (!Files.isReadable(file)) return "";
+        Path file = tokenPath(dataFolder, fileName);
+        if (file == null || !Files.isReadable(file)) return "";
         try {
             return normalizeToken(Files.readString(file, StandardCharsets.UTF_8));
         } catch (IOException e) {
@@ -133,26 +132,39 @@ public final class UpdaterService {
         }
     }
 
+    /**
+     * Путь к файлу токена строго внутри папки плагина: имя файла приходит из
+     * config.yml, и «../../server.properties» раньше позволял читать и создавать
+     * файлы за её пределами.
+     */
+    static Path tokenPath(File dataFolder, String fileName) {
+        if (dataFolder == null || fileName == null || fileName.isBlank()) {
+            return null;
+        }
+        Path base = dataFolder.toPath().toAbsolutePath().normalize();
+        Path file = base.resolve(fileName).normalize();
+        return file.startsWith(base) ? file : null;
+    }
+
     public static void ensureTokenFile(HahGpsPlugin plugin) {
         String name = String.valueOf(plugin.getConfig()
                 .getString("обновление.файл-ключа", "github-token.txt")).trim();
         if (name.isEmpty()) return;
-        Path file = plugin.getDataFolder().toPath().resolve(name);
+        Path file = tokenPath(plugin.getDataFolder(), name);
+        if (file == null) {
+            plugin.getLogger().warning("Обновление: обновление.файл-ключа = «" + name
+                    + "» выводит за пределы папки плагина — файл не создаю.");
+            return;
+        }
         if (Files.exists(file)) return;
         try {
             Path parent = file.getParent();
             if (parent != null) Files.createDirectories(parent);
-            try (InputStream in = plugin.getResource(TOKEN_TEMPLATE)) {
-                if (in != null) {
-                    Files.copy(in, file);
-                } else {
-                    Files.writeString(file, "# Токен GitHub (fine-grained, Contents: Read-only)\n"
-                            + "# Можно не заполнять: если токен уже настроен у плагина "
-                            + MAIN_PLUGIN_FOLDER + " (plugins/" + MAIN_PLUGIN_FOLDER + "/" + name
-                            + "), hahgps возьмёт его оттуда.\n"
-                            + TOKEN_PLACEHOLDER + "\n", StandardCharsets.UTF_8);
-                }
-            }
+            Files.writeString(file, "# Токен GitHub (fine-grained, Contents: Read-only)\n"
+                    + "# Можно не заполнять: если токен уже настроен у плагина "
+                    + MAIN_PLUGIN_FOLDER + " (plugins/" + MAIN_PLUGIN_FOLDER + "/" + name
+                    + "), hahgps возьмёт его оттуда.\n"
+                    + TOKEN_PLACEHOLDER + "\n", StandardCharsets.UTF_8);
             plugin.getLogger().info("Обновление: создан plugins/" + plugin.getDataFolder().getName()
                     + "/" + name + " — впиши в него токен GitHub (fine-grained, право "
                     + "Contents: Read-only), иначе приватный репозиторий с релизами останется "
@@ -229,9 +241,13 @@ public final class UpdaterService {
         reload();
         HotSwap.reset();
         if (!BuildToken.enabled()) {
-
-            plugin.getLogger().info("Обновление: в этой сборке нет токена — проверка подлинности "
-                    + "скачиваемого файла пропускается; включится сама после обновления.");
+            // Fail-closed: без токена сборки подлинность скачанного файла проверить
+            // нечем, поэтому такой плагин сам себя не обновляет.
+            autoDownload = false;
+            hotApply = false;
+            plugin.getLogger().warning("Обновление: в этой сборке нет hahtojer.token — "
+                    + "автоскачивание и горячая подмена выключены (проверять подлинность нечем). "
+                    + "Новую версию придётся положить в plugins/ вручную.");
         }
         active = true;
         try {
@@ -304,15 +320,15 @@ public final class UpdaterService {
     }
 
     public void checkAsync(Consumer<String> feedback, boolean installIfNewer) {
-        if (busy) {
+        if (!busy.compareAndSet(false, true)) {
             reply(feedback, "Проверка обновления уже идёт.");
             return;
         }
         if (repo.isBlank() || !repo.contains("/")) {
+            busy.set(false);
             reply(feedback, "Репозиторий релизов не задан (обновление.репозиторий в config.yml).");
             return;
         }
-        busy = true;
         String current = currentVersion();
         try {
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
@@ -406,13 +422,13 @@ public final class UpdaterService {
                     stop();
                 }
             } finally {
-                busy = false;
+                busy.set(false);
             }
             });
         } catch (Throwable t) {
 
 
-            busy = false;
+            busy.set(false);
             String message = t.getMessage() == null ? t.toString() : t.getMessage();
             plugin.getLogger().warning("Обновление: не удалось запустить проверку (" + message + ")");
             reply(feedback, "Не удалось запустить проверку обновления: " + message);
@@ -541,20 +557,21 @@ public final class UpdaterService {
 
 
 
+        // Тело сразу пишется в файл: раньше весь jar собирался в byte[] и висел
+        // в памяти, а попыток скачивания до трёх.
         HttpRequest request = api("/repos/" + repo + "/releases/assets/" + release.assetId())
                 .setHeader("Accept", "application/octet-stream")
-
                 .timeout(Duration.ofMinutes(5))
                 .GET()
                 .build();
-        HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
-        Files.write(tmp, followAssetRedirect(response));
+        HttpResponse<Path> response = http.send(request, HttpResponse.BodyHandlers.ofFile(tmp));
+        followAssetRedirect(response, tmp);
     }
 
-    private byte[] followAssetRedirect(HttpResponse<byte[]> response) throws Exception {
+    private void followAssetRedirect(HttpResponse<Path> response, Path tmp) throws Exception {
         int code = response.statusCode();
         if (code == 200) {
-            return response.body();
+            return;
         }
         if (code / 100 == 3) {
             String location = response.headers().firstValue("location")
@@ -562,16 +579,18 @@ public final class UpdaterService {
             if (!location.startsWith("https://")) {
                 throw new IOException("небезопасный редирект: " + location);
             }
+            // На редиректе в файл попадает служебный ответ GitHub, а не jar.
+            Files.deleteIfExists(tmp);
             HttpRequest follow = HttpRequest.newBuilder(URI.create(location))
                     .timeout(Duration.ofMinutes(2))
                     .header("User-Agent", "hahgps-updater")
                     .GET()
                     .build();
-            HttpResponse<byte[]> second = http.send(follow, HttpResponse.BodyHandlers.ofByteArray());
+            HttpResponse<Path> second = http.send(follow, HttpResponse.BodyHandlers.ofFile(tmp));
             if (second.statusCode() != 200) {
                 throw new IOException("скачивание: HTTP " + second.statusCode());
             }
-            return second.body();
+            return;
         }
         throw new IOException("скачивание: HTTP " + code);
     }

@@ -38,12 +38,27 @@ public class InputManager {
 
             return false;
         }
+        // Событие чата в Paper асинхронное: колбэк трогает инвентари, сообщения
+        // и сервисы, поэтому переносим его в главный поток.
+        if (Bukkit.isPrimaryThread()) {
+            accept(entry, message);
+        } else {
+            try {
+                Bukkit.getScheduler().runTask(ru.hahgps.HahGpsPlugin.getInstance(),
+                        () -> accept(entry, message));
+            } catch (Throwable t) {
+                accept(entry, message);
+            }
+        }
+        return true;
+    }
+
+    private void accept(Pending entry, String message) {
         try {
             entry.callback().accept(message);
         } catch (Throwable t) {
             Bukkit.getLogger().warning("[HahGps] Ошибка обработки ввода: " + t);
         }
-        return true;
     }
 
     public boolean isPending(Player player) {

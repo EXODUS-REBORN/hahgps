@@ -10,23 +10,34 @@ import org.bukkit.map.MapCanvas;
 import org.bukkit.map.MapRenderer;
 import org.bukkit.map.MapView;
 import ru.hahgps.HahGpsPlugin;
+import ru.hahgps.config.ConfigManager;
+import ru.hahgps.model.NavigationSession;
 import ru.hahgps.model.Poi;
+import ru.hahgps.storage.DataService;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BooleanSupplier;
+
+/**
+ * Карта игрока: одна MapView на игрока, отрисовка — порциями через TerrainRenderer.
+ *
+ * Список точек берётся из кэша DataService (раньше каждый рендер дёргал БД),
+ * а каждый новый рендер отменяет предыдущий — иначе спам по клавише карты
+ * запускал параллельные задачи загрузки чанков.
+ */
 public class MapService {
     private final HahGpsPlugin plugin;
     private final TerrainRenderer terrainRenderer;
 
-
     private final Map<UUID, MapView> playerMaps = new ConcurrentHashMap<>();
     private final Map<UUID, BufferedImage> renderedImages = new ConcurrentHashMap<>();
     private final Map<UUID, MapRenderer> renderers = new ConcurrentHashMap<>();
-
     private final Map<UUID, AtomicLong> renderTokens = new ConcurrentHashMap<>();
 
     private static final BufferedImage BLANK_IMAGE = new BufferedImage(128, 128, BufferedImage.TYPE_INT_RGB);
@@ -44,7 +55,6 @@ public class MapService {
 
         player.sendMap(view);
         renderAsync(player, view);
-
         giveMapItem(player, view);
     }
 
@@ -104,35 +114,74 @@ public class MapService {
 
     private void renderAsync(Player player, MapView view) {
         World world = view.getWorld();
-        if (world == null || !plugin.isEnabled()) {
+        DataService dataService = plugin.getDataService();
+        if (world == null || !plugin.isEnabled() || dataService == null) {
             return;
         }
+        ConfigManager config = plugin.getConfigManager();
         UUID id = player.getUniqueId();
 
-        long token = renderTokens.computeIfAbsent(id, k -> new AtomicLong()).incrementAndGet();
+        AtomicLong counter = renderTokens.computeIfAbsent(id, k -> new AtomicLong());
+        long token = counter.incrementAndGet();
+        // Устаревший рендер видит это и прекращает грузить чанки.
+        BooleanSupplier cancelled = () -> {
+            AtomicLong current = renderTokens.get(id);
+            return current == null || current.get() != token || playerMaps.get(id) != view;
+        };
+
         int centerX = view.getCenterX();
         int centerZ = view.getCenterZ();
         MapView.Scale scale = view.getScale();
-
         Location playerLoc = player.getLocation().clone();
-        boolean showPois = plugin.getConfigManager().isMapShowPois();
+        boolean showPois = config.isMapShowPois();
+        boolean showRoute = config.isMapShowRoute();
+        boolean showPlayers = config.isMapShowPlayers();
 
-        CompletableFuture<List<Poi>> poisFuture = plugin.getDataService().getPois();
-        poisFuture.thenAccept(pois -> {
-            if (pois == null) {
-                pois = List.of();
+        List<Poi> pois;
+        if (showPois) {
+            // Кэш DataService: точки меняются только командами, которые его обновляют.
+            pois = new ArrayList<>();
+            for (Poi poi : dataService.getCachedPois()) {
+                Location loc = poi == null ? null : poi.getLocation();
+                if (loc != null && loc.getWorld() != null && loc.getWorld().equals(world)) {
+                    pois.add(poi);
+                }
             }
-            List<Poi> filtered = showPois
-                    ? pois.stream()
-                          .filter(poi -> poi != null && poi.getLocation() != null
-                                  && poi.getLocation().getWorld() != null
-                                  && poi.getLocation().getWorld().equals(world))
-                          .toList()
-                    : List.of();
+        } else {
+            pois = List.of();
+        }
 
-            terrainRenderer.render(world, centerX, centerZ, scale, filtered, null, playerLoc)
-                    .thenAccept(image -> applyRenderedImage(id, token, view, player, image));
-        });
+        List<Location> route = List.of();
+        if (showRoute) {
+            NavigationService navigation = plugin.getNavigationService();
+            NavigationSession session = navigation == null ? null : navigation.getSession(player);
+            if (session != null && session.getPath() != null) {
+                route = session.getPath();
+            }
+        }
+
+        List<Location> others = List.of();
+        if (showPlayers) {
+            List<Location> collected = new ArrayList<>();
+            for (Player online : Bukkit.getOnlinePlayers()) {
+                if (!online.getUniqueId().equals(id) && online.getWorld().equals(world)) {
+                    collected.add(online.getLocation());
+                }
+            }
+            others = collected;
+        }
+
+        List<Poi> finalPois = pois;
+        List<Location> finalRoute = route;
+        List<Location> finalOthers = others;
+
+        terrainRenderer.render(world, centerX, centerZ, scale, finalPois, finalRoute, playerLoc,
+                        finalOthers, cancelled)
+                .thenAccept(image -> {
+                    if (image != null) {
+                        applyRenderedImage(id, token, view, player, image);
+                    }
+                });
     }
 
     private void applyRenderedImage(UUID id, long token, MapView view, Player player, BufferedImage image) {
@@ -152,12 +201,10 @@ public class MapService {
                 player.sendMap(view);
             });
         } catch (Throwable ignored) {
-
         }
     }
 
     private void giveMapItem(Player player, MapView view) {
-
         for (ItemStack item : player.getInventory().getStorageContents()) {
             if (item == null || item.getType() != Material.FILLED_MAP || !item.hasItemMeta()) {
                 continue;
@@ -175,7 +222,11 @@ public class MapService {
             map.setItemMeta(meta);
         }
 
-        player.getInventory().addItem(map);
+        // addItem возвращает то, что не влезло, и это молча терялось.
+        Map<Integer, ItemStack> leftover = player.getInventory().addItem(map);
+        if (!leftover.isEmpty()) {
+            player.sendMessage(plugin.getMessages().getPrefixed("map-inventory-full"));
+        }
     }
 
     public MapView getMapView(Player player) {
@@ -208,9 +259,12 @@ public class MapService {
     }
 
     private static MapView.Scale parseZoom(String name) {
+        if (name == null) {
+            return MapView.Scale.CLOSE;
+        }
         try {
-            return MapView.Scale.valueOf(name.toUpperCase());
-        } catch (IllegalArgumentException | NullPointerException e) {
+            return MapView.Scale.valueOf(name.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
             return MapView.Scale.CLOSE;
         }
     }

@@ -32,7 +32,10 @@ public class Pathfinder {
         int expansions = 0;
         while (!open.isEmpty()) {
             if (++expansions > MAX_EXPANSIONS) {
-
+                // Раньше лимит приводил к тихой прямой линии: игрок шёл сквозь
+                // горы и не знал, что маршрут не построен. Теперь об этом видно в логе.
+                log().warning("HahGps: маршрут " + from.getId() + " -> " + to.getId()
+                        + " не построен: превышен лимит расширений (" + MAX_EXPANSIONS + ").");
                 return Collections.emptyList();
             }
             GraphNode current = open.poll();
@@ -169,5 +172,17 @@ public class Pathfinder {
             }
         }
         return length;
+    }
+
+    private static java.util.logging.Logger log() {
+        try {
+            java.util.logging.Logger logger = org.bukkit.Bukkit.getLogger();
+            if (logger != null) {
+                return logger;
+            }
+        } catch (Throwable ignored) {
+            // вне сервера (юнит-тесты) Bukkit недоступен
+        }
+        return java.util.logging.Logger.getLogger("HahGps");
     }
 }

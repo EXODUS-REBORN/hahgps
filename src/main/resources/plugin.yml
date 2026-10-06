@@ -19,8 +19,9 @@ commands:
 #   gps.search / gps.map / gps.reload — одноимённые подкоманды
 #   gps.edge / gps.visual / gps.admin — edge, visual, update (объявления об
 #   обновлении — не по gps.admin, а группам LuckPerms из обновление.группы-оповещения)
-#   gps.route.record, gps.route.save, gps.transport — зарезервированы под ещё
-#   не реализованные подкоманды (пока кодом не проверяются)
+#   gps.route.record / gps.route.save — route record start|stop и route save
+#   (/gps reload работает и из консоли, остальные подкоманды — только для игроков;
+#    доступность видов транспорта задаётся секцией transport в config.yml, а не правом)
 permissions:
   gps.use:
     description: Basic GPS usage
@@ -47,16 +48,13 @@ permissions:
     description: Record routes
     default: op
   gps.route.save:
-    description: Save routes
+    description: Save recorded routes
     default: op
   gps.map:
     description: Open map
     default: true
   gps.search:
     description: Search points
-    default: true
-  gps.transport:
-    description: Select transport
     default: true
   gps.reload:
     description: Reload config

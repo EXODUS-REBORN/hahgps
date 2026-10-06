@@ -18,17 +18,26 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.BooleanSupplier;
+
+/**
+ * Отрисовка карты: сэмплирование блоков идёт порциями в главном потоке,
+ * картинка рисуется в своём потоке.
+ *
+ * Каждая задача знает, актуальна ли она ещё ({@code cancelled}): карта,
+ * которую игрок уже закрыл или перерисовал, перестаёт грузить чанки и
+ * сэмплировать блоки. Раньше токен только отменял подстановку картинки,
+ * а работа (до 1024 загрузок чанков) продолжалась до конца.
+ */
 public class TerrainRenderer {
 
     private static final int MAP_SIZE = 128;
     private static final int TOTAL_SAMPLES = MAP_SIZE * MAP_SIZE;
 
-
-    private static final int MAX_CHUNK_REQUESTS = 1024;
-
+    /** Больше чанков за один рендер не грузим: остальное станет дырками NO_DATA. */
+    private static final int MAX_CHUNK_REQUESTS = 512;
 
     private static final int SAMPLES_PER_TICK = 2048;
-
 
     private static final int NO_DATA = 0x202020;
 
@@ -59,10 +68,11 @@ public class TerrainRenderer {
         };
     }
 
-
     public CompletableFuture<BufferedImage> render(World world, int centerX, int centerZ,
                                                    MapView.Scale scale, List<Poi> pois,
-                                                   List<Location> route, Location playerLoc) {
+                                                   List<Location> route, Location playerLoc,
+                                                   List<Location> others,
+                                                   BooleanSupplier cancelled) {
         if (world == null) {
             return CompletableFuture.completedFuture(blankImage());
         }
@@ -71,7 +81,7 @@ public class TerrainRenderer {
             try {
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     try {
-                        render(world, centerX, centerZ, scale, pois, route, playerLoc)
+                        render(world, centerX, centerZ, scale, pois, route, playerLoc, others, cancelled)
                                 .whenComplete((image, error) -> {
                                     if (error != null) {
                                         out.completeExceptionally(error);
@@ -88,12 +98,14 @@ public class TerrainRenderer {
             }
             return out;
         }
-        return renderOnMain(world, centerX, centerZ, scale, pois, route, playerLoc);
+        return renderOnMain(world, centerX, centerZ, scale, pois, route, playerLoc, others, cancelled);
     }
 
     private CompletableFuture<BufferedImage> renderOnMain(World world, int centerX, int centerZ,
                                                           MapView.Scale scale, List<Poi> pois,
-                                                          List<Location> route, Location playerLoc) {
+                                                          List<Location> route, Location playerLoc,
+                                                          List<Location> others,
+                                                          BooleanSupplier cancelled) {
         double bpp = blocksPerPixel(scale);
         int radius = (int) (MAP_SIZE / 2 * bpp);
 
@@ -104,7 +116,6 @@ public class TerrainRenderer {
         int centerChunkX = centerX >> 4;
         int centerChunkZ = centerZ >> 4;
 
-
         List<int[]> chunks = new ArrayList<>();
         for (int cx = minChunkX; cx <= maxChunkX; cx++) {
             for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
@@ -112,16 +123,18 @@ public class TerrainRenderer {
             }
         }
         if (chunks.size() > MAX_CHUNK_REQUESTS) {
-
+            // Обрезаем по дальности от центра, но больше об этом молчать нельзя:
+            // на карте будут серые пятна, и админ должен понимать почему.
             chunks.sort(Comparator.comparingInt(c -> {
                 int dx = c[0] - centerChunkX;
                 int dz = c[1] - centerChunkZ;
                 return dx * dx + dz * dz;
             }));
+            plugin.getLogger().info("HahGps: для карты нужно " + chunks.size()
+                    + " чанков, загружаю " + MAX_CHUNK_REQUESTS
+                    + " ближайших — дальние края останутся пустыми.");
             chunks = new ArrayList<>(chunks.subList(0, MAX_CHUNK_REQUESTS));
         }
-
-
 
         List<CompletableFuture<?>> loads = new ArrayList<>(chunks.size());
         for (int[] c : chunks) {
@@ -129,7 +142,6 @@ public class TerrainRenderer {
                 CompletableFuture<Chunk> load = world.getChunkAtAsync(c[0], c[1], false);
                 loads.add(load.handle((chunk, error) -> null));
             } catch (Throwable ignored) {
-
             }
         }
 
@@ -143,23 +155,36 @@ public class TerrainRenderer {
                 sampled.completeExceptionally(error);
                 return;
             }
-            startSampling(world, centerX, centerZ, bpp, sampled);
+            if (cancelled != null && cancelled.getAsBoolean()) {
+                sampled.complete(null);
+                return;
+            }
+            startSampling(world, centerX, centerZ, bpp, sampled, cancelled);
         });
 
         return sampled.thenApplyAsync(
-                colors -> drawImage(colors, centerX, centerZ, bpp, pois, route, playerLoc, world),
+                colors -> colors == null ? null
+                        : drawImage(colors, centerX, centerZ, bpp, pois, route, playerLoc, others, world),
                 drawExecutor);
     }
 
 
     private void startSampling(World world, int centerX, int centerZ, double bpp,
-                               CompletableFuture<int[]> out) {
+                               CompletableFuture<int[]> out, BooleanSupplier cancelled) {
         int[] colors = new int[TOTAL_SAMPLES];
         Arrays.fill(colors, NO_DATA);
         int[] cursor = {0};
         BukkitTask[] holder = new BukkitTask[1];
         try {
             holder[0] = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+                if (cancelled != null && cancelled.getAsBoolean()) {
+                    BukkitTask task = holder[0];
+                    if (task != null) {
+                        task.cancel();
+                    }
+                    out.complete(null);
+                    return;
+                }
                 int budget = SAMPLES_PER_TICK;
                 while (budget-- > 0 && cursor[0] < TOTAL_SAMPLES) {
                     int index = cursor[0]++;
@@ -170,8 +195,6 @@ public class TerrainRenderer {
                     colors[index] = sampleBlock(world, worldX, worldZ);
                 }
                 if (cursor[0] >= TOTAL_SAMPLES) {
-
-
                     BukkitTask task = holder[0];
                     if (task != null) {
                         task.cancel();
@@ -180,7 +203,6 @@ public class TerrainRenderer {
                 }
             }, 0L, 1L);
         } catch (Throwable t) {
-
             out.completeExceptionally(t);
         }
     }
@@ -193,8 +215,6 @@ public class TerrainRenderer {
             int y = world.getHighestBlockYAt(x, z);
             Material material = world.getBlockAt(x, y, z).getType();
             if (material.isAir()) {
-
-
                 int below = y - 1;
                 if (below < world.getMinHeight()) {
                     return NO_DATA;
@@ -224,7 +244,7 @@ public class TerrainRenderer {
 
     private BufferedImage drawImage(int[] colors, int centerX, int centerZ, double bpp,
                                     List<Poi> pois, List<Location> route, Location playerLoc,
-                                    World world) {
+                                    List<Location> others, World world) {
         BufferedImage image = new BufferedImage(MAP_SIZE, MAP_SIZE, BufferedImage.TYPE_INT_RGB);
         for (int pz = 0; pz < MAP_SIZE; pz++) {
             int row = pz * MAP_SIZE;
@@ -252,10 +272,7 @@ public class TerrainRenderer {
 
         if (pois != null) {
             for (Poi poi : pois) {
-                if (poi == null) {
-                    continue;
-                }
-                Location loc = poi.getLocation();
+                Location loc = poi == null ? null : poi.getLocation();
                 if (loc == null || loc.getWorld() == null || !loc.getWorld().equals(world)) {
                     continue;
                 }
@@ -263,6 +280,19 @@ public class TerrainRenderer {
                 int pz = (int) ((loc.getZ() - centerZ) / bpp) + MAP_SIZE / 2;
                 if (px >= 0 && px < MAP_SIZE && pz >= 0 && pz < MAP_SIZE) {
                     drawMarker(g, px, pz, new Color(63, 134, 255));
+                }
+            }
+        }
+
+        if (others != null) {
+            for (Location other : others) {
+                if (other == null || other.getWorld() == null || !other.getWorld().equals(world)) {
+                    continue;
+                }
+                int px = (int) ((other.getX() - centerX) / bpp) + MAP_SIZE / 2;
+                int pz = (int) ((other.getZ() - centerZ) / bpp) + MAP_SIZE / 2;
+                if (px >= 0 && px < MAP_SIZE && pz >= 0 && pz < MAP_SIZE) {
+                    drawMarker(g, px, pz, new Color(79, 209, 224));
                 }
             }
         }

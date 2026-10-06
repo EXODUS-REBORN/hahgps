@@ -67,6 +67,9 @@ category-deleted: "<#8fe9f5>✔</#8fe9f5> <gray>Категория</gray> <white
 category-not-found: "<#3f86ff>✖ Категория <white><bold>{name}</bold></white> не найдена.</#3f86ff>"
 category-exists: "<#3f86ff>✖ Категория с таким именем уже существует.</#3f86ff>"
 cannot-delete-default: "<#3f86ff>✖ Нельзя удалить стандартную категорию.</#3f86ff>"
+category-not-empty: "<#3f86ff>✖ В категории <white><bold>{name}</bold></white> ещё есть точки — сначала удали их или перенеси в другую категорию.</#3f86ff>"
+map-inventory-full: "<#3f86ff>✖ В инвентаре нет места под карту — освободи слот и открой карту снова.</#3f86ff>"
+transport-disabled: "<#3f86ff>✖ Транспорт «<white><bold>{transport}</bold></white>» выключен в config.yml.</#3f86ff>"
 category-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ КАТЕГОРИИ ({count}) ═══</gradient></bold>"
 category-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>точек:</gray> <#8fc6ff><bold>{count}</bold></#8fc6ff>"
 
@@ -74,6 +77,13 @@ category-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> 
 route-started: "<#8fe9f5>✔</#8fe9f5> <gray>Навигация к</gray> <white><bold>{name}</bold></white> <dark_gray>начата · осталось</dark_gray> <#8fc6ff><bold>{distance}</bold></#8fc6ff>"
 route-stopped: "<#8fe9f5>✔</#8fe9f5> <gray>Навигация остановлена.</gray>"
 no-active-route: "<#3f86ff>✖ У вас нет активной навигации.</#3f86ff>"
+route-record-started: "<#8fe9f5>✔</#8fe9f5> <gray>Запись маршрута начата — иди по дороге, потом</gray> <white>/gps route record stop</white><gray>.</gray>"
+route-record-stopped: "<#8fe9f5>✔</#8fe9f5> <gray>Запись остановлена: точек</gray> <#8fc6ff><bold>{count}</bold></#8fc6ff><gray>. Сохрани командой</gray> <white>/gps route save</white><gray>.</gray>"
+route-record-empty: "<#3f86ff>✖ Ничего не записано — пройди хотя бы несколько блоков.</#3f86ff>"
+route-record-none: "<#3f86ff>✖ Нет записанного маршрута: сначала <white>/gps route record start</white>.</#3f86ff>"
+route-record-already: "<#3f86ff>✖ Запись уже идёт — останови её командой <white>/gps route record stop</white>.</#3f86ff>"
+route-saved: "<#8fe9f5>✔</#8fe9f5> <gray>Маршрут</gray> <white><bold>{name}</bold></white> <gray>сохранён: точек</gray> <#8fc6ff>{count}</#8fc6ff><gray>, длина</gray> <#8fc6ff>{length}</#8fc6ff><gray>. Граф дорог пересобран.</gray>"
+route-exists: "<#3f86ff>✖ Маршрут с именем <white><bold>{name}</bold></white> уже существует.</#3f86ff>"
 arrival: "<#8fe9f5><bold>✔ ЦЕЛЬ ДОСТИГНУТА</bold></#8fe9f5>"
 
 # --- Подсказки: та же синяя лестница, от светлого к тёмному ---

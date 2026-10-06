@@ -48,6 +48,14 @@ public class CommandManager implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player player)) {
+            // Консоль тоже должна уметь перезагрузить конфиг — раньше /gps
+            // целиком отбивался сообщением «только для игроков».
+            if (args.length >= 1 && args[0].equalsIgnoreCase("reload")) {
+                plugin.getConfigManager().reload();
+                plugin.getMessages().reload(plugin.getConfigManager().getLanguage());
+                sender.sendMessage("HahGps: конфигурация и сообщения перезагружены.");
+                return true;
+            }
             sender.sendMessage(plugin.getMessages().getPrefixed("player-only"));
             return true;
         }
@@ -110,6 +118,12 @@ public class CommandManager implements CommandExecutor, TabCompleter {
     }
 
     private void tryGoto(Player player, String[] args) {
+        // Сокращение «/gps <точка>» обязано подчиняться тем же правам, что и
+        // «/gps goto <точка>»: раньше эта ветка вообще не проверяла gps.use.
+        if (!player.hasPermission("gps.use")) {
+            player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
+            return;
+        }
         String pointName = args[0];
         TransportType transport = TransportType.FOOT;
         if (args.length >= 2) {
@@ -117,6 +131,12 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             if (transport == null) {
                 player.sendMessage(plugin.getMessages().getPrefixed("invalid-args",
                         "usage", new GotoCommand().usage()));
+                return;
+            }
+            // Транспорт, выключенный в config.yml, не должен включаться в обход GUI.
+            if (!plugin.getConfigManager().isTransportAvailable(transport.getKey())) {
+                player.sendMessage(plugin.getMessages().getPrefixed("transport-disabled",
+                        "transport", transport.getKey()));
                 return;
             }
         }

@@ -67,6 +67,9 @@ category-deleted: "<#8fe9f5>✔</#8fe9f5> <gray>Category</gray> <white><bold>{na
 category-not-found: "<#3f86ff>✖ Category <white><bold>{name}</bold></white> not found.</#3f86ff>"
 category-exists: "<#3f86ff>✖ A category with that name already exists.</#3f86ff>"
 cannot-delete-default: "<#3f86ff>✖ Cannot delete a default category.</#3f86ff>"
+category-not-empty: "<#3f86ff>✖ Category <white><bold>{name}</bold></white> still has points — delete them or move them to another category first.</#3f86ff>"
+map-inventory-full: "<#3f86ff>✖ No free slot for the map — free one and open the map again.</#3f86ff>"
+transport-disabled: "<#3f86ff>✖ Transport <white><bold>{transport}</bold></white> is disabled in config.yml.</#3f86ff>"
 category-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ CATEGORIES ({count}) ═══</gradient></bold>"
 category-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>points:</gray> <#8fc6ff><bold>{count}</bold></#8fc6ff>"
 
@@ -74,6 +77,13 @@ category-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> 
 route-started: "<#8fe9f5>✔</#8fe9f5> <gray>Navigation to</gray> <white><bold>{name}</bold></white> <dark_gray>started · remaining</dark_gray> <#8fc6ff><bold>{distance}</bold></#8fc6ff>"
 route-stopped: "<#8fe9f5>✔</#8fe9f5> <gray>Navigation stopped.</gray>"
 no-active-route: "<#3f86ff>✖ You have no active navigation.</#3f86ff>"
+route-record-started: "<#8fe9f5>✔</#8fe9f5> <gray>Route recording started — walk the road, then</gray> <white>/gps route record stop</white><gray>.</gray>"
+route-record-stopped: "<#8fe9f5>✔</#8fe9f5> <gray>Recording stopped: points</gray> <#8fc6ff><bold>{count}</bold></#8fc6ff><gray>. Save it with</gray> <white>/gps route save</white><gray>.</gray>"
+route-record-empty: "<#3f86ff>✖ Nothing recorded — walk at least a few blocks.</#3f86ff>"
+route-record-none: "<#3f86ff>✖ No recorded route: run <white>/gps route record start</white> first.</#3f86ff>"
+route-record-already: "<#3f86ff>✖ Recording is already running — stop it with <white>/gps route record stop</white>.</#3f86ff>"
+route-saved: "<#8fe9f5>✔</#8fe9f5> <gray>Route</gray> <white><bold>{name}</bold></white> <gray>saved: points</gray> <#8fc6ff>{count}</#8fc6ff><gray>, length</gray> <#8fc6ff>{length}</#8fc6ff><gray>. Road graph rebuilt.</gray>"
+route-exists: "<#3f86ff>✖ A route named <white><bold>{name}</bold></white> already exists.</#3f86ff>"
 arrival: "<#8fe9f5><bold>✔ DESTINATION REACHED</bold></#8fe9f5>"
 
 # --- Hints: the same blue ladder, from light to dark ---

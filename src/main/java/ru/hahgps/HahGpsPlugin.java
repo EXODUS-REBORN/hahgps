@@ -9,6 +9,8 @@ import ru.hahgps.gui.InputManager;
 import ru.hahgps.listener.ChatInputListener;
 import ru.hahgps.listener.GuiListener;
 import ru.hahgps.listener.PlayerQuitListener;
+import ru.hahgps.listener.RouteRecordListener;
+import ru.hahgps.listener.WorldLoadListener;
 import ru.hahgps.service.*;
 import ru.hahgps.storage.DataService;
 import ru.hahgps.storage.MysqlStorageProvider;
@@ -42,10 +44,9 @@ public class HahGpsPlugin extends JavaPlugin {
     private GraphService graphService;
     private VisualizationService visualizationService;
     private HudService hudService;
+    private RouteRecordingService routeRecordingService;
 
     private volatile boolean hotSwapping;
-
-    private volatile boolean ready = false;
 
     @Override
     public void onEnable() {
@@ -84,7 +85,7 @@ public class HahGpsPlugin extends JavaPlugin {
                     configManager.getMysqlDatabase(),
                     configManager.getMysqlUsername(),
                     configManager.getMysqlPassword(),
-                    false);
+                    configManager.getMysqlUseSsl());
         } else {
             File dbFile = new File(getDataFolder(), configManager.getSqliteFile());
             storageProvider = new SqliteStorageProvider(dbFile);
@@ -169,6 +170,7 @@ public class HahGpsPlugin extends JavaPlugin {
             mapService = new MapService(this);
             visualizationService = new VisualizationService(graphService);
             hudService = new HudService();
+            routeRecordingService = new RouteRecordingService();
             commandManager = new CommandManager(this);
 
             categoryService.seedDefaults(configManager.getDefaultCategories())
@@ -188,19 +190,19 @@ public class HahGpsPlugin extends JavaPlugin {
             Bukkit.getPluginManager().registerEvents(new GuiListener(), this);
             Bukkit.getPluginManager().registerEvents(new ChatInputListener(), this);
             Bukkit.getPluginManager().registerEvents(new PlayerQuitListener(), this);
+            Bukkit.getPluginManager().registerEvents(new WorldLoadListener(this), this);
+            Bukkit.getPluginManager().registerEvents(new RouteRecordListener(this), this);
 
             navigationService.start();
             Bukkit.getScheduler().runTaskTimer(this, () -> visualizationService.tick(), 20L, 20L);
 
             initUpdater();
 
-            ready = true;
             ConsoleBanner.printBanner(this, getPluginMeta().getVersion());
             getLogger().info("HahGps enabled. Storage: " + configManager.getStorageType());
         } catch (Throwable t) {
 
             getLogger().log(Level.SEVERE, "HahGps: startup failed", t);
-            ready = false;
             failStartup();
         }
     }
@@ -216,9 +218,6 @@ public class HahGpsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        ready = false;
-
-
         UpdaterService service = updater;
         updater = null;
         if (service != null) {
@@ -239,6 +238,13 @@ public class HahGpsPlugin extends JavaPlugin {
             }
         } catch (Throwable t) {
             getLogger().log(Level.WARNING, "HahGps: map stop failed", t);
+        }
+        try {
+            if (routeService != null) {
+                routeService.shutdown();
+            }
+        } catch (Throwable t) {
+            getLogger().log(Level.WARNING, "HahGps: route service stop failed", t);
         }
         try {
             if (visualizationService != null) {
@@ -282,10 +288,6 @@ public class HahGpsPlugin extends JavaPlugin {
         }
 
         getLogger().info("HahGps disabled.");
-    }
-
-    public boolean isReady() {
-        return ready;
     }
 
     public static HahGpsPlugin getInstance() {
@@ -346,6 +348,10 @@ public class HahGpsPlugin extends JavaPlugin {
 
     public HudService getHudService() {
         return hudService;
+    }
+
+    public RouteRecordingService getRouteRecordingService() {
+        return routeRecordingService;
     }
 
     public boolean isHotSwapping() {

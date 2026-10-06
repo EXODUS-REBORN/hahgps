@@ -4,10 +4,17 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Граф дорог. Наружу отдаётся только для чтения: изменяющие методы вызываются
+ * исключительно на приватной копии, которую публикует {@code GraphService}.
+ * Списки смежности возвращаются как неизменяемые представления, поэтому
+ * опубликованный граф безопасно читать из другого потока.
+ */
 public class RoadGraph {
 
     private final List<GraphNode> nodes = new ArrayList<>();
@@ -19,21 +26,44 @@ public class RoadGraph {
     }
 
     public void addEdge(GraphNode from, GraphNode to, Set<TransportType> allowedTransport) {
+        if (from == null || to == null || allowedTransport == null || allowedTransport.isEmpty()) {
+            return;
+        }
         double weight = from.distanceTo(to);
         if (weight == Double.MAX_VALUE) {
             return;
         }
+        Set<TransportType> types = allowedTransport.isEmpty()
+                ? EnumSet.noneOf(TransportType.class)
+                : EnumSet.copyOf(allowedTransport);
         adjacency.computeIfAbsent(from.getId(), k -> new ArrayList<>())
-                .add(new GraphEdge(from, to, weight, allowedTransport));
+                .add(new GraphEdge(from, to, weight, types));
         adjacency.computeIfAbsent(to.getId(), k -> new ArrayList<>())
-                .add(new GraphEdge(to, from, weight, allowedTransport));
+                .add(new GraphEdge(to, from, weight, types));
     }
 
     public void removeEdge(GraphNode from, GraphNode to) {
-        adjacency.getOrDefault(from.getId(), new ArrayList<>())
+        adjacency.computeIfAbsent(from.getId(), k -> new ArrayList<>())
                 .removeIf(e -> e.getTo().equals(to));
-        adjacency.getOrDefault(to.getId(), new ArrayList<>())
-                .removeIf(e -> e.getFrom().equals(from));
+        adjacency.computeIfAbsent(to.getId(), k -> new ArrayList<>())
+                .removeIf(e -> e.getTo().equals(from));
+    }
+
+    /** Копия для правки: узлы общие (неизменяемы), списки смежности — свои. */
+    public RoadGraph copy() {
+        RoadGraph out = new RoadGraph();
+        Set<Integer> copied = new HashSet<>();
+        for (Map.Entry<Integer, List<GraphEdge>> entry : adjacency.entrySet()) {
+            out.adjacency.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+            copied.add(entry.getKey());
+        }
+        for (GraphNode node : nodes) {
+            out.nodes.add(node);
+            if (!copied.contains(node.getId())) {
+                out.adjacency.put(node.getId(), new ArrayList<>());
+            }
+        }
+        return out;
     }
 
     public List<GraphNode> getNodes() {
@@ -45,8 +75,12 @@ public class RoadGraph {
     }
 
     public List<GraphEdge> getEdges(GraphNode node, TransportType type) {
+        List<GraphEdge> source = adjacency.getOrDefault(node.getId(), Collections.emptyList());
+        if (type == null) {
+            return Collections.unmodifiableList(source);
+        }
         List<GraphEdge> result = new ArrayList<>();
-        for (GraphEdge edge : adjacency.getOrDefault(node.getId(), Collections.emptyList())) {
+        for (GraphEdge edge : source) {
             if (edge.allows(type)) {
                 result.add(edge);
             }
@@ -58,15 +92,26 @@ public class RoadGraph {
         return nodes.isEmpty();
     }
 
-    public GraphNode findNearestNode(Location location) {
+    public int size() {
+        return nodes.size();
+    }
+
+    public GraphNode findNearestNode(Location location, TransportType type) {
+        if (location == null || location.getWorld() == null) {
+            return null;
+        }
         GraphNode nearest = null;
         double min = Double.MAX_VALUE;
         for (GraphNode node : nodes) {
-            if (node.getLocation().getWorld() == null
-                    || !node.getLocation().getWorld().equals(location.getWorld())) {
+            Location nodeLoc = node.getLocation();
+            if (nodeLoc == null || nodeLoc.getWorld() == null
+                    || !nodeLoc.getWorld().equals(location.getWorld())) {
                 continue;
             }
-            double d = node.getLocation().distance(location);
+            if (type != null && !hasEdgeFor(node, type)) {
+                continue;
+            }
+            double d = nodeLoc.distance(location);
             if (d < min) {
                 min = d;
                 nearest = node;
@@ -75,31 +120,13 @@ public class RoadGraph {
         return nearest;
     }
 
-    public GraphNode findNearestNode(Location location, TransportType type) {
-        GraphNode nearest = null;
-        double min = Double.MAX_VALUE;
-        for (GraphNode node : nodes) {
-            if (node.getLocation().getWorld() == null
-                    || !node.getLocation().getWorld().equals(location.getWorld())) {
-                continue;
-            }
-            boolean hasEdge = false;
-            for (GraphEdge edge : adjacency.getOrDefault(node.getId(), Collections.emptyList())) {
-                if (edge.allows(type)) {
-                    hasEdge = true;
-                    break;
-                }
-            }
-            if (!hasEdge) {
-                continue;
-            }
-            double d = node.getLocation().distance(location);
-            if (d < min) {
-                min = d;
-                nearest = node;
+    private boolean hasEdgeFor(GraphNode node, TransportType type) {
+        for (GraphEdge edge : adjacency.getOrDefault(node.getId(), Collections.emptyList())) {
+            if (edge.allows(type)) {
+                return true;
             }
         }
-        return nearest;
+        return false;
     }
 
     public void clear() {

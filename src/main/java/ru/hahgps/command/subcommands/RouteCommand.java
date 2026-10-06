@@ -9,7 +9,9 @@ public class RouteCommand implements SubCommand {
 
     private final List<SubCommand> children = List.of(
             new RouteStartCommand(),
-            new RouteStopCommand()
+            new RouteStopCommand(),
+            new RouteRecordCommand(),
+            new RouteSaveCommand()
     );
 
     @Override
@@ -19,7 +21,7 @@ public class RouteCommand implements SubCommand {
 
     @Override
     public String usage() {
-        return "/gps route <start|stop>";
+        return "/gps route <start|stop|record|save>";
     }
 
     @Override

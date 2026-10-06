@@ -77,18 +77,17 @@ public class PoiService {
     }
 
     public CompletableFuture<List<Poi>> loadAllPoisWithRatings() {
-        return dataService.getPois().thenCompose(pois -> {
-            List<CompletableFuture<Void>> futures = pois.stream()
-                    .map(poi -> dataService.getRatings(poi.getId()).thenAccept(ratings -> {
-                        if (!ratings.isEmpty()) {
-                            double avg = ratings.values().stream().mapToInt(Integer::intValue).average().orElse(0);
-                            poi.setRating(avg);
-                            poi.setRatingCount(ratings.size());
-                        }
-                    }))
-                    .toList();
-            return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                    .thenApply(v -> pois);
+        return dataService.getPois().thenCombine(dataService.getAllRatings(), (pois, ratings) -> {
+            for (Poi poi : pois) {
+                Map<UUID, Integer> own = ratings.get(poi.getId());
+                if (own == null || own.isEmpty()) {
+                    continue;
+                }
+                double avg = own.values().stream().mapToInt(Integer::intValue).average().orElse(0);
+                poi.setRating(avg);
+                poi.setRatingCount(own.size());
+            }
+            return pois;
         });
     }
 
