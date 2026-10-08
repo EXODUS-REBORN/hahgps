@@ -24,26 +24,71 @@ public class MessagesManager {
         this.plugin = plugin;
     }
 
+    /**
+     * Загрузка сообщений выбранного языка.
+     *
+     * Любая ошибка (нет бандла, битый YAML) не должна ронять плагин:
+     * остаёмся на встроенном эталоне из jar, а если и его нет — на дефолтах
+     * предыдущего состояния. Поля подменяются только после полного успеха,
+     * иначе getLanguage() врал бы про язык, которого фактически нет.
+     */
     public void load(String language) {
-        this.language = language;
+        String lang = resolveLanguage(language);
 
+        YamlConfiguration bundled = loadBundled(lang);
 
-        this.defaults = loadBundled(language);
-
-        File file = new File(plugin.getDataFolder(), "messages_" + language + ".yml");
+        File file = new File(plugin.getDataFolder(), "messages_" + lang + ".yml");
         if (!file.exists()) {
-            plugin.saveResource("messages_" + language + ".yml", false);
+            try {
+                plugin.saveResource("messages_" + lang + ".yml", false);
+            } catch (IllegalArgumentException missing) {
+                plugin.getLogger().warning("HahGps: в плагине нет messages_" + lang
+                        + ".yml — использую встроенные тексты.");
+            }
         }
-        this.messages = YamlConfiguration.loadConfiguration(file);
 
+        YamlConfiguration loaded = null;
+        if (file.exists()) {
+            try {
+                loaded = YamlConfiguration.loadConfiguration(file);
+            } catch (Exception e) {
+                plugin.getLogger().warning("HahGps: не удалось прочитать messages_" + lang
+                        + ".yml (" + e.getMessage() + ") — использую встроенные тексты.");
+            }
+        }
+        if (loaded == null && bundled == null) {
+            // Нет ни файла, ни эталона: язык не поддерживаем, откат на русский.
+            if (!"ru".equals(lang)) {
+                load("ru");
+            }
+            return;
+        }
 
-        int fileVersion = this.messages.getInt("palette-version", 1);
-        if (defaults != null) {
-            this.messages.setDefaults(defaults);
-            this.messages.options().copyDefaults(true);
+        this.language = lang;
+        this.defaults = bundled;
+        this.messages = loaded != null ? loaded : bundled;
+
+        // Кэш чистим ДО подмены полей: иначе конкурентный get(), прочитавший
+        // старый messages между присвоениями, может оставить протухшую запись.
+        this.cache.clear();
+
+        if (this.messages != null && this.messages != bundled) {
+            int fileVersion = this.messages.getInt("palette-version", 1);
+            if (bundled != null) {
+                this.messages.setDefaults(bundled);
+                this.messages.options().copyDefaults(true);
+            }
             migrate(file, fileVersion);
         }
-        this.cache.clear();
+    }
+
+    /** Нормализация языка: пустое/битое/неподдержанное значение даёт ru. */
+    private String resolveLanguage(String language) {
+        if (language == null || language.isBlank()) {
+            return "ru";
+        }
+        String lang = language.toLowerCase(java.util.Locale.ROOT);
+        return lang.equals("ru") || lang.equals("en") ? lang : "ru";
     }
 
     private YamlConfiguration loadBundled(String lang) {
@@ -76,6 +121,9 @@ public class MessagesManager {
             }
         }
         if (changed) {
+            // Версию выставляем и здесь: иначе ремап палитры повторялся бы
+            // на каждом старте и перекрашивал бы осознанно изменённые админом цвета.
+            messages.set("palette-version", PALETTE_VERSION);
             save(file, "Сообщения обновлены до палитры hahtojer");
         }
     }
