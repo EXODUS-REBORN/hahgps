@@ -110,17 +110,27 @@ public class EdgeCommand implements SubCommand {
         @Override
         public List<String> tabComplete(Player player, String[] args) {
             if (args.length == 1 || args.length == 2) {
+                // Фильтр по префиксу и лимит: граф может содержать тысячи
+                // узлов, а Tab-complete идёт в главном потоке.
+                String prefix = args.length == 1 ? args[0] : "";
                 List<String> ids = new ArrayList<>();
                 var graphService = HahGpsPlugin.getInstance().getGraphService();
                 if (graphService != null) {
                     for (var node : graphService.getNodes()) {
-                        ids.add(String.valueOf(node.getId()));
+                        String id = String.valueOf(node.getId());
+                        if (id.startsWith(prefix)) {
+                            ids.add(id);
+                        }
+                        if (ids.size() >= 100) {
+                            break;
+                        }
                     }
                 }
                 return ids;
             }
             if (args.length == 3) {
-                return List.of("foot,car", "foot,car,transit", "foot,car,transit,air,water");
+                return SubCommand.filterByPrefix(
+                        List.of("foot,car", "foot,car,transit", "foot,car,transit,air,water"), args[0]);
             }
             return List.of();
         }

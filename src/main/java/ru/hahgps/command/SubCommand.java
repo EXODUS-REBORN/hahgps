@@ -42,6 +42,25 @@ public interface SubCommand {
         return null;
     }
 
+    /**
+     * Подсказки, отфильтрованные по префиксу. Tab-complete идёт в главном
+     * потоке, поэтому длинные списки (все точки, все узлы графа) режутся
+     * ещё и по количеству.
+     */
+    static List<String> filterByPrefix(List<String> options, String prefix) {
+        String lower = prefix == null ? "" : prefix.toLowerCase(java.util.Locale.ROOT);
+        List<String> out = new java.util.ArrayList<>();
+        for (String option : options) {
+            if (option.toLowerCase(java.util.Locale.ROOT).startsWith(lower)) {
+                out.add(option);
+            }
+            if (out.size() >= 100) {
+                break;
+            }
+        }
+        return out;
+    }
+
 
     static void sendError(Player player, Throwable error) {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
@@ -93,8 +112,10 @@ public interface SubCommand {
             } else {
                 Bukkit.getScheduler().runTask(plugin, task);
             }
-        } catch (Throwable ignored) {
-
+        } catch (Throwable t) {
+            // Не молча: иначе любой сбой планировщика выглядел бы как
+            // «команда просто ничего не сделала».
+            plugin.getLogger().log(Level.FINE, "HahGps: не удалось выйти на главный поток", t);
         }
     }
 }

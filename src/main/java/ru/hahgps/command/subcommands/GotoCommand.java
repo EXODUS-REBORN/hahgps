@@ -78,7 +78,10 @@ public class GotoCommand implements SubCommand {
         if (args.length == 2) {
             List<String> types = new java.util.ArrayList<>();
             for (TransportType t : TransportType.values()) {
-                types.add(t.getKey());
+                // Подсказываем только включённые в config.yml транспорты.
+                if (HahGpsPlugin.getInstance().getConfigManager().isTransportAvailable(t.getKey())) {
+                    types.add(t.getKey());
+                }
             }
             return types;
         }

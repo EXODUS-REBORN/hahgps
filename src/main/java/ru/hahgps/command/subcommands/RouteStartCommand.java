@@ -40,6 +40,12 @@ public class RouteStartCommand implements SubCommand {
                         "usage", usage()));
                 return;
             }
+            // Транспорт, выключенный в config.yml, не должен проходить тут в обход GUI.
+            if (!plugin.getConfigManager().isTransportAvailable(transport.getKey())) {
+                player.sendMessage(plugin.getMessages().getPrefixed("transport-disabled",
+                        "transport", transport.getKey()));
+                return;
+            }
         }
         final TransportType finalTransport = transport;
         plugin.getPoiService().loadPoiWithRating(name).whenComplete((poi, error) -> {
@@ -72,7 +78,10 @@ public class RouteStartCommand implements SubCommand {
         if (args.length == 2) {
             List<String> types = new java.util.ArrayList<>();
             for (TransportType t : TransportType.values()) {
-                types.add(t.getKey());
+                // Подсказываем только то, что включено в config.yml.
+                if (HahGpsPlugin.getInstance().getConfigManager().isTransportAvailable(t.getKey())) {
+                    types.add(t.getKey());
+                }
             }
             return types;
         }

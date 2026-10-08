@@ -59,7 +59,8 @@ public class PointRateCommand implements SubCommand {
                 });
                 return;
             }
-            plugin.getPoiService().ratePoi(name, player.getUniqueId(), finalRating)
+            // Точка уже найдена выше: оцениваем по id, а не резолвим имя в БД второй раз.
+            plugin.getDataService().setRating(poi.getId(), player.getUniqueId(), finalRating)
                     .whenComplete((v, rateError) -> plugin.getDataService().runSync(() -> {
                         if (!player.isOnline()) {
                             return;

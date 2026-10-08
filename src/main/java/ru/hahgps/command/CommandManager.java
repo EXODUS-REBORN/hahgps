@@ -51,6 +51,10 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             // Консоль тоже должна уметь перезагрузить конфиг — раньше /gps
             // целиком отбивался сообщением «только для игроков».
             if (args.length >= 1 && args[0].equalsIgnoreCase("reload")) {
+                if (!sender.hasPermission("gps.reload")) {
+                    sender.sendMessage("HahGps: нужна права gps.reload.");
+                    return true;
+                }
                 plugin.getConfigManager().reload();
                 plugin.getMessages().reload(plugin.getConfigManager().getLanguage());
                 sender.sendMessage("HahGps: конфигурация и сообщения перезагружены.");
@@ -66,6 +70,10 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         }
 
         if (args[0].equalsIgnoreCase("off")) {
+            if (!player.hasPermission("gps.use")) {
+                player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
+                return true;
+            }
             if (!plugin.getNavigationService().isNavigating(player)) {
                 player.sendMessage(plugin.getMessages().getPrefixed("no-active-route"));
                 return true;

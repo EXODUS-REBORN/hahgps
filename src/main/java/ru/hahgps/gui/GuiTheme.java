@@ -196,7 +196,7 @@ public final class GuiTheme {
     }
 
 
-    static String escapeForMini(String s) {
+    public static String escapeForMini(String s) {
         if (s == null) return "";
 
 

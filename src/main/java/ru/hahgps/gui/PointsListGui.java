@@ -84,7 +84,10 @@ public class PointsListGui extends GuiScreen {
         if (page < pages - 1) {
             inventory.setItem(navRow + 8, GuiTheme.navForward(getMsg("gui.next-page")));
         }
-        inventory.setItem(navRow + 4, GuiUtil.item(Material.BOOK,
+        // Индикатор страницы — на slot 50. Раньше он стоял на 49, который
+        // onClick обрабатывает как «в главное меню»: подпись «Страница 1/3»
+        // на кнопке, уводящей в меню, — обман.
+        inventory.setItem(navRow + 5, GuiUtil.item(Material.BOOK,
                 comp("gui.page-info",
                         "page", String.valueOf(page + 1), "pages", String.valueOf(pages))));
         inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));

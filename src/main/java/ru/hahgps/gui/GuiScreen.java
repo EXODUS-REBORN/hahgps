@@ -131,8 +131,13 @@ public abstract class GuiScreen implements InventoryHolder {
                 notify.run();
             } else if (plugin.getDataService() != null) {
                 plugin.getDataService().runSync(notify);
-            } else {
-                notify.run();
+            } else if (plugin.isEnabled()) {
+                // Сервиса данных нет, но плагин жив: выходим в главный поток
+                // напрямую. Отправка сообщений из async — неопределённость.
+                try {
+                    Bukkit.getScheduler().runTask(plugin, notify);
+                } catch (Throwable ignored) {
+                }
             }
         } catch (Throwable ignored) {
 

@@ -1,6 +1,7 @@
 package ru.hahgps.gui;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import ru.hahgps.HahGpsPlugin;
 
 import java.util.Map;
 import java.util.UUID;
@@ -30,25 +31,35 @@ public class InputManager {
     }
 
     public boolean handleChat(Player player, String message) {
-        Pending entry = pending.remove(player.getUniqueId());
+        Pending entry = pending.get(player.getUniqueId());
         if (entry == null) {
             return false;
         }
         if (System.currentTimeMillis() - entry.createdAt() > TIMEOUT_MS) {
-
+            // Просрочено: снимаем промпт и честно предупреждаем. Раньше запись
+            // удалялась до проверки, и фраза молча уходила в публичный чат.
+            pending.remove(player.getUniqueId());
+            player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+                    .deserialize("<gray>Время ввода истекло — начните заново.</gray>"));
             return false;
         }
-        // Событие чата в Paper асинхронное: колбэк трогает инвентари, сообщения
-        // и сервисы, поэтому переносим его в главный поток.
+        pending.remove(player.getUniqueId());
+        // Событие чата в Paper асинхронное: колбэк трогает инвентари,
+        // сообщения и сервисы, поэтому переносим его в главный поток.
         if (Bukkit.isPrimaryThread()) {
             accept(entry, message);
-        } else {
-            try {
-                Bukkit.getScheduler().runTask(ru.hahgps.HahGpsPlugin.getInstance(),
-                        () -> accept(entry, message));
-            } catch (Throwable t) {
-                accept(entry, message);
-            }
+            return true;
+        }
+        HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+        if (plugin == null || !plugin.isEnabled()) {
+            return true;
+        }
+        try {
+            Bukkit.getScheduler().runTask(plugin, () -> accept(entry, message));
+        } catch (Throwable t) {
+            // Никакого fallback'а в async-потоке: колбэки трогают инвентари и
+            // БД, и выполнение их мимо главного потока — неопределённость.
+            Bukkit.getLogger().warning("[HahGps] Не удалось выйти в главный поток для ввода: " + t);
         }
         return true;
     }
