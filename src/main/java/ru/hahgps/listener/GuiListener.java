@@ -8,6 +8,7 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryType;
 import ru.hahgps.gui.GuiManager;
 import ru.hahgps.gui.GuiScreen;
+import ru.hahgps.gui.InputManager;
 
 public class GuiListener implements Listener {
 
@@ -22,6 +23,9 @@ public class GuiListener implements Listener {
             if (event.getView() != null && event.getView().getTopInventory() != null
                     && event.getView().getTopInventory().getHolder() instanceof GuiScreen) {
                 event.setCancelled(true);
+                // Заодно снимаем висящий чат-ввод: иначе после force-close
+                // следующее сообщение игрока уйдёт в чужой колбэк.
+                InputManager.getInstance().remove(player);
                 player.closeInventory();
             }
             return;
