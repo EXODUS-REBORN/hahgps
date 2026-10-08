@@ -30,7 +30,9 @@ public class GraphEdge {
     }
 
     public Set<TransportType> getAllowedTransport() {
-        return allowedTransport;
+        // Неизменяемый вид: COW-модель RoadGraph обещает, что опубликованный
+        // граф никто не сломает извне.
+        return java.util.Collections.unmodifiableSet(allowedTransport);
     }
 
     public boolean allows(TransportType type) {

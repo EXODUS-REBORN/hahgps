@@ -33,20 +33,43 @@ public class RoadGraph {
         if (weight == Double.MAX_VALUE) {
             return;
         }
-        Set<TransportType> types = allowedTransport.isEmpty()
-                ? EnumSet.noneOf(TransportType.class)
-                : EnumSet.copyOf(allowedTransport);
+        Set<TransportType> types = EnumSet.copyOf(allowedTransport);
         adjacency.computeIfAbsent(from.getId(), k -> new ArrayList<>())
                 .add(new GraphEdge(from, to, weight, types));
         adjacency.computeIfAbsent(to.getId(), k -> new ArrayList<>())
                 .add(new GraphEdge(to, from, weight, types));
     }
 
+    /**
+     * Заменить ребро между парой узлов: снять существующие и добавить с
+     * указанными типами. Пустой набор типов = снять ребро полностью.
+     */
+    public void replaceEdge(GraphNode from, GraphNode to, Set<TransportType> allowedTransport) {
+        removeEdge(from, to);
+        if (allowedTransport != null && !allowedTransport.isEmpty()) {
+            addEdge(from, to, allowedTransport);
+        }
+    }
+
     public void removeEdge(GraphNode from, GraphNode to) {
-        adjacency.computeIfAbsent(from.getId(), k -> new ArrayList<>())
-                .removeIf(e -> e.getTo().equals(to));
-        adjacency.computeIfAbsent(to.getId(), k -> new ArrayList<>())
-                .removeIf(e -> e.getTo().equals(from));
+        // Снимаем только по одному ребру в каждую сторону: между парой узлов
+        // может проходить несколько физических маршрутов, и removeIf по
+        // предикателю убирал бы их все разом.
+        removeFirst(from.getId(), to);
+        removeFirst(to.getId(), from);
+    }
+
+    private void removeFirst(int ownerId, GraphNode target) {
+        List<GraphEdge> edges = adjacency.get(ownerId);
+        if (edges == null) {
+            return;
+        }
+        for (int i = 0; i < edges.size(); i++) {
+            if (edges.get(i).getTo().equals(target)) {
+                edges.remove(i);
+                return;
+            }
+        }
     }
 
     /** Копия для правки: узлы общие (неизменяемы), списки смежности — свои. */
@@ -105,13 +128,13 @@ public class RoadGraph {
         for (GraphNode node : nodes) {
             Location nodeLoc = node.getLocation();
             if (nodeLoc == null || nodeLoc.getWorld() == null
-                    || !nodeLoc.getWorld().equals(location.getWorld())) {
+                    || !ru.hahgps.util.LocationUtil.sameWorld(nodeLoc.getWorld(), location.getWorld())) {
                 continue;
             }
             if (type != null && !hasEdgeFor(node, type)) {
                 continue;
             }
-            double d = nodeLoc.distance(location);
+            double d = ru.hahgps.util.LocationUtil.distance(nodeLoc, location);
             if (d < min) {
                 min = d;
                 nearest = node;

@@ -28,10 +28,10 @@ public class GraphNode {
 
     public double distanceTo(GraphNode other) {
         if (location.getWorld() == null || other.location.getWorld() == null
-                || !location.getWorld().equals(other.location.getWorld())) {
+                || !ru.hahgps.util.LocationUtil.sameWorld(location.getWorld(), other.location.getWorld())) {
             return Double.MAX_VALUE;
         }
-        return location.distance(other.location);
+        return ru.hahgps.util.LocationUtil.distance(location, other.location);
     }
 
     @Override

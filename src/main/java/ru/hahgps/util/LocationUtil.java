@@ -7,21 +7,42 @@ import java.util.Locale;
 public final class LocationUtil {
     private LocationUtil() {
     }
+    /**
+     * Один и тот же мир?
+     *
+     * {@link World} не переопределяет equals/hashCode, а объект мира после
+     * перезагрузки (Multiverse, /mv reload) — новый. Сравнение по идентичности
+     * объекта после первой перезагрузки мира объявляло «разные миры» одним и
+     * тем же миром: навигация и граф молча умирали. Имя мира — стабильный ключ.
+     */
+    public static boolean sameWorld(World a, World b) {
+        return a == b || (a != null && b != null && a.getName().equals(b.getName()));
+    }
+
+    /**
+     * Евклидово расстояние. Для миров с одинаковым именем, но разными
+     * инстансами (после перезагрузки мира) считаем по координатам: штатный
+     * {@link Location#distance} требует идентичности объекта мира и бросает
+     * IllegalArgumentException.
+     */
     public static double distance(Location a, Location b) {
-        if (a.getWorld() == null || b.getWorld() == null) {
+        if (a == null || b == null || a.getWorld() == null || b.getWorld() == null) {
             return Double.MAX_VALUE;
         }
-        if (!a.getWorld().equals(b.getWorld())) {
+        if (!sameWorld(a.getWorld(), b.getWorld())) {
             return Double.MAX_VALUE;
         }
-        return a.distance(b);
+        double dx = a.getX() - b.getX();
+        double dy = a.getY() - b.getY();
+        double dz = a.getZ() - b.getZ();
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
     public static double distanceHorizontal(Location a, Location b) {
-        if (a.getWorld() == null || b.getWorld() == null) {
+        if (a == null || b == null || a.getWorld() == null || b.getWorld() == null) {
             return Double.MAX_VALUE;
         }
-        if (!a.getWorld().equals(b.getWorld())) {
+        if (!sameWorld(a.getWorld(), b.getWorld())) {
             return Double.MAX_VALUE;
         }
         double dx = a.getX() - b.getX();

@@ -47,7 +47,8 @@ public class NavigationSession {
     }
 
     public List<Location> getPath() {
-        return path;
+        // Неизменяемый вид: путь читает карта, и писать в него извне нельзя.
+        return java.util.Collections.unmodifiableList(path);
     }
 
     public double getTotalDistance() {

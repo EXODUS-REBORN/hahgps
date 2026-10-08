@@ -1,11 +1,8 @@
 package ru.hahgps.model;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.World;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import org.bukkit.Location;
 
 public class Route {
 
@@ -25,7 +22,8 @@ public class Route {
         this.transport = transport;
         this.createdBy = createdBy;
         this.createdAt = createdAt;
-        this.nodes = nodes != null ? nodes : new ArrayList<>();
+        // Копия: иначе вызывающий держит тот же список, а владелец — нет.
+        this.nodes = nodes != null ? new ArrayList<>(nodes) : new ArrayList<>();
     }
 
     public int getId() {
@@ -65,22 +63,11 @@ public class Route {
         for (int i = 1; i < nodes.size(); i++) {
             Location a = nodes.get(i - 1);
             Location b = nodes.get(i);
-            if (a.getWorld() != null && a.getWorld().equals(b.getWorld())) {
-                length += a.distance(b);
+            if (a.getWorld() != null && b.getWorld() != null
+                    && ru.hahgps.util.LocationUtil.sameWorld(a.getWorld(), b.getWorld())) {
+                length += ru.hahgps.util.LocationUtil.distance(a, b);
             }
         }
         return length;
-    }
-
-    public static List<Location> toNodeList(String worldName, List<double[]> coords) {
-        List<Location> list = new ArrayList<>();
-        World world = Bukkit.getWorld(worldName);
-        if (world == null) {
-            return list;
-        }
-        for (double[] c : coords) {
-            list.add(new Location(world, c[0], c[1], c[2]));
-        }
-        return list;
     }
 }
