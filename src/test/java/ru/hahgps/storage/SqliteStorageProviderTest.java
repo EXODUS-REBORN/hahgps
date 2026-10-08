@@ -9,10 +9,12 @@ import org.junit.jupiter.api.io.TempDir;
 import ru.hahgps.model.Category;
 import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
+import ru.hahgps.model.TransportType;
 import ru.hahgps.testsupport.FakeWorld;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -208,5 +210,68 @@ class SqliteStorageProviderTest {
         } finally {
             reopened.close();
         }
+    }
+    @Test
+    void schemaVersionIsWritten() {
+        assertEquals(AbstractSqlStorageProvider.SCHEMA_VERSION, provider.schemaVersion(),
+                "версия схемы должна попадать в meta — на ней строятся миграции");
+    }
+
+    @Test
+    void savedEdgesSurviveReopen() throws Exception {
+        provider.saveEdge(new ru.hahgps.model.EdgeRecord("world",
+                1, 64, 2, 10, 64, 5, EnumSet.of(TransportType.FOOT, TransportType.CAR)));
+        provider.close();
+
+        TestProvider reopened = new TestProvider(
+                tempDir.resolve("hahgps.db").toFile(), Map.of("world", WORLD));
+        reopened.init();
+        try {
+            List<ru.hahgps.model.EdgeRecord> edges = reopened.getEdges();
+            assertEquals(1, edges.size());
+            ru.hahgps.model.EdgeRecord edge = edges.get(0);
+            assertEquals("world", edge.world());
+            assertEquals(EnumSet.of(TransportType.FOOT, TransportType.CAR), edge.transports());
+        } finally {
+            reopened.close();
+        }
+    }
+
+    @Test
+    void saveEdgeReplacesEdgeWithSameEndpoints() {
+        provider.saveEdge(new ru.hahgps.model.EdgeRecord("world",
+                1, 64, 2, 10, 64, 5, EnumSet.of(TransportType.FOOT)));
+        provider.saveEdge(new ru.hahgps.model.EdgeRecord("world",
+                10, 64, 5, 1, 64, 2, EnumSet.of(TransportType.FOOT, TransportType.CAR)));
+
+        List<ru.hahgps.model.EdgeRecord> edges = provider.getEdges();
+        assertEquals(1, edges.size(), "ребро с теми же концами заменяется, а не дублируется");
+        assertEquals(2, edges.get(0).transports().size());
+    }
+
+    @Test
+    void deleteEdgeRemovesOnlyGivenPair() {
+        provider.saveEdge(new ru.hahgps.model.EdgeRecord("world",
+                1, 64, 2, 10, 64, 5, EnumSet.of(TransportType.FOOT)));
+        provider.saveEdge(new ru.hahgps.model.EdgeRecord("world",
+                10, 64, 5, 20, 64, 8, EnumSet.of(TransportType.FOOT)));
+
+        provider.deleteEdge(new ru.hahgps.model.EdgeRecord("world",
+                1, 64, 2, 10, 64, 5, EnumSet.of(TransportType.FOOT)));
+
+        assertEquals(1, provider.getEdges().size());
+    }
+
+    @Test
+    void malformedRatingRowDoesNotBreakRatingLoad() throws Exception {
+        // Битая строка UUID: getRatings обязан её пропустить, как getAllRatings.
+        try (var st = provider.connection.createStatement()) {
+            st.execute("INSERT INTO categories (name, is_default) VALUES ('c', 0)");
+            st.execute("INSERT INTO pois (name, category_id, world, x, y, z, description, author, created_at) "
+                    + "VALUES ('p', 1, 'world', 0, 64, 0, '', 't', 1)");
+            st.execute("INSERT INTO ratings (poi_id, player_uuid, rating) VALUES (1, 'not-a-uuid', 5)");
+        }
+        Map<UUID, Integer> ratings = provider.getRatings(1);
+        assertTrue(ratings.isEmpty(), "битая строка не должна ронять весь ответ");
     }
 }

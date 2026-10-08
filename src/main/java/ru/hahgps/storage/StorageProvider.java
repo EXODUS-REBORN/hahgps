@@ -52,6 +52,15 @@ public interface StorageProvider extends AutoCloseable {
 
     Route getRouteByName(String name);
 
+    /** Все сохранённые админские рёбра графа (между узлами маршрутов). */
+    List<ru.hahgps.model.EdgeRecord> getEdges();
+
+    /** Сохранить (заменить существующее с теми же концами) ребро. */
+    void saveEdge(ru.hahgps.model.EdgeRecord edge);
+
+    /** Удалить ребро с этими концами. */
+    void deleteEdge(ru.hahgps.model.EdgeRecord edge);
+
     @Override
     void close();
 }

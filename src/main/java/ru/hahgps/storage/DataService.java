@@ -5,6 +5,7 @@ import ru.hahgps.model.Route;
 import org.bukkit.Bukkit;
 import ru.hahgps.HahGpsPlugin;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -19,8 +20,10 @@ import java.util.logging.Level;
  *
  * Кэш существует для того, чтобы команды, GUI и карта не били в БД на каждое
  * открытие (кэш читается через {@code getCachedPois}/{@code getCachedCategories}).
- * Каждое обращение к провайдеру уходит в собственный пул из двух потоков: главный
- * поток сервера на SQL не ходит никогда.
+ * Обращения к провайдеру уходят в пул: главный поток сервера на SQL не ходит
+ * никогда. Пул из двух потоков, но соединение с БД одно и методы провайдера
+ * синхронизированы — параллельных запросов не бывает, второй поток только
+ * разгружает планирование.
  */
 public class DataService {
 
@@ -32,7 +35,12 @@ public class DataService {
     private final Map<String, Category> categoryByName = new ConcurrentHashMap<>();
     private final Map<Integer, Poi> poiCache = new ConcurrentHashMap<>();
 
+    /** Отсортированный по имени снимок poiCache: список точек открывают часто. */
+    private volatile List<Poi> sortedPois = List.of();
+
     private final List<Route> routeCache = new ArrayList<>();
+    /** Растёт при каждом изменении routeCache: защита от гонки читателя и писателя. */
+    private int routeCacheVersion = 0;
 
     public DataService(HahGpsPlugin plugin, StorageProvider provider) {
         this.plugin = plugin;
@@ -59,13 +67,39 @@ public class DataService {
             for (Poi p : pois) {
                 poiCache.put(p.getId(), p);
             }
+            sortedPois = sortPois(poiCache.values());
 
             List<Route> routes = provider.getRoutes();
             synchronized (routeCache) {
                 routeCache.clear();
                 routeCache.addAll(routes);
+                routeCacheVersion++;
             }
         }, executor);
+    }
+
+    /** Снимок кэша точек, отсортированный по имени (регистронезависимо). */
+    public List<Poi> getCachedPois() {
+        return sortedPois;
+    }
+
+    /**
+     * Сколько точек в каждой категории — по кэшу. Раньше /gps category list
+     * делал по запросу на категорию (N+1) и блокировал единственное
+     * соединение с БД.
+     */
+    public Map<Integer, Long> countPoisByCategoryCached() {
+        Map<Integer, Long> counts = new java.util.HashMap<>();
+        for (Poi poi : poiCache.values()) {
+            counts.merge(poi.getCategoryId(), 1L, Long::sum);
+        }
+        return counts;
+    }
+
+    private static List<Poi> sortPois(java.util.Collection<Poi> values) {
+        List<Poi> out = new ArrayList<>(values);
+        out.sort(java.util.Comparator.comparing(Poi::getName, String.CASE_INSENSITIVE_ORDER));
+        return Collections.unmodifiableList(out);
     }
 
     public Category getCachedCategory(int id) {
@@ -80,10 +114,19 @@ public class DataService {
         return new ArrayList<>(categoryCache.values());
     }
 
-    public List<Poi> getCachedPois() {
-        List<Poi> out = new ArrayList<>(poiCache.values());
-        out.sort(java.util.Comparator.comparing(Poi::getName, String.CASE_INSENSITIVE_ORDER));
-        return out;
+    /**
+     * Сброс кэша маршрутов: после перезагрузки мира в нём висят Location на
+     * мёртвые инстансы World. Вызывается из WorldLoadListener перед
+     * пересборкой графа.
+     */
+    public void invalidateRoutes() {
+        synchronized (routeCache) {
+            if (routeCache.isEmpty()) {
+                return;
+            }
+            routeCache.clear();
+            routeCacheVersion++;
+        }
     }
 
     private <T> CompletableFuture<T> async(Supplier<T> action) {
@@ -151,6 +194,7 @@ public class DataService {
             Poi created = provider.createPoi(poi);
             if (created != null) {
                 poiCache.put(created.getId(), created);
+                sortedPois = sortPois(poiCache.values());
             }
             return created;
         });
@@ -161,6 +205,7 @@ public class DataService {
             boolean result = provider.deletePoi(id);
             if (result) {
                 poiCache.remove(id);
+                sortedPois = sortPois(poiCache.values());
             }
             return result;
         });
@@ -187,6 +232,7 @@ public class DataService {
             boolean result = provider.updatePoi(poi);
             if (result) {
                 poiCache.put(poi.getId(), poi);
+                sortedPois = sortPois(poiCache.values());
             }
             return result;
         });
@@ -227,17 +273,38 @@ public class DataService {
         });
     }
 
+    /**
+     * Маршруты. Кэш тёплый — отдаём снимок, но future ВСЕГДА доисполняется в
+     * пуле: GraphService.loadGraph() строит граф в handle(), а на уже
+     * завершённом future колбэк выполнился бы на вызывающем потоке — то есть
+     * в главном, на каждом WorldLoadEvent.
+     */
     public CompletableFuture<List<Route>> getRoutes() {
-        synchronized (routeCache) {
-            if (!routeCache.isEmpty()) {
-                return CompletableFuture.completedFuture(new ArrayList<>(routeCache));
+        return async(() -> {
+            synchronized (routeCache) {
+                if (!routeCache.isEmpty()) {
+                    return new ArrayList<>(routeCache);
+                }
             }
-        }
-        return async(provider::getRoutes);
+            return provider.getRoutes();
+        });
     }
 
     public CompletableFuture<Route> getRouteByName(String name) {
         return async(() -> provider.getRouteByName(name));
+    }
+
+    /** Сохранённые админские рёбра графа. */
+    public CompletableFuture<List<ru.hahgps.model.EdgeRecord>> getEdgesAsync() {
+        return async(provider::getEdges);
+    }
+
+    public CompletableFuture<Void> saveEdge(ru.hahgps.model.EdgeRecord edge) {
+        return asyncVoid(() -> provider.saveEdge(edge));
+    }
+
+    public CompletableFuture<Void> deleteEdge(ru.hahgps.model.EdgeRecord edge) {
+        return asyncVoid(() -> provider.deleteEdge(edge));
     }
 
     public void runSync(Runnable runnable) {
@@ -256,11 +323,13 @@ public class DataService {
     }
 
     public void shutdown() {
+        // Короткие таймауты: onDisable идёт в главном потоке, а зависшая на
+        // SQLite-блокировке задача (busy_timeout=5s) иначе стояла бы секунды.
         executor.shutdown();
         try {
-            if (!executor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+            if (!executor.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)) {
                 executor.shutdownNow();
-                executor.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS);
+                executor.awaitTermination(1, java.util.concurrent.TimeUnit.SECONDS);
             }
         } catch (InterruptedException e) {
             executor.shutdownNow();

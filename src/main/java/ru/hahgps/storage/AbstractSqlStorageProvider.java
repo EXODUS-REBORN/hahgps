@@ -134,14 +134,68 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                     "world VARCHAR(64) NOT NULL, " +
                     "x DOUBLE NOT NULL, y DOUBLE NOT NULL, z DOUBLE NOT NULL, " +
                     "FOREIGN KEY (route_id) REFERENCES routes(id) ON DELETE CASCADE)");
+
+            // Схема v2: рёбра, добавленные админом через /gps edge, переживают
+            // пересборку графа. Концы храним координатами: id узлов графа
+            // синтезируются заново при каждой загрузке.
+            st.execute("CREATE TABLE IF NOT EXISTS graph_edges (" +
+                    "id INTEGER PRIMARY KEY " + autoIncrement() + ", " +
+                    "world VARCHAR(64) NOT NULL, " +
+                    "x1 DOUBLE NOT NULL, y1 DOUBLE NOT NULL, z1 DOUBLE NOT NULL, " +
+                    "x2 DOUBLE NOT NULL, y2 DOUBLE NOT NULL, z2 DOUBLE NOT NULL, " +
+                    "transports VARCHAR(64) NOT NULL, " +
+                    "created_at BIGINT NOT NULL)");
+
+            st.execute("CREATE TABLE IF NOT EXISTS meta (" +
+                    "key VARCHAR(32) PRIMARY KEY, " +
+                    "value VARCHAR(64) NOT NULL)");
+
+            writeSchemaVersion(st);
         }
         createIndexes();
+    }
+
+    /** Текущая версия схемы: растёт при миграциях. */
+    public static final int SCHEMA_VERSION = 2;
+
+    private void writeSchemaVersion(Statement st) throws SQLException {
+        st.execute(upsertMetaSql());
+    }
+
+    protected String upsertMetaSql() {
+        if (mysql) {
+            return "INSERT INTO meta (key, value) VALUES ('schema_version', '" + SCHEMA_VERSION + "') " +
+                    "ON DUPLICATE KEY UPDATE value = VALUES(value)";
+        }
+        return "INSERT INTO meta (key, value) VALUES ('schema_version', '" + SCHEMA_VERSION + "') " +
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value";
+    }
+
+    /** Версия схемы в БД: будущие миграции сверяются с ней. */
+    public int schemaVersion() {
+        try {
+            ensureConnected();
+            try (Statement st = connection.createStatement();
+                 ResultSet rs = st.executeQuery("SELECT value FROM meta WHERE key = 'schema_version'")) {
+                if (rs.next()) {
+                    try {
+                        return Integer.parseInt(rs.getString("value"));
+                    } catch (NumberFormatException ignored) {
+                        return 0;
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            markStale();
+        }
+        return 0;
     }
 
 
     protected void createIndexes() {
         createIndex("idx_route_nodes_route", "route_nodes", "route_id");
         createIndex("idx_pois_category", "pois", "category_id");
+        createIndex("idx_graph_edges_world", "graph_edges", "world");
     }
 
     private void createIndex(String name, String table, String columns) {
@@ -450,6 +504,112 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         }
     }
 
+    @Override
+    public synchronized List<ru.hahgps.model.EdgeRecord> getEdges() {
+        List<ru.hahgps.model.EdgeRecord> list = new ArrayList<>();
+        try {
+            ensureConnected();
+            try (Statement st = connection.createStatement();
+                 ResultSet rs = st.executeQuery(
+                         "SELECT world, x1, y1, z1, x2, y2, z2, transports FROM graph_edges")) {
+                while (rs.next()) {
+                    list.add(new ru.hahgps.model.EdgeRecord(
+                            rs.getString("world"),
+                            rs.getDouble("x1"), rs.getDouble("y1"), rs.getDouble("z1"),
+                            rs.getDouble("x2"), rs.getDouble("y2"), rs.getDouble("z2"),
+                            ru.hahgps.model.EdgeRecord.parseTransports(rs.getString("transports"))));
+                }
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to load graph edges", e);
+        }
+        return list;
+    }
+
+    @Override
+    public synchronized void saveEdge(ru.hahgps.model.EdgeRecord edge) {
+        if (edge == null || edge.transports().isEmpty()) {
+            return;
+        }
+        ru.hahgps.model.EdgeRecord canonical = edge.canonical();
+        try {
+            ensureConnected();
+            boolean previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                try (PreparedStatement del = connection.prepareStatement(
+                        "DELETE FROM graph_edges WHERE world = ? AND x1 = ? AND y1 = ? AND z1 = ? " +
+                                "AND x2 = ? AND y2 = ? AND z2 = ?")) {
+                    del.setString(1, canonical.world());
+                    del.setDouble(2, canonical.x1());
+                    del.setDouble(3, canonical.y1());
+                    del.setDouble(4, canonical.z1());
+                    del.setDouble(5, canonical.x2());
+                    del.setDouble(6, canonical.y2());
+                    del.setDouble(7, canonical.z2());
+                    del.executeUpdate();
+                }
+                try (PreparedStatement ins = connection.prepareStatement(
+                        "INSERT INTO graph_edges (world, x1, y1, z1, x2, y2, z2, transports, created_at) " +
+                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+                    ins.setString(1, canonical.world());
+                    ins.setDouble(2, canonical.x1());
+                    ins.setDouble(3, canonical.y1());
+                    ins.setDouble(4, canonical.z1());
+                    ins.setDouble(5, canonical.x2());
+                    ins.setDouble(6, canonical.y2());
+                    ins.setDouble(7, canonical.z2());
+                    ins.setString(8, ru.hahgps.model.EdgeRecord.serializeTransports(canonical.transports()));
+                    ins.setLong(9, System.currentTimeMillis());
+                    ins.executeUpdate();
+                }
+                connection.commit();
+            } catch (SQLException e) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackError) {
+                    e.addSuppressed(rollbackError);
+                }
+                throw e;
+            } finally {
+                try {
+                    connection.setAutoCommit(previousAutoCommit);
+                } catch (SQLException ignored) {
+                }
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to save graph edge", e);
+        }
+    }
+
+    @Override
+    public synchronized void deleteEdge(ru.hahgps.model.EdgeRecord edge) {
+        if (edge == null) {
+            return;
+        }
+        ru.hahgps.model.EdgeRecord canonical = edge.canonical();
+        try {
+            ensureConnected();
+            try (PreparedStatement del = connection.prepareStatement(
+                    "DELETE FROM graph_edges WHERE world = ? AND x1 = ? AND y1 = ? AND z1 = ? " +
+                            "AND x2 = ? AND y2 = ? AND z2 = ?")) {
+                del.setString(1, canonical.world());
+                del.setDouble(2, canonical.x1());
+                del.setDouble(3, canonical.y1());
+                del.setDouble(4, canonical.z1());
+                del.setDouble(5, canonical.x2());
+                del.setDouble(6, canonical.y2());
+                del.setDouble(7, canonical.z2());
+                del.executeUpdate();
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to delete graph edge", e);
+        }
+    }
+
     private Poi mapPoi(ResultSet rs) throws SQLException {
         return new Poi(
                 rs.getInt("id"),
@@ -490,7 +650,15 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 ps.setInt(1, poiId);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
-                        map.put(UUID.fromString(rs.getString("player_uuid")), rs.getInt("rating"));
+                        UUID player;
+                        try {
+                            player = UUID.fromString(rs.getString("player_uuid"));
+                        } catch (IllegalArgumentException malformed) {
+                            // Как в getAllRatings: одна битая строка не должна
+                            // ронять весь будущий ответ.
+                            continue;
+                        }
+                        map.put(player, rs.getInt("rating"));
                     }
                 }
             }
@@ -625,28 +793,68 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
 
     @Override
     public synchronized List<Route> getRoutes() {
-        List<Object[]> rows = new ArrayList<>();
+        // Маршруты и их узлы — двумя запросами вместо N+1 (один loadNodes на
+        // каждый маршрут под тем же локом соединения блокировал бы всю БД).
+        Map<Integer, Object[]> rows = new HashMap<>();
         try {
             ensureConnected();
             try (Statement st = connection.createStatement();
                  ResultSet rs = st.executeQuery(
                          "SELECT id, name, world, transport, created_by, created_at FROM routes ORDER BY name")) {
                 while (rs.next()) {
-                    rows.add(new Object[]{
+                    rows.put(rs.getInt("id"), new Object[]{
                             rs.getInt("id"), rs.getString("name"), rs.getString("world"),
                             rs.getString("transport"), rs.getString("created_by"), rs.getLong("created_at")});
                 }
             }
+            Map<Integer, List<double[]>> allNodes = loadAllNodes();
             List<Route> list = new ArrayList<>(rows.size());
-            for (Object[] row : rows) {
-                list.add(new Route((int) row[0], (String) row[1], (String) row[2], (String) row[3],
-                        (String) row[4], (Long) row[5], loadNodes((int) row[0])));
+            for (Object[] row : rows.values()) {
+                int id = (int) row[0];
+                List<double[]> coords = allNodes.getOrDefault(id, List.of());
+                list.add(new Route(id, (String) row[1], (String) row[2], (String) row[3],
+                        (String) row[4], (Long) row[5], locationsOf((String) row[2], coords)));
             }
             return list;
         } catch (SQLException e) {
             markStale();
             throw new RuntimeException("Failed to load routes", e);
         }
+    }
+
+    /** Все узлы всех маршрутов одним проходом: {@code routeId -> [x, y, z]...}. */
+    private synchronized Map<Integer, List<double[]>> loadAllNodes() throws SQLException {
+        Map<Integer, List<double[]>> out = new HashMap<>();
+        try (Statement st = connection.createStatement();
+             ResultSet rs = st.executeQuery(
+                     "SELECT route_id, x, y, z FROM route_nodes ORDER BY route_id, seq")) {
+            while (rs.next()) {
+                out.computeIfAbsent(rs.getInt("route_id"), k -> new ArrayList<>())
+                        .add(new double[]{rs.getDouble("x"), rs.getDouble("y"), rs.getDouble("z")});
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Точки маршрута. Узлы, чей мир ещё не загружен, пропускаются — но об этом
+     * пишется предупреждение: раньше маршрут молча укорачивался, и граф дорог
+     * на старте сервера оказывался полупустым без единой строчки в логе.
+     */
+    private List<Location> locationsOf(String routeWorld, List<double[]> coords) {
+        List<Location> nodes = new ArrayList<>(coords.size());
+        for (double[] c : coords) {
+            if (c == null || c.length < 3) {
+                continue;
+            }
+            World world = routeWorld == null ? null : resolveWorld(routeWorld);
+            if (world == null) {
+                warnMissingWorld(-1, routeWorld);
+                continue;
+            }
+            nodes.add(new Location(world, c[0], c[1], c[2]));
+        }
+        return nodes;
     }
 
     @Override
@@ -678,23 +886,33 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
      * на старте сервера оказывался полупустым без единой строчки в логе.
      */
     private List<Location> loadNodes(int routeId) throws SQLException {
-        List<Location> nodes = new ArrayList<>();
+        String routeWorld = null;
+        List<double[]> coords = new ArrayList<>();
         try (PreparedStatement ps = connection.prepareStatement(
-                "SELECT world, x, y, z FROM route_nodes WHERE route_id = ? ORDER BY seq")) {
+                "SELECT r.world AS world, n.x AS x, n.y AS y, n.z AS z " +
+                        "FROM route_nodes n JOIN routes r ON r.id = n.route_id " +
+                        "WHERE n.route_id = ? ORDER BY n.seq")) {
             ps.setInt(1, routeId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    String worldName = rs.getString("world");
-                    World world = worldName == null ? null : resolveWorld(worldName);
-                    if (world == null) {
-                        warnMissingWorld(routeId, worldName);
-                        continue;
+                    if (routeWorld == null) {
+                        routeWorld = rs.getString("world");
                     }
-                    nodes.add(new Location(world, rs.getDouble("x"), rs.getDouble("y"), rs.getDouble("z")));
+                    coords.add(new double[]{rs.getDouble("x"), rs.getDouble("y"), rs.getDouble("z")});
                 }
             }
         }
-        return nodes;
+        if (routeWorld == null) {
+            try (PreparedStatement ps = connection.prepareStatement("SELECT world FROM routes WHERE id = ?")) {
+                ps.setInt(1, routeId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        routeWorld = rs.getString("world");
+                    }
+                }
+            }
+        }
+        return locationsOf(routeWorld, coords);
     }
 
     /** Точка расширения для тестов: в юнит-тестах Bukkit недоступен. */
