@@ -6,7 +6,7 @@
 
     <groupId>ru.hahgps</groupId>
     <artifactId>hahgps</artifactId>
-    <version>1.1.0</version>
+    <version>1.1.1</version>
     <packaging>jar</packaging>
 
     <name>HahGps</name>
@@ -134,6 +134,19 @@
             <resource>
                 <directory>src/main/resources</directory>
                 <filtering>true</filtering>
+                <!-- Токен сборки — НЕ фильтруем: значение с @...@ или ${...}
+                     было бы deserts/порчено фильтром, и автообновление молча
+                     отключилось бы у такой сборки. -->
+                <excludes>
+                    <exclude>*.token</exclude>
+                </excludes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <includes>
+                    <include>*.token</include>
+                </includes>
             </resource>
         </resources>
     </build>

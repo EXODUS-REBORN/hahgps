@@ -70,6 +70,9 @@ public final class HotSwap {
         }
         if (!Bukkit.isPrimaryThread()) {
 
+            // queued снимаем ДО перепланировки: иначе перепланированный вызов
+            // увидит «подмена уже идёт» и навсегда останется без ответа.
+            queued = false;
             try {
                 Bukkit.getScheduler().runTask(plugin, () -> apply(plugin, staged, force, feedback, true));
             } catch (Throwable t) {
@@ -94,16 +97,8 @@ public final class HotSwap {
         }
     }
 
-    private static void warmup() {
-        Result probe = new Result(false, "", "");
-        probe.applied();
-        probe.version();
-        probe.reason();
-    }
-
     private static Result doApply(HahGpsPlugin plugin, Path staged, boolean force, Consumer<String> feedback) {
         String version = versionFromJarName(staged);
-        warmup();
 
         String textStart = "Горячее обновление: ставлю " + version + " на ходу…";
         String textMissing = "Файл обновления не найден: " + staged.getFileName();
@@ -204,6 +199,11 @@ public final class HotSwap {
                     rollbackTemplate, loaded);
         }
 
+        // Новая версия работает: только теперь закрываем classloader прежней.
+        // Не раньше — откат грузит старый jar заново, а закрытый загрузчик
+        // классов уже не отдаст.
+        closeClassLoader(plugin);
+
         clearFailed(updateDir);
         retireJar(oldJar, updateDir);
         try {
@@ -214,7 +214,26 @@ public final class HotSwap {
         }
         syncCommands();
         Bukkit.getLogger().info("Горячая подмена: " + version + " работает — сервер не перезапускался.");
+        // Игрок, выполнивший /gps update apply, должен отличить успех от зависания.
+        reply(feedback, textOk);
         return new Result(true, version, "");
+    }
+
+    /**
+     * Закрытие загрузчика классов выгруженного плагина. Paper'овский
+     * PaperPluginClassLoader реализует Closeable; без этого каждый hot-swap
+     * оставляет в куче классы, слушателей и DataService прежней версии.
+     */
+    private static void closeClassLoader(HahGpsPlugin plugin) {
+        try {
+            ClassLoader loader = plugin.getClass().getClassLoader();
+            if (loader instanceof java.io.Closeable closeable) {
+                closeable.close();
+            }
+        } catch (Throwable t) {
+            log(Level.FINE, "Горячая подмена: classloader прежней версии не закрылся ("
+                    + message(t) + ")", null);
+        }
     }
 
     private static Result rollback(Path oldJar, Path target, Path updateDir,
@@ -267,12 +286,20 @@ public final class HotSwap {
             fresh = true;
         }
         Map<String, String> values = readState(state);
+        if (values.isEmpty()) {
+            // Файл прочитался пустым (прерванная запись): удаляем только
+            // теперь — иначе провал никогда не был бы анонсирован.
+            try {
+                Files.deleteIfExists(state);
+            } catch (IOException ignored) {
+            }
+            return;
+        }
         try {
             Files.deleteIfExists(state);
         } catch (IOException ignored) {
 
         }
-        if (values.isEmpty()) return;
         String version = values.getOrDefault("version", "");
         boolean ok = Boolean.parseBoolean(values.getOrDefault("ok", "false"));
         String current = plugin.getPluginMeta().getVersion();
@@ -444,17 +471,24 @@ public final class HotSwap {
         if (pluginsDir == null || !Files.isDirectory(pluginsDir)) return null;
         String current = plugin.getPluginMeta().getVersion();
         Path fallback = null;
+        boolean ambiguous = false;
         try (var stream = Files.newDirectoryStream(pluginsDir, UpdaterService.JAR_PREFIX + "*.jar")) {
             for (Path file : stream) {
                 if (!Files.isRegularFile(file)) continue;
                 String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
                 if (!current.isEmpty() && name.contains(current)) return file.toAbsolutePath();
-                if (fallback == null) fallback = file.toAbsolutePath();
+                if (fallback == null) {
+                    fallback = file.toAbsolutePath();
+                } else {
+                    // Больше одного кандидата без версии в имени: угадывать
+                    // нельзя — удалили бы не тот jar. Отказываемся.
+                    ambiguous = true;
+                }
             }
         } catch (IOException e) {
             return own;
         }
-        return fallback == null ? own : fallback;
+        return ambiguous ? null : (fallback == null ? own : fallback);
     }
 
     static boolean sameFile(Path a, Path b) {
@@ -504,11 +538,19 @@ public final class HotSwap {
                             + "rem Обновление hahgps: убери прежний jar и перезапусти сервер.\r\n"
                             + "del /F /Q \"" + oldJar.toAbsolutePath() + "\"\r\n",
                     StandardCharsets.UTF_8);
-            Files.writeString(updateDir.resolve("apply-update.sh"),
+            Path sh = updateDir.resolve("apply-update.sh");
+            Files.writeString(sh,
                     "#!/bin/sh\n"
                             + "# Обновление hahgps: убери прежний jar и перезапусти сервер.\n"
                             + "rm -f '" + oldJar.toAbsolutePath() + "'\n",
                     StandardCharsets.UTF_8);
+            try {
+                // Без бита исполнения ./apply-update.sh даёт EACCES.
+                Files.setPosixFilePermissions(sh, java.nio.file.attribute.PosixFilePermissions
+                        .fromString("rwxr-xr-x"));
+            } catch (Exception ignored) {
+                // Не-POSIX (Windows) — там .cmd.
+            }
             log(Level.WARNING, "Горячая подмена: прежний jar убрать не удалось — удали "
                     + oldJar.getFileName() + " из plugins/ перед рестартом (см. update/apply-update.cmd).", null);
         } catch (IOException e) {

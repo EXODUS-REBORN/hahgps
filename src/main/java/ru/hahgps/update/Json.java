@@ -6,8 +6,12 @@ import java.util.Map;
 
 final class Json {
 
+    /** Лимит вложенности для рекурсивного парсера: защита от StackOverflowError. */
+    private static final int MAX_DEPTH = 64;
+
     private final String src;
     private int pos;
+    private int depth;
 
     private Json(String src) {
         this.src = src;
@@ -41,17 +45,28 @@ final class Json {
     }
 
     private Object value() {
+        if (depth >= MAX_DEPTH) {
+            // Рекурсивный парсер без лимита стека: глубоко вложенный JSON
+            // (ответ API под атакой) давал StackOverflowError, который не
+            // ловится catch (Exception) и утекал сырым стеком в консоль.
+            throw error("слишком глубокая вложенность (лимит " + MAX_DEPTH + ")");
+        }
         if (pos >= src.length()) throw error("неожиданный конец документа");
-        char c = src.charAt(pos);
-        return switch (c) {
-            case '{' -> objectBody();
-            case '[' -> arrayBody();
-            case '"' -> string();
-            case 't' -> literal("true", Boolean.TRUE);
-            case 'f' -> literal("false", Boolean.FALSE);
-            case 'n' -> literal("null", null);
-            default -> number();
-        };
+        depth++;
+        try {
+            char c = src.charAt(pos);
+            return switch (c) {
+                case '{' -> objectBody();
+                case '[' -> arrayBody();
+                case '"' -> string();
+                case 't' -> literal("true", Boolean.TRUE);
+                case 'f' -> literal("false", Boolean.FALSE);
+                case 'n' -> literal("null", null);
+                default -> number();
+            };
+        } finally {
+            depth--;
+        }
     }
 
     private Object literal(String word, Object value) {
@@ -124,7 +139,12 @@ final class Json {
                 case 'f' -> out.append('\f');
                 case 'u' -> {
                     if (pos + 4 > src.length()) throw error("обрыв \\u-последовательности");
-                    out.append((char) Integer.parseInt(src.substring(pos, pos + 4), 16));
+                    String hex = src.substring(pos, pos + 4);
+                    try {
+                        out.append((char) Integer.parseInt(hex, 16));
+                    } catch (NumberFormatException bad) {
+                        throw error("некорректная \\u-последовательность: " + hex);
+                    }
                     pos += 4;
                 }
                 default -> out.append(esc);
@@ -138,7 +158,11 @@ final class Json {
         while (pos < src.length() && "+-0123456789.eE".indexOf(src.charAt(pos)) >= 0) pos++;
         String text = src.substring(start, pos);
         if (text.isEmpty()) throw error("не число");
-        return Double.valueOf(text);
+        try {
+            return Double.valueOf(text);
+        } catch (NumberFormatException bad) {
+            throw error("некорректное число: " + text);
+        }
     }
 
     private IllegalArgumentException error(String message) {

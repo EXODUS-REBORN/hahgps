@@ -38,11 +38,13 @@ public final class UpdateAnnouncer {
     public static final List<String> DEFAULT_GROUPS = List.of("41", "42", "103", "555");
     public static final List<String> DEFAULT_PLAYERS = List.of("haker_one");
 
+    /** Неизменяемая цель: публикуется одной volatile-записью. */
+    private record Targets(List<String> groups, Set<String> groupKeys,
+                           List<String> players, Set<String> playerNames) {
+    }
+
     private final HahGpsPlugin plugin;
-    private volatile List<String> groups = new ArrayList<>(DEFAULT_GROUPS);
-    private volatile Set<String> groupKeys = normalize(DEFAULT_GROUPS);
-    private volatile List<String> players = new ArrayList<>(DEFAULT_PLAYERS);
-    private volatile Set<String> playerNames = normalize(DEFAULT_PLAYERS);
+    private volatile Targets targets = build(DEFAULT_GROUPS, DEFAULT_PLAYERS);
 
     private final LuckPerms luckPerms;
 
@@ -53,36 +55,43 @@ public final class UpdateAnnouncer {
 
     public void setGroups(List<String> groups) {
         List<String> cleaned = clean(groups);
-        this.groups = cleaned.isEmpty() ? new ArrayList<>(DEFAULT_GROUPS) : cleaned;
-        this.groupKeys = normalize(this.groups);
+        this.targets = build(cleaned.isEmpty() ? DEFAULT_GROUPS : cleaned, targets.players());
     }
 
     /** Ники, которым оповещения приходят всегда, независимо от группы. */
     public void setPlayers(List<String> players) {
         List<String> cleaned = clean(players);
-        this.players = cleaned.isEmpty() ? new ArrayList<>(DEFAULT_PLAYERS) : cleaned;
-        this.playerNames = normalize(this.players);
+        this.targets = build(targets.groups(), cleaned.isEmpty() ? DEFAULT_PLAYERS : cleaned);
+    }
+
+    private static Targets build(List<String> groups, List<String> players) {
+        return new Targets(
+                groups.isEmpty() ? List.of() : List.copyOf(groups),
+                normalize(groups),
+                players.isEmpty() ? List.of() : List.copyOf(players),
+                normalize(players));
     }
 
     public List<String> groups() {
-        return new ArrayList<>(groups);
+        return new ArrayList<>(targets.groups());
     }
 
     public List<String> players() {
-        return new ArrayList<>(players);
+        return new ArrayList<>(targets.players());
     }
 
     /** Есть ли у игрока приоритетная группа либо он в списке имён. */
     public boolean isPrivileged(Player player) {
         if (player == null) return false;
-        if (playerNames.contains(lower(player.getName()))) return true;
-        if (groupKeys.isEmpty()) return false;
+        Targets current = targets;
+        if (current.playerNames().contains(lower(player.getName()))) return true;
+        if (current.groupKeys().isEmpty()) return false;
 
         if (luckPerms != null) {
             // LuckPerms есть — решение только по группам, оператор не исключается сам собой
-            return luckPerms.hasAnyGroup(player.getUniqueId(), groupKeys);
+            return luckPerms.hasAnyGroup(player.getUniqueId(), current.groupKeys());
         }
-        for (String group : groupKeys) {
+        for (String group : current.groupKeys()) {
             if (hasExplicitPermission(player, "group." + group)) return true;
         }
         return false;
@@ -165,13 +174,15 @@ public final class UpdateAnnouncer {
         private final Method getUser;
         private final Method getPrimaryGroup;
         private final Method getInheritedGroups;
+        private final Method isLoaded;
 
         private LuckPerms(Object userManager, Method getUser,
-                          Method getPrimaryGroup, Method getInheritedGroups) {
+                           Method getPrimaryGroup, Method getInheritedGroups, Method isLoaded) {
             this.userManager = userManager;
             this.getUser = getUser;
             this.getPrimaryGroup = getPrimaryGroup;
             this.getInheritedGroups = getInheritedGroups;
+            this.isLoaded = isLoaded;
         }
 
         static LuckPerms lookup() {
@@ -189,14 +200,27 @@ public final class UpdateAnnouncer {
                         api,
                         managerClass.getMethod("getUser", UUID.class),
                         userClass.getMethod("getPrimaryGroup"),
-                        userClass.getMethod("getInheritedGroups"));
+                        userClass.getMethod("getInheritedGroups"),
+                        managerClass.getMethod("isLoaded", UUID.class));
             } catch (Throwable ignored) {
                 return null;
             }
         }
 
+        boolean isLoaded(UUID uuid) {
+            if (isLoaded == null) return true;
+            try {
+                return Boolean.TRUE.equals(isLoaded.invoke(userManager, uuid));
+            } catch (Throwable ignored) {
+                return true;
+            }
+        }
+
         boolean hasAnyGroup(UUID uuid, Set<String> wanted) {
             if (uuid == null || wanted.isEmpty()) return false;
+            // isLoaded: getUser() для незагруженного игрока потенциально блокирующий
+            // (чтение хранилища LuckPerms), а вызываем мы из главного потока.
+            if (!isLoaded(uuid)) return false;
             try {
                 Object user = getUser.invoke(userManager, uuid);
                 if (user == null) return false;

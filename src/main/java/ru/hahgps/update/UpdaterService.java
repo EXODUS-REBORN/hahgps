@@ -35,15 +35,15 @@ public final class UpdaterService {
             .connectTimeout(Duration.ofSeconds(10))
             .followRedirects(HttpClient.Redirect.NEVER)
             .build();
-    private boolean enabled = true;
-    private String repo = "";
-    private boolean allowPrerelease;
-    private long intervalMinutes = 5;
-    private String tokenFile = "github-token.txt";
-    private boolean autoDownload = true;
-    private boolean hotApply = true;
-    private String token = "";
-    private String api = API;
+    private volatile boolean enabled = true;
+    private volatile String repo = "";
+    private volatile boolean allowPrerelease;
+    private volatile long intervalMinutes = 5;
+    private volatile String tokenFile = "github-token.txt";
+    private volatile boolean autoDownload = true;
+    private volatile boolean hotApply = true;
+    private volatile String token = "";
+    private volatile String api = API;
     private volatile BukkitTask task;
 
     private volatile boolean active;
@@ -62,12 +62,19 @@ public final class UpdaterService {
         this.announcer = new UpdateAnnouncer(plugin);
     }
 
-    public void reload() {
+    /**
+     * Перечитывание настроек. synchronized: вызывается из async-потока
+     * ({@code /gps update reload}), а поля читают таймерная задача и api().
+     * Без монитора читатель видел бы полуобновлённые repo/token.
+     */
+    public synchronized void reload() {
         var cfg = plugin.getConfig();
         enabled = cfg.getBoolean("обновление.включено", true);
         repo = String.valueOf(cfg.getString("обновление.репозиторий", "EXODUS-REBORN/hahgps")).trim();
         allowPrerelease = cfg.getBoolean("обновление.предрелизы", false);
-        intervalMinutes = Math.max(0, cfg.getLong("обновление.интервал-минут", 5));
+        // Верхняя граница: интервал переводится в тики, и огромное значение
+        // переполняло long, давая отрицательный период для runTaskTimer.
+        intervalMinutes = Math.max(0, Math.min(1440, cfg.getLong("обновление.интервал-минут", 5)));
         tokenFile = String.valueOf(cfg.getString("обновление.файл-ключа", "github-token.txt")).trim();
         autoDownload = cfg.getBoolean("обновление.авто-скачивание", true);
         hotApply = cfg.getBoolean("обновление.горячее-обновление", true);
@@ -453,6 +460,15 @@ public final class UpdaterService {
     }
 
     private Release selectRelease(String body) {
+        Object parsed = Json.parse(body);
+        // GitHub на 200 может отдать объект ошибки (rate limit, maintenance) —
+        // array() молча вернул бы пустой список, и пользователь увидел бы
+        // «релизов не найдено» вместо настоящей причины.
+        if (parsed instanceof Map<?, ?> error) {
+            String message = str(error.get("message"));
+            throw new IllegalArgumentException("GitHub вернул ошибку: "
+                    + (message.isBlank() ? "неизвестная" : message));
+        }
         for (Object item : Json.array(body)) {
             if (!(item instanceof Map<?, ?> release)) continue;
             if (Boolean.TRUE.equals(release.get("draft"))) continue;
@@ -511,7 +527,17 @@ public final class UpdaterService {
                 if (attempt >= DOWNLOAD_ATTEMPTS) break;
                 plugin.getLogger().warning("Обновление: скачивание не удалось (" + e.getMessage()
                         + ") — пробую ещё раз (" + attempt + " из " + (DOWNLOAD_ATTEMPTS - 1) + ").");
-                Thread.sleep(2000L * attempt);
+                try {
+                    Thread.sleep(2000L * attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            } catch (InterruptedException interrupted) {
+                // Прерывание не должно съедать остальные попытки молча:
+                // восстанавливаем флаг и выходим.
+                Thread.currentThread().interrupt();
+                throw new IOException("скачивание прервано", interrupted);
             }
         }
         throw last == null ? new IOException("скачивание не удалось") : last;

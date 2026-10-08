@@ -54,7 +54,10 @@ public final class BuildToken {
         try (InputStream in = BuildToken.class.getClassLoader().getResourceAsStream(ENTRY)) {
             if (in == null) return "";
             return clean(new String(in.readAllBytes(), StandardCharsets.UTF_8));
-        } catch (IOException | RuntimeException ignored) {
+        } catch (Throwable ignored) {
+            // Ловим и Error: сбой в статическом инициализаторе иначе даёт
+            // ExceptionInInitializerError, после чего класс навсегда неработо-
+            // способен (NoClassDefInitializedError на enabled()).
             return "";
         }
     }
