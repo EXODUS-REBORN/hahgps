@@ -34,7 +34,7 @@ public class SearchService {
         if (query == null || query.trim().isEmpty()) {
             return CompletableFuture.completedFuture(new ArrayList<>());
         }
-        final String qLower = query.toLowerCase(java.util.Locale.ROOT);
+        final String qLower = query.trim().toLowerCase(java.util.Locale.ROOT);
         final int limit = Math.max(0, maxResults);
         final double minSimilarity = threshold;
         return dataService.getPois().thenApply(pois -> {
@@ -45,12 +45,14 @@ public class SearchService {
                 }
                 String name = poi.getName();
                 String nameLower = name.toLowerCase(java.util.Locale.ROOT);
-                boolean contains = nameLower.contains(qLower);
                 double sim;
-                if (contains) {
-                    sim = FuzzyMatcher.similarity(qLower, nameLower);
+                if (nameLower.contains(qLower)) {
+                    // Подстрочное совпадение всегда релевантно, и полный
+                    // Левенштейн по всей строке давал бы ему 0.15 и топил
+                    // среди нерелевантных. Стабильный ранг: точное имя >
+                    // префикс > вхождение в середину.
+                    sim = scoreContains(qLower, nameLower);
                 } else {
-
                     if (FuzzyMatcher.upperBound(qLower, nameLower) < minSimilarity) {
                         continue;
                     }
@@ -67,5 +69,16 @@ public class SearchService {
             }
             return results;
         });
+    }
+
+    /** 1.0 — точное совпадение, 0.9 — начало названия, 0.8 — вхождение внутри. */
+    private static double scoreContains(String query, String nameLower) {
+        if (nameLower.equals(query)) {
+            return 1.0;
+        }
+        if (nameLower.startsWith(query)) {
+            return 0.9;
+        }
+        return 0.8;
     }
 }

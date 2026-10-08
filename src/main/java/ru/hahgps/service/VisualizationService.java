@@ -121,18 +121,34 @@ public class VisualizationService {
         }
         RoadGraph graph = graphService.graph();
         List<GraphNode> nodes = graph.getNodes();
+        // Один проход по рёбрам вместо пяти (types × nodes): getEdges(node,
+        // type) аллоцирует список на каждый вызов, и на 10k узлов это были
+        // десятки тысяч временных объектов в главном потоке.
+        Map<TransportType, List<GraphEdge>> fresh = new EnumMap<>(TransportType.class);
         for (TransportType type : TransportType.values()) {
-            List<GraphEdge> edges = new ArrayList<>();
-            for (GraphNode node : nodes) {
-                for (GraphEdge edge : graph.getEdges(node, type)) {
-
-                    if (edge.getFrom() != null && edge.getTo() != null
-                            && edge.getFrom().getId() < edge.getTo().getId()) {
-                        edges.add(edge);
+            fresh.put(type, new ArrayList<>());
+        }
+        for (GraphNode node : nodes) {
+            for (GraphEdge edge : graph.getEdges(node)) {
+                if (edge.getFrom() == null || edge.getTo() == null
+                        || edge.getFrom().getId() >= edge.getTo().getId()) {
+                    continue;
+                }
+                Set<TransportType> allowed = edge.getAllowedTransport();
+                if (allowed == null) {
+                    continue;
+                }
+                for (TransportType type : allowed) {
+                    List<GraphEdge> bucket = fresh.get(type);
+                    if (bucket != null) {
+                        bucket.add(edge);
                     }
                 }
             }
-            edgeCache.put(type, Collections.unmodifiableList(edges));
+        }
+        edgeCache.clear();
+        for (Map.Entry<TransportType, List<GraphEdge>> entry : fresh.entrySet()) {
+            edgeCache.put(entry.getKey(), Collections.unmodifiableList(entry.getValue()));
         }
         cachedRevision = revision;
     }

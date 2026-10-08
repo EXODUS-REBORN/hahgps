@@ -16,6 +16,9 @@ public class HudService {
     private volatile Method sendMethod;
     private volatile Method removeMethod;
     private volatile boolean apiBroken;
+    private volatile long apiBrokenAt;
+
+    private static final long API_RETRY_MS = 60_000L;
 
     public HudService() {
         this.itemsAdderAvailable = Bukkit.getPluginManager().getPlugin("ItemsAdder") != null;
@@ -42,10 +45,10 @@ public class HudService {
             String icon = getIconName(transport);
             int meters = distance >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) distance;
             String text = icon + " " + (targetName == null ? "" : targetName) + " | " + meters + "m";
-            sendMethod.invoke(wrapperInstance, player.getUniqueId().toString(), text);
-        } catch (Throwable ignored) {
-
+            sendMethod.invoke(wrapperInstance, hudArgs(sendMethod, player, text));
+        } catch (Throwable t) {
             apiBroken = true;
+            apiBrokenAt = System.currentTimeMillis();
         }
     }
 
@@ -60,10 +63,26 @@ public class HudService {
             return;
         }
         try {
-            removeMethod.invoke(wrapperInstance, player.getUniqueId().toString());
-        } catch (Throwable ignored) {
+            removeMethod.invoke(wrapperInstance, hudArgs(removeMethod, player, ""));
+        } catch (Throwable t) {
             apiBroken = true;
+            apiBrokenAt = System.currentTimeMillis();
         }
+    }
+
+    /**
+     * Аргументы вызова ItemsAdder: в зависимости от подписи метода первым
+     * идёт либо UUID-строка, либо Player.
+     */
+    private static Object[] hudArgs(Method method, Player player, String text) {
+        if (method.getParameterCount() >= 2) {
+            return firstParamIsString(method)
+                    ? new Object[]{player.getUniqueId().toString(), text}
+                    : new Object[]{player, text};
+        }
+        return firstParamIsString(method)
+                ? new Object[]{player.getUniqueId().toString()}
+                : new Object[]{player};
     }
 
 
@@ -83,8 +102,13 @@ public class HudService {
     }
 
     private boolean resolveApi() {
-        if (apiBroken) {
+        if (apiBroken && System.currentTimeMillis() - apiBrokenAt < API_RETRY_MS) {
             return false;
+        }
+        if (apiBroken) {
+            // Пробуем снять защёлку раз в минуту: транзиентная ошибка не должна
+            // убивать HUD до перезапуска сервера.
+            apiBroken = false;
         }
         if (sendMethod == null) {
             synchronized (this) {
@@ -92,10 +116,15 @@ public class HudService {
                     try {
                         Class<?> hudApi = Class.forName("dev.lone.itemsadder.api.FontImages.FontImageWrapper");
                         getInstanceMethod = hudApi.getMethod("getInstance");
-                        sendMethod = hudApi.getMethod("sendFontImage", String.class, String.class);
-                        removeMethod = hudApi.getMethod("removeFontImage", String.class);
+                        sendMethod = findHudMethod(hudApi, "sendFontImage", 2);
+                        removeMethod = findHudMethod(hudApi, "removeFontImage", 1);
+                        if (sendMethod == null || removeMethod == null) {
+                            throw new NoSuchMethodException("sendFontImage/removeFontImage не найдены у FontImageWrapper");
+                        }
                     } catch (Throwable t) {
+                        logOnce("HahGps: HUD ItemsAdder недоступен (проверьте сигнатуру API): " + t);
                         apiBroken = true;
+                        apiBrokenAt = System.currentTimeMillis();
                         return false;
                     }
                 }
@@ -105,16 +134,52 @@ public class HudService {
             try {
                 Object instance = getInstanceMethod.invoke(null);
                 if (instance == null) {
-
                     return false;
                 }
                 wrapperInstance = instance;
             } catch (Throwable t) {
+                logOnce("HahGps: не удалось получить экземпляр FontImageWrapper: " + t);
                 apiBroken = true;
+                apiBrokenAt = System.currentTimeMillis();
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Поиск метода HUD по имени и числу параметров. ItemsAdder в разных сборках
+     * отдаёт как (String, String), так и (Player, String): точный getMethod по
+     * одной сигнатуре ронял HUD навсегда при первом же несовпадении.
+     */
+    private static Method findHudMethod(Class<?> api, String name, int params) {
+        Method fallback = null;
+        for (Method method : api.getMethods()) {
+            if (!method.getName().equals(name) || method.getParameterCount() != params) {
+                continue;
+            }
+            Class<?>[] types = method.getParameterTypes();
+            if (!String.class.equals(types[params - 1])) {
+                continue;
+            }
+            if (String.class.equals(types[0])) {
+                return method;
+            }
+            if (fallback == null && params == 2 && Player.class.isAssignableFrom(types[0])) {
+                fallback = method;
+            }
+        }
+        return fallback;
+    }
+
+    /** true, если первый параметр метода — строка (UUID), а не Player. */
+    private static boolean firstParamIsString(Method method) {
+        return method != null && method.getParameterCount() > 0
+                && String.class.equals(method.getParameterTypes()[0]);
+    }
+
+    private void logOnce(String text) {
+        Bukkit.getLogger().warning(text);
     }
 
     private String getIconName(TransportType type) {

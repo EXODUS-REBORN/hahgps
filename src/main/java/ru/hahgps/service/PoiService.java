@@ -29,17 +29,29 @@ public class PoiService {
             if (category != null) {
                 categoryId = category.getId();
             } else {
-
+                // Неизвестная категория — не молчаливый откат на первую: игрок
+                // должен знать, в какую категорию реально попала точка.
                 return dataService.getCategories().thenCompose(categories -> {
                     if (categories.isEmpty()) {
+                        player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+                                .deserialize("<red>Нет ни одной категории — точка не создана. Создайте категорию: /gps category create <имя>"));
                         return CompletableFuture.completedFuture(null);
                     }
                     Category first = categories.get(0);
+                    player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+                            .deserialize("<yellow>Категория «" + safe(categoryName)
+                                    + "» не найдена — точка сохранена в «" + safe(first.getName()) + "»."));
                     return savePoi(name, first.getId(), description, loc, author);
                 });
             }
             return savePoi(name, categoryId, description, loc, author);
         });
+    }
+
+    private static String safe(String raw) {
+        return raw == null ? "?" : net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+                .plainText().serialize(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+                        .deserialize(ru.hahgps.gui.GuiTheme.escapeForMini(raw)));
     }
 
     private CompletableFuture<Poi> savePoi(String name, int categoryId, String description,
@@ -107,10 +119,6 @@ public class PoiService {
         }
         Location playerLoc = player.getLocation();
 
-        if (poiLoc.getWorld() == null || playerLoc.getWorld() == null
-                || !poiLoc.getWorld().equals(playerLoc.getWorld())) {
-            return Double.MAX_VALUE;
-        }
-        return playerLoc.distance(poiLoc);
+        return ru.hahgps.util.LocationUtil.distance(playerLoc, poiLoc);
     }
 }

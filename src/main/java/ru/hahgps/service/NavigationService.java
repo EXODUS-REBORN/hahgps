@@ -44,7 +44,7 @@ public class NavigationService {
         updateTask = Bukkit.getScheduler().runTaskTimer(plugin, this::updateAll, interval, interval);
     }
 
-    public void stop() {
+    public synchronized void stop() {
         org.bukkit.scheduler.BukkitTask task = updateTask;
         updateTask = null;
         if (task != null) {
@@ -173,10 +173,16 @@ public class NavigationService {
         // его трогать незачем, это ещё и затирает чужие плагины.
 
         if (target == null || target.getWorld() == null || playerLoc.getWorld() == null
-                || !playerLoc.getWorld().equals(target.getWorld())) {
+                || !LocationUtil.sameWorld(playerLoc.getWorld(), target.getWorld())) {
             BossBar crossWorldBar = bossBars.get(player.getUniqueId());
             if (crossWorldBar != null) {
                 crossWorldBar.setTitle(title("⚠", transportIcon, targetName, ""));
+            }
+            // HUD и последнее расстояние из прошлого мира убираем: иначе
+            // боссбар говорит «другой мир», а HUD продолжает показывать старое.
+            HudService crossWorldHud = plugin.getHudService();
+            if (crossWorldHud != null) {
+                crossWorldHud.clearHud(player);
             }
             return;
         }

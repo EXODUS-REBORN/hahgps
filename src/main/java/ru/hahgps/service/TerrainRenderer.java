@@ -369,6 +369,17 @@ public class TerrainRenderer {
     }
 
     private void drawLine(Graphics2D g, int x0, int y0, int x1, int y1) {
+        // Обрезка по границам канвы: линия к цели в 300k блоков иначе дала бы
+        // сотни тысяч итераций Брезенхэма в единственном потоке рендера, и все
+        // следующие рендеры встали бы в очередь.
+        if ((x0 < 0 && x1 < 0) || (x0 >= MAP_SIZE && x1 >= MAP_SIZE)
+                || (y0 < 0 && y1 < 0) || (y0 >= MAP_SIZE && y1 >= MAP_SIZE)) {
+            return;
+        }
+        x0 = Math.max(0, Math.min(MAP_SIZE - 1, x0));
+        y0 = Math.max(0, Math.min(MAP_SIZE - 1, y0));
+        x1 = Math.max(0, Math.min(MAP_SIZE - 1, x1));
+        y1 = Math.max(0, Math.min(MAP_SIZE - 1, y1));
         int dx = Math.abs(x1 - x0);
         int dy = Math.abs(y1 - y0);
         int sx = x0 < x1 ? 1 : -1;

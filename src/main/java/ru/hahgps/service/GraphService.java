@@ -1,9 +1,11 @@
 package ru.hahgps.service;
 
 import org.bukkit.Location;
+import ru.hahgps.model.EdgeRecord;
 import ru.hahgps.model.GraphEdge;
 import ru.hahgps.model.GraphNode;
 import ru.hahgps.model.RoadGraph;
+import ru.hahgps.model.Route;
 import ru.hahgps.model.TransportType;
 import ru.hahgps.storage.DataService;
 
@@ -29,11 +31,14 @@ public class GraphService {
     private final DataService dataService;
 
     private volatile RoadGraph roadGraph = new RoadGraph();
-    private int nextNodeId = 1;
+    private volatile int nextNodeId = 1;
 
     /** Растёт при каждой публикации: кэши по нему понимают, что устарели. */
     private volatile int revision;
     private volatile boolean loading;
+
+    /** Текущая пересборка: второй вызов loadGraph() получает тот же future. */
+    private volatile CompletableFuture<Void> loadInFlight;
 
     public GraphService(DataService dataService) {
         this.dataService = dataService;
@@ -52,42 +57,132 @@ public class GraphService {
         return loading;
     }
 
-    /** Пересборка из БД: при старте и когда догружается новый мир. */
-    public CompletableFuture<Void> loadGraph() {
+    /**
+     * Пересборка из БД: при старте и когда догружается новый мир.
+     *
+     * single-flight: два WorldLoadEvent подряд не должны запускать две
+     * параллельные полные пересборки. Публикация итога — под монитором,
+     * как и мутаторы, иначе правка могла бы затереть свежепересобранный граф.
+     */
+    public synchronized CompletableFuture<Void> loadGraph() {
+        if (loading) {
+            return loadInFlight;
+        }
         loading = true;
-        return dataService.getRoutes().handle((routes, error) -> {
-            if (error != null) {
-                loading = false;
-                throw new CompletionException(error);
-            }
-            RoadGraph graph = new RoadGraph();
-            int nodeId = 1;
-            int routesUsed = 0;
-            int routesSkipped = 0;
-            for (var route : routes) {
-                List<Location> nodes = route.getNodes();
-                if (nodes.size() < 2) {
-                    routesSkipped++;
-                    continue;
-                }
-                routesUsed++;
-                GraphNode prev = null;
-                for (Location loc : nodes) {
-                    GraphNode node = new GraphNode(nodeId++, loc);
-                    graph.addNode(node);
-                    if (prev != null) {
-                        graph.addEdge(prev, node, EnumSet.of(TransportType.FOOT, TransportType.CAR));
+        loadInFlight = dataService.getRoutes()
+                .thenCompose(routes -> dataService.getEdgesAsync()
+                        .thenApply(edges -> applyRoutes(routes, edges)))
+                .handle((built, error) -> {
+                    if (error != null) {
+                        loading = false;
+                        throw new CompletionException(error);
                     }
-                    prev = node;
-                }
+                    publish(built.graph(), built.nextId());
+                    log().log(Level.INFO, "HahGps: граф дорог собран — узлов " + built.graph().size()
+                            + ", маршрутов " + built.routesUsed()
+                            + (built.routesSkipped() > 0
+                            ? ", пропущено маршрутов без загруженного мира: " + built.routesSkipped()
+                            : "")
+                            + ".");
+                    return null;
+                });
+        return loadInFlight;
+    }
+
+    /** Сборка графа из маршрутов + применение сохранённых админских рёбер. */
+    private BuiltGraph applyRoutes(List<Route> routes, List<EdgeRecord> edges) {
+        RoadGraph graph = new RoadGraph();
+        int nodeId = 1;
+        int routesUsed = 0;
+        int routesSkipped = 0;
+        for (var route : routes) {
+            List<Location> nodes = route.getNodes();
+            if (nodes.size() < 2) {
+                routesSkipped++;
+                continue;
             }
-            publish(graph, nodeId);
-            log().log(Level.INFO, "HahGps: граф дорог собран — узлов " + graph.size()
-                    + ", маршрутов " + routesUsed
-                    + (routesSkipped > 0 ? ", пропущено маршрутов без загруженного мира: " + routesSkipped : "")
-                    + ".");
-            return null;
-        });
+            routesUsed++;
+            GraphNode prev = null;
+            for (Location loc : nodes) {
+                GraphNode node = new GraphNode(nodeId++, loc);
+                graph.addNode(node);
+                if (prev != null) {
+                    // Тип транспорта берём из самого маршрута: water/air-маршрут
+                    // иначе становился проходимым пешком и на машине.
+                    Set<TransportType> types = routeTransports(route);
+                    graph.addEdge(prev, node, types);
+                }
+                prev = node;
+            }
+        }
+        int applied = applyStoredEdges(graph, edges);
+        if (applied > 0) {
+            log().log(Level.INFO, "HahGps: применено сохранённых рёбер графа: " + applied + ".");
+        }
+        return new BuiltGraph(graph, nodeId, routesUsed, routesSkipped);
+    }
+
+    private Set<TransportType> routeTransports(Route route) {
+        String key = route.getTransport();
+        if (key == null || key.isBlank()) {
+            return EnumSet.of(TransportType.FOOT, TransportType.CAR);
+        }
+        try {
+            TransportType type = TransportType.valueOf(key.toUpperCase(java.util.Locale.ROOT));
+            return EnumSet.of(type);
+        } catch (IllegalArgumentException unknown) {
+            return EnumSet.of(TransportType.FOOT, TransportType.CAR);
+        }
+    }
+
+    /**
+     * Восстановление админских рёбер: концы в БД хранятся координатами,
+     * матчим с ближайшими узлами графа (допуск — доля блока).
+     */
+    private int applyStoredEdges(RoadGraph graph, List<EdgeRecord> edges) {
+        if (edges == null || edges.isEmpty()) {
+            return 0;
+        }
+        int applied = 0;
+        List<GraphNode> nodes = graph.getNodes();
+        for (EdgeRecord edge : edges) {
+            if (edge.transports().isEmpty()) {
+                continue;
+            }
+            GraphNode a = nearestTo(graph, nodes, edge.world(), edge.x1(), edge.y1(), edge.z1());
+            GraphNode b = nearestTo(graph, nodes, edge.world(), edge.x2(), edge.y2(), edge.z2());
+            if (a == null || b == null || a.equals(b)) {
+                continue;
+            }
+            graph.replaceEdge(a, b, EnumSet.copyOf(edge.transports()));
+            applied++;
+        }
+        return applied;
+    }
+
+    private GraphNode nearestTo(RoadGraph graph, List<GraphNode> nodes, String world,
+                                double x, double y, double z) {
+        GraphNode best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (GraphNode node : nodes) {
+            Location loc = node.getLocation();
+            if (loc == null || loc.getWorld() == null || !loc.getWorld().getName().equals(world)) {
+                continue;
+            }
+            double dx = loc.getX() - x;
+            double dy = loc.getY() - y;
+            double dz = loc.getZ() - z;
+            double d = dx * dx + dy * dy + dz * dz;
+            if (d < bestDist) {
+                bestDist = d;
+                best = node;
+            }
+        }
+        // Допуск 4 блока: координаты в БД должны совпадать с узлами маршрутов.
+        return bestDist <= 16.0 ? best : null;
+    }
+
+    private record BuiltGraph(RoadGraph graph, int nextId, int routesUsed, int routesSkipped) {
     }
 
     private void publish(RoadGraph graph, int nextId) {
@@ -114,9 +209,13 @@ public class GraphService {
             if (n1 == null || n2 == null) {
                 return false;
             }
+            if (types == null || types.isEmpty()) {
+                return false;
+            }
             RoadGraph copy = roadGraph.copy();
-            copy.addEdge(n1, n2, types);
+            copy.replaceEdge(n1, n2, EnumSet.copyOf(types));
             publish(copy, nextNodeId);
+            persistEdge(n1, n2, types, true);
             return true;
         }
     }
@@ -131,6 +230,7 @@ public class GraphService {
             RoadGraph copy = roadGraph.copy();
             copy.removeEdge(n1, n2);
             publish(copy, nextNodeId);
+            persistEdge(n1, n2, EnumSet.noneOf(TransportType.class), false);
             return true;
         }
     }
@@ -148,8 +248,9 @@ public class GraphService {
             }
             current.add(type);
             RoadGraph copy = roadGraph.copy();
-            copy.addEdge(n1, n2, current);
+            copy.replaceEdge(n1, n2, current);
             publish(copy, nextNodeId);
+            persistEdge(n1, n2, current, true);
             return true;
         }
     }
@@ -167,12 +268,37 @@ public class GraphService {
             }
             current.remove(type);
             RoadGraph copy = roadGraph.copy();
-            copy.removeEdge(n1, n2);
-            if (!current.isEmpty()) {
-                copy.addEdge(n1, n2, current);
-            }
+            copy.replaceEdge(n1, n2, current);
             publish(copy, nextNodeId);
+            if (current.isEmpty()) {
+                persistEdge(n1, n2, current, false);
+            } else {
+                persistEdge(n1, n2, current, true);
+            }
             return true;
+        }
+    }
+
+    /** Правка ребра должна пережить пересборку графа: пишем в БД асинхронно. */
+    private void persistEdge(GraphNode n1, GraphNode n2, Set<TransportType> types, boolean save) {
+        Location a = n1.getLocation();
+        Location b = n2.getLocation();
+        if (a == null || b == null || a.getWorld() == null || b.getWorld() == null) {
+            return;
+        }
+        EdgeRecord record = new EdgeRecord(
+                a.getWorld().getName(),
+                a.getX(), a.getY(), a.getZ(),
+                b.getX(), b.getY(), b.getZ(),
+                EnumSet.copyOf(types));
+        try {
+            if (save) {
+                dataService.saveEdge(record);
+            } else {
+                dataService.deleteEdge(record);
+            }
+        } catch (Throwable t) {
+            log().log(Level.WARNING, "HahGps: не удалось сохранить ребро графа в БД", t);
         }
     }
 
@@ -205,7 +331,14 @@ public class GraphService {
         RoadGraph graph = roadGraph;
         List<GraphEdge> all = new ArrayList<>();
         for (GraphNode node : graph.getNodes()) {
-            all.addAll(graph.getEdges(node));
+            for (GraphEdge edge : graph.getEdges(node)) {
+                // Рёбра неориентированные и лежат в обе стороны: отдаём
+                // каждое только один раз.
+                if (edge.getFrom() != null && edge.getTo() != null
+                        && edge.getFrom().getId() < edge.getTo().getId()) {
+                    all.add(edge);
+                }
+            }
         }
         return all;
     }

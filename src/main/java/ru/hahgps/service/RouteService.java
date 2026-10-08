@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -24,14 +24,19 @@ import java.util.concurrent.TimeUnit;
 public class RouteService {
 
     private final GraphService graphService;
+    /**
+     * Очередь с отказом, а не CallerRunsPolicy: при занятом пуле задача
+     * выполнилась бы в ВЫЗЫВАЮЩЕМ потоке — то есть в главном тике сервера,
+     * и A* на большом графе фризил бы его на секунды.
+     */
     private final ExecutorService executor = new ThreadPoolExecutor(
-            0, 2, 60L, TimeUnit.SECONDS, new SynchronousQueue<>(),
+            0, 2, 60L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(8),
             r -> {
                 Thread t = new Thread(r, "HahGps-Route");
                 t.setDaemon(true);
                 return t;
             },
-            new ThreadPoolExecutor.CallerRunsPolicy());
+            new ThreadPoolExecutor.AbortPolicy());
 
     public RouteService(GraphService graphService) {
         this.graphService = graphService;
@@ -66,11 +71,9 @@ public class RouteService {
                         : Pathfinder.buildRoute(graph, start, end, type);
             }, executor);
         } catch (java.util.concurrent.RejectedExecutionException e) {
-            // пул занят и политика отказалась ставить в очередь — считаем на месте
-            RoadGraph graph = graphService.graph();
-            return CompletableFuture.completedFuture(multiModal
-                    ? Pathfinder.buildMultiModalRoute(graph, start, end, type)
-                    : Pathfinder.buildRoute(graph, start, end, type));
+            // Очередь переполнена: честный отказ, а не расчёт в главном потоке.
+            return CompletableFuture.failedFuture(new java.util.concurrent.RejectedExecutionException(
+                    "HahGps: сервер занят построением других маршрутов, попробуйте через секунду"));
         }
     }
 

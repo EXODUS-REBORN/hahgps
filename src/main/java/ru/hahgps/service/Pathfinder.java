@@ -63,6 +63,10 @@ public class Pathfinder {
                 }
             }
         }
+        // Исчерпание открытого множества — тоже «путь не найден», но без
+        // строчки в логе оно неотличимо от недостижимой цели с валидным графом.
+        log().warning("HahGps: маршрут " + from.getId() + " -> " + to.getId()
+                + " не построен: достижимых узлов не осталось.");
         return Collections.emptyList();
     }
 
@@ -140,7 +144,10 @@ public class Pathfinder {
         GraphNode transitStart = graph.findNearestNode(start, mainTransport);
         GraphNode transitEnd = graph.findNearestNode(end, mainTransport);
 
-        if (transitStart != null && !transitStart.getLocation().equals(start)) {
+        // Location.equals сравнивает сырые double: «дойти до транспорта»
+        // фактически всегда добавлялось лишним звеном. Допуск — 1 блок.
+        if (transitStart != null
+                && ru.hahgps.util.LocationUtil.distance(start, transitStart.getLocation()) > 1.0) {
             List<Location> walkTo = buildRoute(graph, start, transitStart.getLocation(), TransportType.FOOT);
             route.addAll(walkTo.subList(1, walkTo.size()));
         }
@@ -151,7 +158,8 @@ public class Pathfinder {
             route.addAll(transitPath.subList(1, transitPath.size()));
         }
 
-        if (transitEnd != null && !transitEnd.getLocation().equals(end)) {
+        if (transitEnd != null
+                && ru.hahgps.util.LocationUtil.distance(end, transitEnd.getLocation()) > 1.0) {
             List<Location> walkFrom = buildRoute(graph, transitEnd.getLocation(), end, TransportType.FOOT);
             route.addAll(walkFrom.subList(1, walkFrom.size()));
         }
