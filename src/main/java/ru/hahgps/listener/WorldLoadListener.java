@@ -24,11 +24,17 @@ public class WorldLoadListener implements Listener {
     @EventHandler
     public void onWorldLoad(WorldLoadEvent event) {
         var graphService = plugin.getGraphService();
+        var dataService = plugin.getDataService();
         if (graphService == null || graphService.isLoading()) {
             return;
         }
         plugin.getLogger().info("HahGps: мир «" + event.getWorld().getName()
                 + "» загружен — пересобираю граф дорог.");
+        // Кэш маршрутов держит Location на старый инстанс мира: сбрасываем,
+        // иначе граф собирался бы по мёртвым ссылкам.
+        if (dataService != null) {
+            dataService.invalidateRoutes();
+        }
         graphService.loadGraph().exceptionally(error -> {
             plugin.getLogger().log(java.util.logging.Level.WARNING,
                     "HahGps: не удалось пересобрать граф после загрузки мира", error);

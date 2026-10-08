@@ -48,9 +48,20 @@ public class HahGpsPlugin extends JavaPlugin {
 
     private volatile boolean hotSwapping;
 
+    /**
+     * Поднят в самом начале onDisable: async-цепочка инициализацииstorage
+     * проверяет его до того, как тронуть dataService, иначе присвоение после
+     * выключения оставило бы DataService без shutdown (утечка пула БД).
+     */
+    private volatile boolean stopping;
+
+    /** Задача тика визуализации: храним, чтобы отменять явно. */
+    private org.bukkit.scheduler.BukkitTask visualizationTask;
+
     @Override
     public void onEnable() {
         instance = this;
+        stopping = false;
 
         configManager = new ConfigManager(this);
         configManager.load();
@@ -94,10 +105,18 @@ public class HahGpsPlugin extends JavaPlugin {
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
                 storageProvider.init();
+                if (stopping) {
+                    // Плагин уже выключали, пока поднималось хранилище.
+                    try {
+                        storageProvider.close();
+                    } catch (Throwable ignored) {
+                    }
+                    return;
+                }
                 DataService service = new DataService(this, storageProvider);
                 dataService = service;
                 service.loadCache().whenComplete((v, error) -> {
-                    if (!isEnabled()) {
+                    if (!isEnabled() || stopping) {
                         return;
                     }
                     if (error != null) {
@@ -128,24 +147,37 @@ public class HahGpsPlugin extends JavaPlugin {
             } catch (Throwable ignored) {
             }
         }
-        try {
-
-
-            Bukkit.getScheduler().runTask(this, () -> {
-                if (dataService != null) {
-                    try {
-                        dataService.shutdown();
-                    } catch (Throwable ignored) {
-                    }
-                    dataService = null;
+        Runnable cleanup = () -> {
+            if (dataService != null) {
+                try {
+                    dataService.shutdown();
+                } catch (Throwable ignored) {
                 }
-                getLogger().severe("HahGps: storage initialization failed. Disabling.");
-                if (isEnabled()) {
-                    getServer().getPluginManager().disablePlugin(this);
+            }
+            // Провайдер закрываем всегда: даже если shutdown() бросил,
+            // иначе JDBC-соединение (и WAL-локи SQLite) останутся висеть.
+            if (storageProvider != null) {
+                try {
+                    storageProvider.close();
+                } catch (Throwable ignored) {
                 }
-            });
-        } catch (Throwable ignored) {
-
+            }
+            dataService = null;
+            getLogger().severe("HahGps: storage initialization failed. Disabling.");
+            if (isEnabled()) {
+                getServer().getPluginManager().disablePlugin(this);
+            }
+        };
+        // runTask на выключенном плагине бросает IllegalPluginAccessException:
+        // в этом случае чистим сразу, иначе отказ был бы тихим.
+        if (isEnabled()) {
+            try {
+                Bukkit.getScheduler().runTask(this, cleanup);
+            } catch (Throwable t) {
+                cleanup.run();
+            }
+        } else {
+            cleanup.run();
         }
     }
 
@@ -194,7 +226,15 @@ public class HahGpsPlugin extends JavaPlugin {
             Bukkit.getPluginManager().registerEvents(new RouteRecordListener(this), this);
 
             navigationService.start();
-            Bukkit.getScheduler().runTaskTimer(this, () -> visualizationService.tick(), 20L, 20L);
+            visualizationTask = Bukkit.getScheduler().runTaskTimer(this, () -> {
+                try {
+                    visualizationService.tick();
+                } catch (Throwable t) {
+                    // Bukkit навсегда отменяет задачу при не пойманном RuntimeException:
+                    // тогда визуализация молча умирает до перезапуска. Ловим и логируем.
+                    getLogger().log(Level.WARNING, "HahGps: tick визуализации упал", t);
+                }
+            }, 20L, 20L);
 
             initUpdater();
 
@@ -218,12 +258,21 @@ public class HahGpsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        stopping = true;
+
         UpdaterService service = updater;
         updater = null;
         if (service != null) {
             service.stop();
         }
 
+        if (visualizationTask != null) {
+            try {
+                visualizationTask.cancel();
+            } catch (Throwable ignored) {
+            }
+            visualizationTask = null;
+        }
 
         try {
             if (navigationService != null) {
@@ -262,20 +311,31 @@ public class HahGpsPlugin extends JavaPlugin {
         }
 
 
-        if (dataService != null) {
+        DataService data = dataService;
+        if (data != null) {
             try {
-                dataService.shutdown();
+                data.shutdown();
             } catch (Throwable t) {
                 getLogger().log(Level.WARNING, "HahGps: storage shutdown failed", t);
             }
-            dataService = null;
-        } else if (storageProvider != null) {
+        }
+        // Провайдер закрываем отдельным if, а не else-if: если shutdown()
+        // бросил, соединение всё равно должно закрыться.
+        if (storageProvider != null) {
             try {
                 storageProvider.close();
             } catch (Throwable ignored) {
             }
+            storageProvider = null;
         }
 
+        // Ссылки на сервисы и dataService намеренно НЕ обнуляем: висящие
+        // async-колбэки (whenComplete в командах и GUI) дергают геттеры, и
+        // runSync/isEnabled внутри них гасительно — NPE в async-потоке
+        // проглотился бы future'ом, и игрок не получил бы даже ошибки.
+        // Статический instance обнуляем: getInstance() не должен отдавать
+        // выключенный плагин (важно для hot-swap).
+        instance = null;
 
         if (service != null && !hotSwapping) {
             try {
