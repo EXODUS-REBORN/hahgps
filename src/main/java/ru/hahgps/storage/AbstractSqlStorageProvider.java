@@ -92,7 +92,30 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 "ON CONFLICT(poi_id, player_uuid) DO UPDATE SET rating = excluded.rating";
     }
 
+    /**
+     * Схема создаётся по шагам: таблицы → колонки в старых таблицах → индексы →
+     * версия. База любой прошлой версии открывается без потерь и без
+     * «no such column».
+     */
     protected void createSchema() throws SQLException {
+        boolean fresh = !tableExists("pois");
+        int previousVersion = fresh ? SCHEMA_VERSION : readSchemaVersionQuietly();
+
+        createTables();
+        ensureColumns();
+        createIndexes();
+        writeSchemaVersion();
+
+        if (!fresh && previousVersion < SCHEMA_VERSION) {
+            log().log(Level.INFO, "HahGps: база старой версии (схема v" + previousVersion
+                    + ") обновлена до v" + SCHEMA_VERSION + " — данные сохранены.");
+        }
+    }
+
+    /** Текущая версия схемы: растёт при миграциях. */
+    public static final int SCHEMA_VERSION = 2;
+
+    private void createTables() throws SQLException {
         try (Statement st = connection.createStatement()) {
             st.execute("CREATE TABLE IF NOT EXISTS categories (" +
                     "id INTEGER PRIMARY KEY " + autoIncrement() + ", " +
@@ -149,17 +172,156 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
             st.execute("CREATE TABLE IF NOT EXISTS meta (" +
                     "key VARCHAR(32) PRIMARY KEY, " +
                     "value VARCHAR(64) NOT NULL)");
-
-            writeSchemaVersion(st);
         }
-        createIndexes();
     }
 
-    /** Текущая версия схемы: растёт при миграциях. */
-    public static final int SCHEMA_VERSION = 2;
+    /**
+     * Обязательные колонки каждой таблицы. Без id (AUTOINCREMENT), уникальных
+     * name и первичных ключей: их нельзя добавить через ALTER TABLE, а их
+     * отсутствие = безнадёжно чужая база. Дефолты — только для NOT NULL:
+     * SQLite не даёт ADD COLUMN NOT NULL без дефолта, и старые строки иначе
+     * не прочитались бы.
+     */
+    private static final Map<String, List<ColumnAdd>> REQUIRED_COLUMNS = requiredColumns();
 
-    private void writeSchemaVersion(Statement st) throws SQLException {
-        st.execute(upsertMetaSql());
+    private static Map<String, List<ColumnAdd>> requiredColumns() {
+        Map<String, List<ColumnAdd>> spec = new LinkedHashMap<>();
+        spec.put("categories", List.of(
+                new ColumnAdd("is_default", "TINYINT NOT NULL DEFAULT 0")));
+        spec.put("pois", List.of(
+                new ColumnAdd("category_id", "INTEGER NOT NULL DEFAULT 0"),
+                new ColumnAdd("world", "VARCHAR(64) NOT NULL DEFAULT 'world'"),
+                new ColumnAdd("x", "DOUBLE NOT NULL DEFAULT 0"),
+                new ColumnAdd("y", "DOUBLE NOT NULL DEFAULT 64"),
+                new ColumnAdd("z", "DOUBLE NOT NULL DEFAULT 0"),
+                new ColumnAdd("description", "TEXT"),
+                new ColumnAdd("author", "VARCHAR(64) NOT NULL DEFAULT ''"),
+                new ColumnAdd("created_at", "BIGINT NOT NULL DEFAULT 0")));
+        spec.put("ratings", List.of(
+                new ColumnAdd("poi_id", "INTEGER NOT NULL DEFAULT 0"),
+                new ColumnAdd("player_uuid", "VARCHAR(36) NOT NULL DEFAULT ''"),
+                new ColumnAdd("rating", "INTEGER NOT NULL DEFAULT 0")));
+        spec.put("routes", List.of(
+                new ColumnAdd("world", "VARCHAR(64) NOT NULL DEFAULT 'world'"),
+                new ColumnAdd("transport", "VARCHAR(16) NOT NULL DEFAULT 'FOOT'"),
+                new ColumnAdd("created_by", "VARCHAR(64)"),
+                new ColumnAdd("created_at", "BIGINT NOT NULL DEFAULT 0")));
+        spec.put("route_nodes", List.of(
+                new ColumnAdd("route_id", "INTEGER NOT NULL DEFAULT 0"),
+                new ColumnAdd("seq", "INTEGER NOT NULL DEFAULT 0"),
+                new ColumnAdd("world", "VARCHAR(64) NOT NULL DEFAULT 'world'"),
+                new ColumnAdd("x", "DOUBLE NOT NULL DEFAULT 0"),
+                new ColumnAdd("y", "DOUBLE NOT NULL DEFAULT 64"),
+                new ColumnAdd("z", "DOUBLE NOT NULL DEFAULT 0")));
+        spec.put("graph_edges", List.of(
+                new ColumnAdd("world", "VARCHAR(64) NOT NULL DEFAULT 'world'"),
+                new ColumnAdd("x1", "DOUBLE NOT NULL DEFAULT 0"),
+                new ColumnAdd("y1", "DOUBLE NOT NULL DEFAULT 64"),
+                new ColumnAdd("z1", "DOUBLE NOT NULL DEFAULT 0"),
+                new ColumnAdd("x2", "DOUBLE NOT NULL DEFAULT 0"),
+                new ColumnAdd("y2", "DOUBLE NOT NULL DEFAULT 64"),
+                new ColumnAdd("z2", "DOUBLE NOT NULL DEFAULT 0"),
+                new ColumnAdd("transports", "VARCHAR(64) NOT NULL DEFAULT ''"),
+                new ColumnAdd("created_at", "BIGINT NOT NULL DEFAULT 0")));
+        spec.put("meta", List.of(
+                new ColumnAdd("value", "VARCHAR(64) NOT NULL DEFAULT ''")));
+        return spec;
+    }
+
+    private record ColumnAdd(String column, String definition) {}
+
+    /** Добавляет в существующие таблицы колонки, которых в них ещё нет. */
+    private void ensureColumns() throws SQLException {
+        for (Map.Entry<String, List<ColumnAdd>> entry : REQUIRED_COLUMNS.entrySet()) {
+            String table = entry.getKey();
+            if (!tableExists(table)) {
+                continue;
+            }
+            Set<String> existing = existingColumns(table);
+            for (ColumnAdd add : entry.getValue()) {
+                if (existing.contains(add.column().toLowerCase(java.util.Locale.ROOT))) {
+                    continue;
+                }
+                String sql = "ALTER TABLE " + table + " ADD COLUMN "
+                        + add.column() + " " + add.definition();
+                try (Statement st = connection.createStatement()) {
+                    st.execute(sql);
+                }
+                log().log(Level.FINE, "HahGps: миграция БД — добавлена колонка "
+                        + table + "." + add.column());
+            }
+        }
+    }
+
+    private boolean tableExists(String table) throws SQLException {
+        if (mysql) {
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?")) {
+                ps.setString(1, table);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next();
+                }
+            }
+        }
+        try (PreparedStatement ps = connection.prepareStatement(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")) {
+            ps.setString(1, table);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    private Set<String> existingColumns(String table) throws SQLException {
+        Set<String> cols = new HashSet<>();
+        if (mysql) {
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "SELECT COLUMN_NAME FROM information_schema.COLUMNS " +
+                            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?")) {
+                ps.setString(1, table);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        cols.add(rs.getString(1).toLowerCase(java.util.Locale.ROOT));
+                    }
+                }
+            }
+            return cols;
+        }
+        try (Statement st = connection.createStatement();
+             ResultSet rs = st.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) {
+                cols.add(rs.getString("name").toLowerCase(java.util.Locale.ROOT));
+            }
+        }
+        return cols;
+    }
+
+    /** Версия схемы без проверки живости соединения — только для init. */
+    private int readSchemaVersionQuietly() {
+        try {
+            if (!tableExists("meta")) {
+                return 0;
+            }
+            try (Statement st = connection.createStatement();
+                 ResultSet rs = st.executeQuery("SELECT value FROM meta WHERE key = 'schema_version'")) {
+                if (rs.next()) {
+                    try {
+                        return Integer.parseInt(rs.getString("value"));
+                    } catch (NumberFormatException ignored) {
+                        return 0;
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            return 0;
+        }
+        return 0;
+    }
+
+    private void writeSchemaVersion() throws SQLException {
+        try (Statement st = connection.createStatement()) {
+            st.execute(upsertMetaSql());
+        }
     }
 
     protected String upsertMetaSql() {

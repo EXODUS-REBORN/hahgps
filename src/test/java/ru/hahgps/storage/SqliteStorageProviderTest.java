@@ -274,4 +274,90 @@ class SqliteStorageProviderTest {
         Map<UUID, Integer> ratings = provider.getRatings(1);
         assertTrue(ratings.isEmpty(), "битая строка не должна ронять весь ответ");
     }
+
+    /** Создаёт базу ровно в том виде, какой её писали старые версии (схема без meta/graph_edges). */
+    private void createLegacyDatabase(File file) throws Exception {
+        try (var conn = java.sql.DriverManager.getConnection("jdbc:sqlite:" + file.getAbsolutePath());
+             var st = conn.createStatement()) {
+            st.execute("CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    + "name VARCHAR(64) UNIQUE NOT NULL, is_default TINYINT NOT NULL DEFAULT 0)");
+            st.execute("CREATE TABLE pois (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    + "name VARCHAR(64) UNIQUE NOT NULL, category_id INTEGER NOT NULL, "
+                    + "world VARCHAR(64) NOT NULL, x DOUBLE NOT NULL, y DOUBLE NOT NULL, z DOUBLE NOT NULL, "
+                    + "description TEXT, author VARCHAR(64) NOT NULL, created_at BIGINT NOT NULL)");
+            st.execute("CREATE TABLE ratings (poi_id INTEGER NOT NULL, player_uuid VARCHAR(36) NOT NULL, "
+                    + "rating INTEGER NOT NULL, PRIMARY KEY (poi_id, player_uuid))");
+            st.execute("CREATE TABLE routes (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    + "name VARCHAR(64) UNIQUE NOT NULL, world VARCHAR(64) NOT NULL, "
+                    + "transport VARCHAR(16) NOT NULL DEFAULT 'FOOT', created_by VARCHAR(64), created_at BIGINT NOT NULL)");
+            st.execute("CREATE TABLE route_nodes (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    + "route_id INTEGER NOT NULL, seq INTEGER NOT NULL, world VARCHAR(64) NOT NULL, "
+                    + "x DOUBLE NOT NULL, y DOUBLE NOT NULL, z DOUBLE NOT NULL)");
+            st.execute("INSERT INTO categories (name, is_default) VALUES ('Старая', 0)");
+            st.execute("INSERT INTO pois (name, category_id, world, x, y, z, description, author, created_at) "
+                    + "VALUES ('Точка', 1, 'world', 5, 64, 7, 'desc', 'author', 42)");
+            st.execute("INSERT INTO ratings (poi_id, player_uuid, rating) VALUES (1, '"
+                    + UUID.randomUUID() + "', 9)");
+            st.execute("INSERT INTO routes (name, world, transport, created_by, created_at) "
+                    + "VALUES ('Маршрут', 'world', 'FOOT', 'admin', 42)");
+            st.execute("INSERT INTO route_nodes (route_id, seq, world, x, y, z) VALUES (1, 0, 'world', 1, 64, 1)");
+            st.execute("INSERT INTO route_nodes (route_id, seq, world, x, y, z) VALUES (1, 1, 'world', 2, 64, 2)");
+        }
+    }
+
+    @Test
+    void legacyDatabaseIsUpgradedWithoutLosingData() throws Exception {
+        File file = tempDir.resolve("legacy.db").toFile();
+        createLegacyDatabase(file);
+
+        TestProvider legacy = new TestProvider(file, Map.of("world", WORLD));
+        legacy.init();
+        try {
+            assertEquals(AbstractSqlStorageProvider.SCHEMA_VERSION, legacy.schemaVersion(),
+                    "старая база без meta должна получить текущую версию схемы");
+            assertEquals(1, legacy.getCategories().size());
+            assertEquals("Старая", legacy.getCategories().get(0).getName());
+            assertEquals(1, legacy.getPois().size());
+            Poi poi = legacy.getPois().get(0);
+            assertEquals("Точка", poi.getName());
+            assertEquals(5.0, poi.getX(), 0.0001);
+            assertEquals("author", poi.getAuthor());
+            assertEquals(42L, poi.getCreatedAt());
+            assertEquals(9, legacy.getAllRatings().get(1).values().iterator().next());
+            assertEquals(1, legacy.getRoutes().size());
+            assertEquals(2, legacy.getRoutes().get(0).getNodeCount());
+            assertTrue(legacy.getEdges().isEmpty(), "graph_edges создаётся пустым для старой базы");
+        } finally {
+            legacy.close();
+        }
+    }
+
+    @Test
+    void missingColumnsAreBackfilledOnOpen() throws Exception {
+        File file = tempDir.resolve("drift.db").toFile();
+        try (var conn = java.sql.DriverManager.getConnection("jdbc:sqlite:" + file.getAbsolutePath());
+             var st = conn.createStatement()) {
+            st.execute("CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    + "name VARCHAR(64) UNIQUE NOT NULL, is_default TINYINT NOT NULL DEFAULT 0)");
+            // Таблица pois без author и created_at — как будто её создала более ранняя/чужая версия.
+            st.execute("CREATE TABLE pois (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    + "name VARCHAR(64) UNIQUE NOT NULL, category_id INTEGER NOT NULL, "
+                    + "world VARCHAR(64) NOT NULL, x DOUBLE NOT NULL, y DOUBLE NOT NULL, z DOUBLE NOT NULL, "
+                    + "description TEXT)");
+            st.execute("INSERT INTO categories (name, is_default) VALUES ('c', 0)");
+            st.execute("INSERT INTO pois (name, category_id, world, x, y, z, description) "
+                    + "VALUES ('p', 1, 'world', 1, 2, 3, 'd')");
+        }
+
+        TestProvider drifted = new TestProvider(file, Map.of("world", WORLD));
+        drifted.init();
+        try {
+            List<Poi> pois = drifted.getPois();
+            assertEquals(1, pois.size());
+            assertEquals("", pois.get(0).getAuthor(), "author дозаполняется пустым значением");
+            assertEquals(0L, pois.get(0).getCreatedAt(), "created_at дозаполняется нулём");
+        } finally {
+            drifted.close();
+        }
+    }
 }
