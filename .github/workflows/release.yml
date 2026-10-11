@@ -93,8 +93,10 @@ jobs:
             exit 1
           fi
           echo "публикую $TAG с файлом $JAR"
+          # Тело релиза — короткий текст из release-notes.txt (1–2 предложения):
+          # он же печатается в стартовом баннере и строке истории README (см. AGENTS.md).
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$JAR" --clobber
           else
-            gh release create "$TAG" "$JAR" --title "HahGPS $TAG" --generate-notes
+            gh release create "$TAG" "$JAR" --title "HahGPS $TAG" --notes-file src/main/resources/release-notes.txt
           fi
