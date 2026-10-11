@@ -102,7 +102,6 @@ ru.hahgps
 - **CategoryCommand** — управление категориями (create, delete, list)
 - **GotoCommand** — навигация к точке
 - **SearchCommand** — поиск точек
-- **MapCommand** — открытие карты
 - **RouteCommand** — управление маршрутом (start, stop)
 - **LogCommand** — переключение подсказок
 - **ReloadCommand** — перезагрузка конфигурации
