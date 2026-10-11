@@ -27,7 +27,6 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         register(new CategoryCommand());
         register(new GotoCommand());
         register(new SearchCommand());
-        register(new MapCommand());
         register(new RouteCommand());
         register(new LogCommand());
         register(new ReloadCommand());
