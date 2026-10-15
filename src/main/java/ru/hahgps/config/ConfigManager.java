@@ -150,8 +150,8 @@ public class ConfigManager {
     }
 
     public int getUpdateInterval() {
-        int interval = config.getInt("navigation.update-interval", 5);
-        return Math.max(1, Math.min(20, interval));
+        int interval = config.getInt("navigation.update-interval", 10);
+        return Math.max(10, Math.min(40, interval));
     }
 
     public double getArrivalRadius() {

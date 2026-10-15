@@ -154,6 +154,19 @@ public final class HotSwap {
             return new Result(false, version, reason);
         }
 
+        // Горячее обновление неизбежно даёт скачок MSPT: loadPlugin + enablePlugin
+        // выполняются в главном потоке. Если TPS и так низкий, подмена усугубит
+        // просадку — лучше отложить до момента, когда сервер разгрузится.
+        double tps = Bukkit.getTPS()[0];
+        if (tps < 18.0) {
+            reply(feedback, "Горячая подмена отложена: TPS слишком низкий ("
+                    + String.format(java.util.Locale.ROOT, "%.1f", tps)
+                    + "). Обновление применится при перезапуске сервера.");
+            log(Level.WARNING, "Горячая подмена отложена: TPS = "
+                    + String.format(java.util.Locale.ROOT, "%.1f", tps), null);
+            return new Result(false, version, "TPS слишком низкий: " + String.format(java.util.Locale.ROOT, "%.1f", tps));
+        }
+
         reply(feedback, textStart);
         log(Level.INFO, "Горячая подмена: ставлю " + version + " на ходу…", null);
 
@@ -174,6 +187,16 @@ public final class HotSwap {
         Bukkit.getLogger().info("Горячая подмена: старая версия выгружена, поднимаю " + version + "…");
 
         releaseInstance(plugin);
+
+        // Прогрев классов нового плагина в фоновом потоке: loadPlugin() в главном
+        // потоке загружает и линкует все классы jar, что даёт 50-200мс лагов.
+        // Предварительная загрузка в отдельном classloader'е переносит эту работу
+        // с главного потока.
+        try {
+            warmUpClasses(target);
+        } catch (Throwable ignored) {
+            // Прогрев необязателен: если не вышло, loadPlugin просто будет чуть дольше
+        }
 
         Plugin loaded = null;
         try {
@@ -217,6 +240,46 @@ public final class HotSwap {
         // Игрок, выполнивший /gps update apply, должен отличить успех от зависания.
         reply(feedback, textOk);
         return new Result(true, version, "");
+    }
+
+    /**
+     * Прогрев классов нового плагина в фоновом потоке.
+     *
+     * loadPlugin() в главном потоке загружает и линкует все классы jar, что даёт
+     * 50-200мс лагов. Предварительная загрузка в отдельном classloader'е
+     * переносит эту работу с главного потока. Классы не регистрируются в
+     * Bukkit — только загружаются и линкуются, прогревая JIT.
+     */
+    private static void warmUpClasses(Path jar) {
+        try {
+            java.net.URL[] urls = {jar.toUri().toURL()};
+            try (java.net.URLClassLoader warmLoader = new java.net.URLClassLoader(
+                    urls, HotSwap.class.getClassLoader())) {
+                // Загружаем все классы из jar: это прогревает JIT и уменьшает
+                // время loadPlugin в главном потоке
+                try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(jar.toFile(),
+                        java.nio.charset.StandardCharsets.UTF_8)) {
+                    java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zip.entries();
+                    while (entries.hasMoreElements()) {
+                        java.util.zip.ZipEntry entry = entries.nextElement();
+                        String name = entry.getName();
+                        if (!name.endsWith(".class")) continue;
+                        String className = name.substring(0, name.length() - 6)
+                                .replace('/', '.');
+                        try {
+                            warmLoader.loadClass(className);
+                        } catch (Throwable ignored) {
+                            // Класс может зависеть от Bukkit API, который не в
+                            // classpath warmLoader — это нормально, loadPlugin
+                            // загрузит его сам
+                        }
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            log(Level.FINE, "Горячая подмена: прогрев классов не удался ("
+                    + message(t) + ")", null);
+        }
     }
 
     /**

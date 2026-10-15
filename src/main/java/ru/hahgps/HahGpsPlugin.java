@@ -219,29 +219,43 @@ public class HahGpsPlugin extends JavaPlugin {
                 cmd.setTabCompleter(commandManager);
             }
 
-            Bukkit.getPluginManager().registerEvents(new GuiListener(), this);
-            Bukkit.getPluginManager().registerEvents(new ChatInputListener(), this);
-            Bukkit.getPluginManager().registerEvents(new PlayerQuitListener(), this);
-            Bukkit.getPluginManager().registerEvents(new WorldLoadListener(this), this);
-            Bukkit.getPluginManager().registerEvents(new RouteRecordListener(this), this);
-
-            navigationService.start();
-            visualizationTask = Bukkit.getScheduler().runTaskTimer(this, () -> {
+            // Отложенная регистрация слушателей и запуск таймеров: регистрация
+            // событий и создание задач в главном потоке дают вклад в скачок MSPT
+            // при перезагрузке плагина. Разбиваем на несколько тиков.
+            Bukkit.getScheduler().runTaskLater(this, () -> {
                 try {
-                    visualizationService.tick();
+                    Bukkit.getPluginManager().registerEvents(new GuiListener(), this);
+                    Bukkit.getPluginManager().registerEvents(new ChatInputListener(), this);
+                    Bukkit.getPluginManager().registerEvents(new PlayerQuitListener(), this);
+                    Bukkit.getPluginManager().registerEvents(new WorldLoadListener(this), this);
+                    Bukkit.getPluginManager().registerEvents(new RouteRecordListener(this), this);
                 } catch (Throwable t) {
-                    // Bukkit навсегда отменяет задачу при не пойманном RuntimeException:
-                    // тогда визуализация молча умирает до перезапуска. Ловим и логируем.
-                    getLogger().log(Level.WARNING, "HahGps: tick визуализации упал", t);
+                    getLogger().log(Level.WARNING, "HahGps: не удалось зарегистрировать слушателей", t);
                 }
-            }, 20L, 20L);
+            }, 2L);
+
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                try {
+                    navigationService.start();
+                    visualizationTask = Bukkit.getScheduler().runTaskTimer(this, () -> {
+                        try {
+                            visualizationService.tick();
+                        } catch (Throwable t) {
+                            // Bukkit навсегда отменяет задачу при не пойманном RuntimeException:
+                            // тогда визуализация молча умирает до перезапуска. Ловим и логируем.
+                            getLogger().log(Level.WARNING, "HahGps: tick визуализации упал", t);
+                        }
+                    }, 20L, 20L);
+                } catch (Throwable t) {
+                    getLogger().log(Level.WARNING, "HahGps: не удалось запустить навигацию и визуализацию", t);
+                }
+            }, 4L);
 
             initUpdater();
 
             ConsoleBanner.printBanner(this, getPluginMeta().getVersion());
             getLogger().info("HahGps enabled. Storage: " + configManager.getStorageType());
         } catch (Throwable t) {
-
             getLogger().log(Level.SEVERE, "HahGps: startup failed", t);
             failStartup();
         }

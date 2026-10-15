@@ -40,7 +40,7 @@ public class NavigationService {
             updateTask.cancel();
             updateTask = null;
         }
-        int interval = Math.max(1, config.getUpdateInterval());
+        int interval = Math.max(10, config.getUpdateInterval());
         updateTask = Bukkit.getScheduler().runTaskTimer(plugin, this::updateAll, interval, interval);
     }
 
