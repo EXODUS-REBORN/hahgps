@@ -6,6 +6,10 @@
   (код, тексты, `release-notes.txt`, версия в `pom.xml`, история в `README.md`) —
   одним коммитом `vX.Y.Z: …`, затем пуш и тег `vX.Y.Z`.
 - Коммитить **только** при выпуске релиза. Без релиза — не коммитить.
+- Пуш — **в оба remote**: `git push origin main --follow-tags` (GitHub, от него
+  работают CI и релизы) и `git push forge main --tags` (локальный Forgejo).
+  После зелёного GitHub-релиза зеркалировать его на форж:
+  `~/.local/bin/forgejo-release-sync.py EXODUS-REBORN/hahgps` (идемпотентно).
 
 ## Релизные заметки (обязательно каждый релиз)
 
