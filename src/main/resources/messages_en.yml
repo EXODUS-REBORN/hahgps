@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Palette schema version: a mismatch replaces the file with the bundled one (old -> .bak)
-palette-version: 5
+palette-version: 6
 
 no-permission: "<#3f86ff>✖ You don't have permission to run this command.</#3f86ff>"
 player-only: "<#3f86ff>✖ This command is for players only.</#3f86ff>"
@@ -68,6 +68,9 @@ category-not-found: "<#3f86ff>✖ Category <white><bold>{name}</bold></white> no
 category-exists: "<#3f86ff>✖ A category with that name already exists.</#3f86ff>"
 cannot-delete-default: "<#3f86ff>✖ Cannot delete a default category.</#3f86ff>"
 category-not-empty: "<#3f86ff>✖ Category <white><bold>{name}</bold></white> still has points — delete them or move them to another category first.</#3f86ff>"
+point-no-categories: "<#3f86ff>✖ No categories exist — the point was not created.</#3f86ff> <gray>Create one:</gray> <white><bold>/gps category create</bold></white>"
+name-too-long: "<#3f86ff>✖ Name is too long — maximum <white><bold>{max}</bold></white> characters.</#3f86ff>"
+point-category-fallback: "<#8fe9f5>✔</#8fe9f5> <gray>Category</gray> <white><bold>{name}</bold></white> <gray>not found — the point was saved to</gray> <#8fc6ff><bold>{category}</bold></#8fc6ff>"
 map-inventory-full: "<#3f86ff>✖ No free slot for the map — free one and open the map again.</#3f86ff>"
 transport-disabled: "<#3f86ff>✖ Transport <white><bold>{transport}</bold></white> is disabled in config.yml.</#3f86ff>"
 category-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ CATEGORIES ({count}) ═══</gradient></bold>"

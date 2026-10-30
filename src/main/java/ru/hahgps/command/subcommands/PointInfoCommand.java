@@ -54,7 +54,7 @@ public class PointInfoCommand implements SubCommand {
                         "y", String.format(java.util.Locale.ROOT, "%.1f", poi.getY()),
                         "z", String.format(java.util.Locale.ROOT, "%.1f", poi.getZ()),
                         "world", poi.getWorld(),
-                        "rating", String.format("%.1f", poi.getRating()),
+                        "rating", String.format(java.util.Locale.ROOT, "%.1f", poi.getRating()),
                         "votes", String.valueOf(poi.getRatingCount()),
                         "author", poi.getAuthor(),
                         "date", poi.getFormattedDate(),

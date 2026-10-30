@@ -32,7 +32,6 @@ ru.hahgps
 │   ├── GuiUtil.java           — хелперы для создания предметов
 │   ├── InputManager.java      — ввод через чат
 │   ├── MainMenuGui.java       — главное меню
-│   ├── MapGui.java            — карта с POI
 │   ├── PoiActionsGui.java     — действия над точкой
 │   ├── PointsListGui.java     — список точек
 │   ├── SearchGui.java         — поиск точек

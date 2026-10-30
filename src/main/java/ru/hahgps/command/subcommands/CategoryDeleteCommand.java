@@ -31,7 +31,8 @@ public class CategoryDeleteCommand implements SubCommand {
             player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
             return;
         }
-        String name = args[0];
+        // Название категории может содержать пробелы («Близкие места»).
+        String name = String.join(" ", args);
 
         plugin.getCategoryService().delete(name)
                 .whenComplete((result, error) -> plugin.getDataService().runSync(() -> {

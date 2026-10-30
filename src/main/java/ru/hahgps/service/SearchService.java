@@ -9,13 +9,35 @@ import java.util.concurrent.CompletableFuture;
 public class SearchService {
 
     private final DataService dataService;
-    private final int maxResults;
-    private final double threshold;
+    /** Значения из конфига на момент старта: запасной вариант, если плагина нет. */
+    private final int defaultMaxResults;
+    private final double defaultThreshold;
 
     public SearchService(DataService dataService, int maxResults, double threshold) {
         this.dataService = dataService;
-        this.maxResults = maxResults;
-        this.threshold = threshold;
+        this.defaultMaxResults = maxResults;
+        this.defaultThreshold = threshold;
+    }
+
+    /**
+     * Настройки поиска читаются на каждый запрос, а не один раз при старте:
+     * иначе {@code /gps reload} (и переключение настроек) не менял ни порог,
+     * ни лимит результатов до перезапуска сервера.
+     */
+    private int maxResults() {
+        ru.hahgps.HahGpsPlugin plugin = ru.hahgps.HahGpsPlugin.getInstance();
+        if (plugin != null && plugin.getConfigManager() != null) {
+            return plugin.getConfigManager().getSearchMaxResults();
+        }
+        return defaultMaxResults;
+    }
+
+    private double threshold() {
+        ru.hahgps.HahGpsPlugin plugin = ru.hahgps.HahGpsPlugin.getInstance();
+        if (plugin != null && plugin.getConfigManager() != null) {
+            return plugin.getConfigManager().getSearchThreshold();
+        }
+        return defaultThreshold;
     }
 
     public static class SearchResult {
@@ -35,8 +57,8 @@ public class SearchService {
             return CompletableFuture.completedFuture(new ArrayList<>());
         }
         final String qLower = query.trim().toLowerCase(java.util.Locale.ROOT);
-        final int limit = Math.max(0, maxResults);
-        final double minSimilarity = threshold;
+        final int limit = Math.max(0, maxResults());
+        final double minSimilarity = threshold();
         return dataService.getPois().thenApply(pois -> {
             List<SearchResult> results = new ArrayList<>();
             for (Poi poi : pois) {

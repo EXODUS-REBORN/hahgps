@@ -16,42 +16,51 @@ public class PoiService {
         this.dataService = dataService;
     }
 
-    public CompletableFuture<Poi> createPoi(Player player, String name, String categoryName, String description) {
+    /**
+     * Итог создания точки: игрок должен видеть, в какую категорию она реально
+     * попала. Раньше сервис сам отправлял сообщения с захардкоженным русским
+     * текстом и цветами вне палитры, а команда показывала поверх этого ещё
+     * одно «категория не найдена» — теперь тексты только в messages_*.yml.
+     *
+     * @param poi              созданная точка или null, если создавать некуда
+     * @param fallbackCategory категория, в которую точка сохранена вместо
+     *                         запрошенной (null — запрошенная категория есть
+     *                         либо не запрашивалась)
+     */
+    public record CreateOutcome(Poi poi, Category fallbackCategory) {
+    }
 
-
+    public CompletableFuture<CreateOutcome> createPoi(Player player, String name, String categoryName,
+                                                      String description) {
         Location loc = player.getLocation().clone();
         String author = player.getName();
         if (loc.getWorld() == null) {
-            return CompletableFuture.completedFuture(null);
+            return CompletableFuture.completedFuture(new CreateOutcome(null, null));
+        }
+        boolean noCategoryRequested = categoryName == null || categoryName.isBlank();
+        if (noCategoryRequested) {
+            return firstCategory().thenCompose(first -> first == null
+                    ? CompletableFuture.completedFuture(new CreateOutcome(null, null))
+                    : savePoi(name, first.getId(), description, loc, author)
+                            .thenApply(poi -> new CreateOutcome(poi, null)));
         }
         return dataService.getCategoryByName(categoryName).thenCompose(category -> {
-            int categoryId;
             if (category != null) {
-                categoryId = category.getId();
-            } else {
-                // Неизвестная категория — не молчаливый откат на первую: игрок
-                // должен знать, в какую категорию реально попала точка.
-                return dataService.getCategories().thenCompose(categories -> {
-                    if (categories.isEmpty()) {
-                        player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-                                .deserialize("<red>Нет ни одной категории — точка не создана. Создайте категорию: /gps category create <имя>"));
-                        return CompletableFuture.completedFuture(null);
-                    }
-                    Category first = categories.get(0);
-                    player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-                            .deserialize("<yellow>Категория «" + safe(categoryName)
-                                    + "» не найдена — точка сохранена в «" + safe(first.getName()) + "»."));
-                    return savePoi(name, first.getId(), description, loc, author);
-                });
+                return savePoi(name, category.getId(), description, loc, author)
+                        .thenApply(poi -> new CreateOutcome(poi, null));
             }
-            return savePoi(name, categoryId, description, loc, author);
+            // Неизвестная категория — не молчаливый откат на первую: игрок
+            // должен знать, в какую категорию реально попала точка.
+            return firstCategory().thenCompose(first -> first == null
+                    ? CompletableFuture.completedFuture(new CreateOutcome(null, null))
+                    : savePoi(name, first.getId(), description, loc, author)
+                            .thenApply(poi -> new CreateOutcome(poi, first)));
         });
     }
 
-    private static String safe(String raw) {
-        return raw == null ? "?" : net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
-                .plainText().serialize(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
-                        .deserialize(ru.hahgps.gui.GuiTheme.escapeForMini(raw)));
+    private CompletableFuture<Category> firstCategory() {
+        return dataService.getCategories().thenApply(categories ->
+                categories == null || categories.isEmpty() ? null : categories.get(0));
     }
 
     private CompletableFuture<Poi> savePoi(String name, int categoryId, String description,

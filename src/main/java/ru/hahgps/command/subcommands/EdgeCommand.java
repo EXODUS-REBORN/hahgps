@@ -129,8 +129,10 @@ public class EdgeCommand implements SubCommand {
                 return ids;
             }
             if (args.length == 3) {
+                // Префикс — текущий (третий) аргумент, а не id1: раньше подсказка
+                // типов транспорта фильтровалась по первому аргументу и пропадала.
                 return SubCommand.filterByPrefix(
-                        List.of("foot,car", "foot,car,transit", "foot,car,transit,air,water"), args[0]);
+                        List.of("foot,car", "foot,car,transit", "foot,car,transit,air,water"), args[2]);
             }
             return List.of();
         }

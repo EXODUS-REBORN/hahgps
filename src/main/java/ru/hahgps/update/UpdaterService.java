@@ -47,6 +47,8 @@ public final class UpdaterService {
     private volatile BukkitTask task;
 
     private volatile boolean active;
+    /** Периодическая проверка остановлена (например, приватный репозиторий без токена). */
+    private volatile boolean autoCheckStopped;
     private final AtomicBoolean busy = new AtomicBoolean();
     private volatile String lastError = "";
     private volatile long lastCheckMs;
@@ -257,6 +259,7 @@ public final class UpdaterService {
                     + "Новую версию придётся положить в plugins/ вручную.");
         }
         active = true;
+        autoCheckStopped = false;
         try {
 
             Bukkit.getScheduler().runTaskAsynchronously(plugin, this::scanStagedAndSchedule);
@@ -319,6 +322,7 @@ public final class UpdaterService {
 
     public synchronized void stop() {
         active = false;
+        autoCheckStopped = true;
         BukkitTask current = task;
         task = null;
         if (current != null) {
@@ -865,7 +869,8 @@ public final class UpdaterService {
         out.add(repo.isBlank()
                 ? "Репозиторий релизов: не задан"
                 : "Репозиторий релизов: " + repo);
-        out.add("Автопроверка: " + (enabled ? "включена" : "выключена")
+        out.add("Автопроверка: " + (!enabled ? "выключена"
+                        : autoCheckStopped ? "остановлена (см. ошибку ниже)" : "включена")
                 + ", интервал: " + intervalMinutes + " мин"
                 + ", предрелизы: " + (allowPrerelease ? "да" : "нет"));
         out.add("Горячее обновление: " + (hotApply ? "включено" : "выключено")

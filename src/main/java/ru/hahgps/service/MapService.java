@@ -40,7 +40,21 @@ public class MapService {
     private final Map<UUID, MapRenderer> renderers = new ConcurrentHashMap<>();
     private final Map<UUID, AtomicLong> renderTokens = new ConcurrentHashMap<>();
 
-    private static final BufferedImage BLANK_IMAGE = new BufferedImage(128, 128, BufferedImage.TYPE_INT_RGB);
+    /**
+     * Пустая картинка для карты до первого рендера.
+     *
+     * Лежит в отдельном holder-классе намеренно: {@code new BufferedImage}
+     * тянет за собой инициализацию AWT ({@code ColorSpace}, {@code Raster}),
+     * а это десятки миллисекунд на нормальной машине и секунды на загруженной.
+     * В статическом поле самого {@code MapService} эта инициализация попадала
+     * в {@code onStorageReady} — то есть в главный поток при старте плагина,
+     * и Paper писал «The server has not responded for 10 seconds».
+     * Теперь AWT поднимается лениво при первом открытии карты.
+     */
+    private static final class Blank {
+        private static final BufferedImage IMAGE =
+                new BufferedImage(128, 128, BufferedImage.TYPE_INT_RGB);
+    }
 
     public MapService(HahGpsPlugin plugin) {
         this.plugin = plugin;
@@ -83,7 +97,8 @@ public class MapService {
 
     private MapView getOrCreateMapView(Player player, World world) {
         MapView view = playerMaps.get(player.getUniqueId());
-        if (view != null && view.getWorld() != null && view.getWorld().equals(world)) {
+        if (view != null && view.getWorld() != null
+                && ru.hahgps.util.LocationUtil.sameWorld(view.getWorld(), world)) {
             return view;
         }
         if (view != null) {
@@ -92,9 +107,15 @@ public class MapService {
                 view.removeRenderer(old);
             }
         }
-        view = Bukkit.createMap(world);
-        view.setScale(parseZoom(plugin.getConfigManager().getMapZoom()));
-        view.setUnlimitedTracking(false);
+        // Карта уже лежит в инвентаре с прошлой сессии — берём её MapView,
+        // а не создаём новую. Раньше каждый вход + открытие карты выдавали
+        // новый filled_map, и предметы копились в инвентаре стопкой.
+        view = findMapViewInInventory(player, world);
+        if (view == null) {
+            view = Bukkit.createMap(world);
+            view.setScale(parseZoom(plugin.getConfigManager().getMapZoom()));
+            view.setUnlimitedTracking(false);
+        }
         MapRenderer renderer = getRenderer(player);
         view.addRenderer(renderer);
         renderers.put(player.getUniqueId(), renderer);
@@ -102,12 +123,32 @@ public class MapService {
         return view;
     }
 
+    /** MapView из выданной ранее карты игрока (в том же мире), если она есть. */
+    private MapView findMapViewInInventory(Player player, World world) {
+        for (ItemStack item : player.getInventory().getStorageContents()) {
+            if (item == null || item.getType() != Material.FILLED_MAP || !item.hasItemMeta()) {
+                continue;
+            }
+            if (!(item.getItemMeta() instanceof MapMeta meta) || !meta.hasMapId()) {
+                continue;
+            }
+            MapView candidate = Bukkit.getMap(meta.getMapId());
+            if (candidate == null || candidate.getWorld() == null) {
+                continue;
+            }
+            if (ru.hahgps.util.LocationUtil.sameWorld(candidate.getWorld(), world)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
     private MapRenderer getRenderer(Player player) {
         return new MapRenderer() {
             @Override
             public void render(MapView mapView, MapCanvas canvas, Player p) {
                 BufferedImage image = renderedImages.get(player.getUniqueId());
-                canvas.drawImage(0, 0, image != null ? image : BLANK_IMAGE);
+                canvas.drawImage(0, 0, image != null ? image : Blank.IMAGE);
             }
         };
     }

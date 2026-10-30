@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Версия схемы палитры: при несовпадении файл заменяется эталоном (старый — в .bak)
-palette-version: 5
+palette-version: 6
 
 no-permission: "<#3f86ff>✖ У вас нет прав для выполнения этой команды.</#3f86ff>"
 player-only: "<#3f86ff>✖ Эта команда доступна только игрокам.</#3f86ff>"
@@ -68,13 +68,16 @@ category-not-found: "<#3f86ff>✖ Категория <white><bold>{name}</bold><
 category-exists: "<#3f86ff>✖ Категория с таким именем уже существует.</#3f86ff>"
 cannot-delete-default: "<#3f86ff>✖ Нельзя удалить стандартную категорию.</#3f86ff>"
 category-not-empty: "<#3f86ff>✖ В категории <white><bold>{name}</bold></white> ещё есть точки — сначала удали их или перенеси в другую категорию.</#3f86ff>"
+point-no-categories: "<#3f86ff>✖ Категорий нет — точка не создана.</#3f86ff> <gray>Создай категорию:</gray> <white><bold>/gps category create</bold></white>"
+name-too-long: "<#3f86ff>✖ Слишком длинное имя — максимум <white><bold>{max}</bold></white> символа.</#3f86ff>"
+point-category-fallback: "<#8fe9f5>✔</#8fe9f5> <gray>Категория</gray> <white><bold>{name}</bold></white> <gray>не найдена — точка сохранена в</gray> <#8fc6ff><bold>{category}</bold></#8fc6ff>"
 map-inventory-full: "<#3f86ff>✖ В инвентаре нет места под карту — освободи слот и открой карту снова.</#3f86ff>"
 transport-disabled: "<#3f86ff>✖ Транспорт «<white><bold>{transport}</bold></white>» выключен в config.yml.</#3f86ff>"
 category-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ КАТЕГОРИИ ({count}) ═══</gradient></bold>"
 category-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>точек:</gray> <#8fc6ff><bold>{count}</bold></#8fc6ff>"
 
 # --- Маршруты и навигация ---
-route-started: "<#8fe9f5>✔</#8fe9f5> <gray>Навигация к</gray> <white><bold>{name}</bold></white> <dark_gray>начата · осталось</dark_gray> <#8fc6ff><bold>{distance}</bold></#8fc6ff>"
+route-started: "<#8fe9f5>✔</#8fe9f5> <gray>Навигация к точке</gray> <white><bold>{name}</bold></white> <dark_gray>начата · осталось</dark_gray> <#8fc6ff><bold>{distance}</bold></#8fc6ff>"
 route-stopped: "<#8fe9f5>✔</#8fe9f5> <gray>Навигация остановлена.</gray>"
 no-active-route: "<#3f86ff>✖ У вас нет активной навигации.</#3f86ff>"
 route-record-started: "<#8fe9f5>✔</#8fe9f5> <gray>Запись маршрута начата — иди по дороге, потом</gray> <white>/gps route record stop</white><gray>.</gray>"

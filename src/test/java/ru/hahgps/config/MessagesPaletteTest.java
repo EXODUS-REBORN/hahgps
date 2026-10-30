@@ -111,7 +111,7 @@ class MessagesPaletteTest {
             for (String[] kv : parse(file)) {
                 if ("palette-version".equals(kv[0])) {
                     found = true;
-                    assertEquals("5", kv[1].trim(), lang + ": устаревшая схема палитры");
+                    assertEquals("6", kv[1].trim(), lang + ": устаревшая схема файла сообщений");
                 }
             }
             assertTrue(found, lang + ": нет ключа palette-version");

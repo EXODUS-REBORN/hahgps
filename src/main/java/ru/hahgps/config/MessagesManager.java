@@ -11,7 +11,13 @@ import java.util.Map;
 public class MessagesManager {
 
 
-    public static final int PALETTE_VERSION = 5;
+    /**
+     * Ревизия файла сообщений. Растёт при любом изменении текстов, а не только
+     * палитры: иначе исправленный текст не доезжает до серверов, где
+     * messages_ru.yml уже лежит (он не перезаписывается, пока версия файла
+     * не ниже текущей). Старая копия сохраняется рядом как {@code .bak}.
+     */
+    public static final int PALETTE_VERSION = 6;
 
     private final HahGpsPlugin plugin;
     private volatile YamlConfiguration messages;

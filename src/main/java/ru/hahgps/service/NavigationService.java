@@ -164,7 +164,6 @@ public class NavigationService {
     private void updateSession(Player player, NavigationSession session) {
         Location target = session.getTarget();
         Location playerLoc = player.getLocation();
-        String transportIcon = getTransportIcon(session.getTransport());
         String targetName = session.getTargetName() == null ? "?"
                 : ru.hahgps.gui.GuiTheme.clipPlain(session.getTargetName(), ru.hahgps.gui.GuiTheme.NAME_MAX);
 
@@ -176,7 +175,7 @@ public class NavigationService {
                 || !LocationUtil.sameWorld(playerLoc.getWorld(), target.getWorld())) {
             BossBar crossWorldBar = bossBars.get(player.getUniqueId());
             if (crossWorldBar != null) {
-                crossWorldBar.setTitle(title("⚠", transportIcon, targetName, ""));
+                crossWorldBar.setTitle(title("⚠", targetName, ""));
             }
             // HUD и последнее расстояние из прошлого мира убираем: иначе
             // боссбар говорит «другой мир», а HUD продолжает показывать старое.
@@ -204,7 +203,7 @@ public class NavigationService {
 
         BossBar bar = bossBars.get(player.getUniqueId());
         if (bar != null) {
-            bar.setTitle(title(arrow, transportIcon, targetName,
+            bar.setTitle(title(arrow, targetName,
                     LocationUtil.formatDistance(distanceToTarget)));
             float progress = session.getTotalDistance() > 0
                     ? (float) Math.max(0.0, Math.min(1.0, distanceToTarget / session.getTotalDistance()))
@@ -226,28 +225,19 @@ public class NavigationService {
         }
     }
 
-    private String getTransportIcon(TransportType type) {
-        if (type == null) {
-            return "";
-        }
-        return switch (type) {
-            case FOOT -> "👣";
-            case CAR -> "🚗";
-            case TRANSIT -> "🚌";
-            case AIR -> "🚁";
-            case WATER -> "🚢";
-        };
-    }
-
     /**
      * Строка боссбара — единственное место, где показывается направление:
-     * {@code стрелка + транспорт + цель + расстояние}.
-     * Порядок именно такой: стрелка первая, чтобы она читалась сразу.
+     * {@code стрелка + цель + расстояние}. Порядок именно такой: стрелка
+     * первая, чтобы она читалась сразу.
+     *
+     * Эмодзи-иконки транспорта (👣🚗🚌🚁🚢) отсюда убраны: они лежат за
+     * пределами BMP, а шрифт Minecraft их не содержит — на клиенте вместо
+     * иконки рисовался пустой квадрат. Остались только глифы из BMP
+     * (стрелки, ⚠).
      */
-    private String title(String arrow, String transportIcon, String targetName, String distance) {
+    private String title(String arrow, String targetName, String distance) {
         StringBuilder sb = new StringBuilder(48);
         if (arrow != null && !arrow.isEmpty()) sb.append(arrow).append(' ');
-        if (transportIcon != null && !transportIcon.isEmpty()) sb.append(transportIcon).append(' ');
         if (targetName != null && !targetName.isEmpty()) sb.append(targetName);
         if (distance != null && !distance.isEmpty()) sb.append(' ').append(distance);
         return sb.toString().trim();

@@ -7,6 +7,9 @@ import java.util.List;
 
 public class CategoryCreateCommand implements SubCommand {
 
+    /** Длина колонки name в БД (VARCHAR(64)). */
+    private static final int MAX_NAME = 64;
+
     @Override
     public String name() {
         return "create";
@@ -29,7 +32,14 @@ public class CategoryCreateCommand implements SubCommand {
             player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
             return;
         }
-        String name = args[0];
+        // Название может содержать пробелы: аргументы команды режутся по ним,
+        // а категорию «Близкие места» потом иначе не удалить и не выбрать.
+        String name = String.join(" ", args);
+        if (name.length() > MAX_NAME) {
+            player.sendMessage(plugin.getMessages().getPrefixed("name-too-long",
+                    "max", String.valueOf(MAX_NAME)));
+            return;
+        }
         plugin.getCategoryService().createCategory(name)
                 .whenComplete((created, error) -> plugin.getDataService().runSync(() -> {
                     if (!player.isOnline()) {

@@ -134,7 +134,7 @@ public class DataService {
             try {
                 return action.get();
             } catch (Exception e) {
-                plugin.getLogger().log(Level.SEVERE, "Database operation failed", e);
+                logFailure(e);
                 throw new RuntimeException(e);
             }
         }, executor);
@@ -145,10 +145,37 @@ public class DataService {
             try {
                 action.run();
             } catch (Exception e) {
-                plugin.getLogger().log(Level.SEVERE, "Database operation failed", e);
+                logFailure(e);
                 throw new RuntimeException(e);
             }
         }, executor);
+    }
+
+    /**
+     * Дубликат имени — ошибка пользователя, а не сбой сервера: команда сама
+     * скажет «уже существует». Раньше на каждый такой случай в консоль летел
+     * ERROR со стектрейсом SQLite, и настоящие сбои БД тонули в этом шуме.
+     */
+    private void logFailure(Exception e) {
+        if (isDuplicateLike(e)) {
+            plugin.getLogger().log(Level.FINE, "Database rejected a duplicate", e);
+        } else {
+            plugin.getLogger().log(Level.SEVERE, "Database operation failed", e);
+        }
+    }
+
+    private static boolean isDuplicateLike(Throwable error) {
+        for (Throwable t = error; t != null; t = t.getCause()) {
+            String message = t.getMessage();
+            if (message == null) {
+                continue;
+            }
+            String lower = message.toLowerCase(java.util.Locale.ROOT);
+            if (lower.contains("unique") || lower.contains("duplicate")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public CompletableFuture<Category> createCategory(String name, boolean defaultCategory) {
