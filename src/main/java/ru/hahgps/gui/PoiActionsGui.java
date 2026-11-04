@@ -3,6 +3,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import ru.hahgps.HahGpsPlugin;
+import ru.hahgps.item.ItemIds;
 import ru.hahgps.model.Category;
 import ru.hahgps.model.Poi;
 
@@ -29,21 +30,21 @@ public class PoiActionsGui extends GuiScreen {
     public void build() {
         inventory.setItem(10, GuiUtil.item(Material.PAPER,
                 comp("gui.info"),
-                lore("gui.lore-info")));
+                lore("gui.lore-info"), ItemIds.POI_INFO));
 
         inventory.setItem(12, GuiUtil.item(Material.COMPASS,
                 comp("gui.goto"),
-                lore("gui.lore-goto")));
+                lore("gui.lore-goto"), ItemIds.POI_GOTO));
 
         inventory.setItem(14, GuiUtil.item(Material.NETHER_STAR,
                 comp("gui.rate"),
-                lore("gui.lore-rate")));
+                lore("gui.lore-rate"), ItemIds.POI_RATE));
 
 
         if (player.hasPermission("gps.point.delete")) {
             inventory.setItem(16, GuiUtil.item(Material.LAVA_BUCKET,
                     comp("gui.delete"),
-                    lore("gui.lore-delete")));
+                    lore("gui.lore-delete"), ItemIds.POI_DELETE));
         }
 
         inventory.setItem(22, GuiTheme.navBack(getMsg("gui.back")));

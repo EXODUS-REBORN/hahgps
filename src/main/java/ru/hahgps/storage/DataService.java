@@ -2,6 +2,7 @@ package ru.hahgps.storage;
 import ru.hahgps.model.Category;
 import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
+import ru.hahgps.model.Tracker;
 import org.bukkit.Bukkit;
 import ru.hahgps.HahGpsPlugin;
 import java.util.ArrayList;
@@ -332,6 +333,23 @@ public class DataService {
 
     public CompletableFuture<Void> deleteEdge(ru.hahgps.model.EdgeRecord edge) {
         return asyncVoid(() -> provider.deleteEdge(edge));
+    }
+
+    /** Установленные трекеры — один запрос при старте. */
+    public CompletableFuture<List<Tracker>> getTrackers() {
+        return async(provider::getTrackers);
+    }
+
+    public CompletableFuture<Tracker> createTracker(Tracker tracker) {
+        return async(() -> provider.createTracker(tracker));
+    }
+
+    public CompletableFuture<Boolean> updateTracker(Tracker tracker) {
+        return async(() -> provider.updateTracker(tracker));
+    }
+
+    public CompletableFuture<Boolean> deleteTracker(int id) {
+        return async(() -> provider.deleteTracker(id));
     }
 
     public void runSync(Runnable runnable) {

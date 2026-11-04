@@ -9,6 +9,8 @@ import org.junit.jupiter.api.io.TempDir;
 import ru.hahgps.model.Category;
 import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
+import ru.hahgps.model.Tracker;
+import ru.hahgps.model.TrackerColor;
 import ru.hahgps.model.TransportType;
 import ru.hahgps.testsupport.FakeWorld;
 
@@ -186,6 +188,67 @@ class SqliteStorageProviderTest {
     }
 
     @Test
+    void trackersSurviveRoundTrip() {
+        long now = 1_700_000_000_000L;
+        UUID owner = UUID.randomUUID();
+        Tracker tracker = new Tracker(0, "TRK-AB12", "Мой", TrackerColor.CYAN, true,
+                owner, "tester", "world", 10.5, 64.0, -3.25, null, false, now, now, now);
+        Tracker created = provider.createTracker(tracker);
+        assertNotNull(created);
+        assertTrue(created.getId() > 0);
+
+        List<Tracker> loaded = provider.getTrackers();
+        assertEquals(1, loaded.size());
+        Tracker saved = loaded.get(0);
+        assertEquals("TRK-AB12", saved.getCode());
+        assertEquals("Мой", saved.getName());
+        assertEquals(TrackerColor.CYAN, saved.getColor());
+        assertTrue(saved.isWaterproof());
+        assertEquals(owner, saved.getOwnerUuid());
+        assertEquals("world", saved.getWorld());
+        assertEquals(10.5, saved.getX(), 0.0001);
+        assertEquals(-3.25, saved.getZ(), 0.0001);
+        assertFalse(saved.isSunk());
+
+        Tracker moved = new Tracker(saved.getId(), saved.getCode(), saved.getName(), saved.getColor(),
+                saved.isWaterproof(), saved.getOwnerUuid(), saved.getOwnerName(), "world",
+                20.0, 65.0, -4.0, null, false, saved.getPlacedAt(), now + 5000, now + 5000);
+        assertTrue(provider.updateTracker(moved));
+        assertEquals(20.0, provider.getTrackers().get(0).getX(), 0.0001);
+        assertEquals(now + 5000, provider.getTrackers().get(0).getMovedAt());
+
+        assertTrue(provider.deleteTracker(saved.getId()));
+        assertTrue(provider.getTrackers().isEmpty());
+    }
+
+    @Test
+    void sunkTrackersKeepTheirStateAndEntityLink() {
+        UUID entity = UUID.randomUUID();
+        Tracker tracker = new Tracker(0, "TRK-SUNK", "", TrackerColor.RED, false,
+                UUID.randomUUID(), "tester", "world", 1, 62, 2, entity, true, 1L, 2L, 3L);
+        provider.createTracker(tracker);
+
+        Tracker saved = provider.getTrackers().get(0);
+        assertTrue(saved.isSunk());
+        assertFalse(saved.hasSignal(), "затонувший трекер не отдаёт сигнал");
+        assertEquals(entity, saved.getEntityUuid());
+        assertEquals("", saved.getName());
+        assertEquals("TRK-SUNK", saved.getDisplayName(), "без имени подписью становится код");
+    }
+
+    @Test
+    void duplicateTrackerCodeIsRejected() {
+        Tracker first = new Tracker(0, "TRK-DUP1", "", TrackerColor.BLUE, false,
+                UUID.randomUUID(), "tester", "world", 0, 64, 0, null, false, 1L, 1L, 1L);
+        provider.createTracker(first);
+        Tracker second = new Tracker(0, "TRK-DUP1", "", TrackerColor.GREEN, false,
+                UUID.randomUUID(), "tester", "world", 5, 64, 5, null, false, 1L, 1L, 1L);
+        RuntimeException error = org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class,
+                () -> provider.createTracker(second));
+        assertTrue(error.getMessage().contains("TRK-DUP1"));
+    }
+
+    @Test
     void duplicatePoiNameIsRejectedBySchema() {
         Category category = provider.createCategory("Тест", false);
         provider.createPoi(poi("Спавн", category.getId()));
@@ -327,6 +390,7 @@ class SqliteStorageProviderTest {
             assertEquals(1, legacy.getRoutes().size());
             assertEquals(2, legacy.getRoutes().get(0).getNodeCount());
             assertTrue(legacy.getEdges().isEmpty(), "graph_edges создаётся пустым для старой базы");
+            assertTrue(legacy.getTrackers().isEmpty(), "таблица трекеров появляется пустой");
         } finally {
             legacy.close();
         }

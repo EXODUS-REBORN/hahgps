@@ -11,6 +11,11 @@ commands:
     description: Main GPS command
     usage: /gps <subcommand>
     aliases: [navigation, nav]
+  itrak:
+    description: iTrak GPS trackers (same as /gps itrak)
+    usage: /itrak [give|give-locator|scan|list|info|route|take|remove|watch|unwatch]
+    aliases: [trk]
+    permission: gps.itrak
 
 # Права ниже соответствуют подкомандам /gps (см. ru.hahgps.command):
 #   gps.use            — point info|list, category list, goto, route start|stop, log, menu, help
@@ -61,4 +66,13 @@ permissions:
     default: op
   gps.visual:
     description: Toggle grid visualization
+    default: op
+  gps.itrak:
+    description: Use iTrak trackers (place, scan, watch, route)
+    default: true
+  gps.itrak.give:
+    description: Give tracker and locator items
+    default: op
+  gps.itrak.admin:
+    description: See, take and remove any tracker
     default: op

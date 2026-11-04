@@ -34,6 +34,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         register(new HelpCommand());
         register(new EdgeCommand());
         register(new VisualCommand());
+        register(new ItrakCommand());
     }
 
     private void register(SubCommand cmd) {

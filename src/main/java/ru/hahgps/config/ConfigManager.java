@@ -82,6 +82,27 @@ public class ConfigManager {
                     "порт вне диапазона 1..65535 — использую 3306");
             config.set("storage.mysql.port", 3306);
         }
+
+        checkRange("itrak.update-interval", 20, 5, 200);
+        checkRange("itrak.stationary-minutes", 1, 1, 600);
+        checkRange("itrak.particle-radius", 48, 8, 128);
+        checkRange("itrak.scan-radius", 200, 16, 1000);
+        checkRange("itrak.take-radius", 5, 1, 32);
+        checkRange("itrak.max-per-player", 8, 1, 64);
+        checkRange("itrak.watch-interval-seconds", 5, 1, 600);
+        checkRange("itrak.save-interval-seconds", 30, 5, 3600);
+        checkRange("itrak.live-route-rebuild-seconds", 10, 2, 300);
+        checkRange("itrak.live-route-rebuild-blocks", 16, 2, 256);
+    }
+
+    /** Числовая настройка с диапазоном: опечатка не должна ронять игру. */
+    private void checkRange(String path, int fallback, int min, int max) {
+        int value = config.getInt(path, fallback);
+        if (value < min || value > max) {
+            warn(path, String.valueOf(value),
+                    "значение вне диапазона " + min + ".." + max + " — использую " + fallback);
+            config.set(path, fallback);
+        }
     }
 
     private <T> void checkEnum(String path, String fallback, java.util.function.Function<String, T> parser,
@@ -235,5 +256,70 @@ public class ConfigManager {
             return DEFAULT_CATEGORIES;
         }
         return configured;
+    }
+
+    // ------------------------------------------------------------------
+    // iTrak: GPS-трекеры
+    // ------------------------------------------------------------------
+
+    public boolean isItrakEnabled() {
+        return config.getBoolean("itrak.enabled", true);
+    }
+
+    /** Период тика трекеров в тиках: чаще раза в 5 тиков опрашивать сущности незачем. */
+    public int getItrakUpdateInterval() {
+        int value = config.getInt("itrak.update-interval", 20);
+        return Math.max(5, Math.min(200, value));
+    }
+
+    /** Через сколько неподвижности трекер считается стоящим и предлагает маршрут. */
+    public long getItrakStationaryMillis() {
+        int minutes = Math.max(1, Math.min(600, config.getInt("itrak.stationary-minutes", 1)));
+        return minutes * 60_000L;
+    }
+
+    public boolean isItrakStationaryNotify() {
+        return config.getBoolean("itrak.stationary-notify", true);
+    }
+
+    public boolean isItrakParticles() {
+        return config.getBoolean("itrak.particles", true);
+    }
+
+    public double getItrakParticleRadius() {
+        return Math.max(8, Math.min(128, config.getInt("itrak.particle-radius", 48)));
+    }
+
+    public double getItrakScanRadius() {
+        return Math.max(16, Math.min(1000, config.getInt("itrak.scan-radius", 200)));
+    }
+
+    public double getItrakTakeRadius() {
+        return Math.max(1, Math.min(32, config.getInt("itrak.take-radius", 5)));
+    }
+
+    public int getItrakMaxPerPlayer() {
+        return Math.max(1, Math.min(64, config.getInt("itrak.max-per-player", 8)));
+    }
+
+    public int getItrakWatchIntervalSeconds() {
+        return Math.max(1, Math.min(600, config.getInt("itrak.watch-interval-seconds", 5)));
+    }
+
+    public int getItrakSaveIntervalSeconds() {
+        return Math.max(5, Math.min(3600, config.getInt("itrak.save-interval-seconds", 30)));
+    }
+
+    public long getItrakLiveRouteRebuildMillis() {
+        return Math.max(2, Math.min(300, config.getInt("itrak.live-route-rebuild-seconds", 10))) * 1000L;
+    }
+
+    public double getItrakLiveRouteRebuildBlocks() {
+        return Math.max(2, Math.min(256, config.getInt("itrak.live-route-rebuild-blocks", 16)));
+    }
+
+    /** Можно ли прицепить трекер к игроку (слежка за игроком). */
+    public boolean isItrakAttachPlayers() {
+        return config.getBoolean("itrak.attach-players", true);
     }
 }

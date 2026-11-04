@@ -3,6 +3,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import ru.hahgps.HahGpsPlugin;
+import ru.hahgps.item.ItemIds;
 import ru.hahgps.model.Category;
 
 import java.util.List;
@@ -55,16 +56,17 @@ public class CategoriesGui extends GuiScreen {
                     int count = counts.getOrDefault(category.getId(), 0);
                     inventory.setItem(slot++, GuiUtil.item(Material.BOOK,
                             GuiUtil.tonedName(9, category.getName()),
-                            lore("gui.lore-category-count", "count", String.valueOf(count))));
+                            lore("gui.lore-category-count", "count", String.valueOf(count)),
+                            ItemIds.CATEGORY_ENTRY));
                 }
 
                 if (player.hasPermission("gps.category.create")) {
                     inventory.setItem(45, GuiUtil.item(Material.EMERALD,
-                            comp("gui.create")));
+                            comp("gui.create"), null, ItemIds.CATEGORY_CREATE));
                 }
                 if (player.hasPermission("gps.category.delete")) {
                     inventory.setItem(46, GuiUtil.item(Material.LAVA_BUCKET,
-                            comp("gui.delete")));
+                            comp("gui.delete"), null, ItemIds.CATEGORY_DELETE));
                 }
                 inventory.setItem(53, GuiTheme.navBack(getMsg("gui.back")));
                 inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));

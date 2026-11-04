@@ -11,12 +11,20 @@ public final class GuiUtil {
     }
 
     public static ItemStack item(Material material, Component name, List<Component> lore) {
+        return item(material, name, lore, null);
+    }
+
+    /** Предмет GUI с кастомным ID модели для будущего ресурспака. */
+    public static ItemStack item(Material material, Component name, List<Component> lore, Integer modelId) {
         ItemStack stack = new ItemStack(material);
         ItemMeta meta = stack.getItemMeta();
         if (meta != null) {
             meta.displayName(name);
             if (lore != null && !lore.isEmpty()) {
                 meta.lore(lore);
+            }
+            if (modelId != null) {
+                meta.setCustomModelData(modelId);
             }
             stack.setItemMeta(meta);
         }
@@ -29,6 +37,10 @@ public final class GuiUtil {
 
     public static ItemStack toned(Material material, int tone, String text, List<String> lore) {
         return GuiTheme.glow(GuiTheme.named(material, GuiTheme.toned(tone, text), lore));
+    }
+
+    public static ItemStack toned(Material material, int tone, String text, List<String> lore, Integer modelId) {
+        return GuiTheme.glow(GuiTheme.named(material, GuiTheme.toned(tone, text), lore, modelId));
     }
 
     public static ItemStack gradient(Material material, String text, List<String> lore) {

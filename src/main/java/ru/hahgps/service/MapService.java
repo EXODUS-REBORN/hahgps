@@ -260,6 +260,8 @@ public class MapService {
         MapMeta meta = (MapMeta) map.getItemMeta();
         if (meta != null) {
             meta.setMapView(view);
+            // Кастомный ID модели — как и у остальных предметов плагина.
+            meta.setCustomModelData(ru.hahgps.item.ItemIds.MAP_ITEM);
             map.setItemMeta(meta);
         }
 

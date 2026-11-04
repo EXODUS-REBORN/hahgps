@@ -44,6 +44,10 @@ public abstract class GuiScreen implements InventoryHolder {
         GuiManager.getInstance().register(player, this);
     }
 
+    /** Вызывается при закрытии меню: здесь гасят повторяющиеся задачи экрана. */
+    public void onClose() {
+    }
+
     public void refresh() {
         if (inventory != null) {
             inventory.clear();

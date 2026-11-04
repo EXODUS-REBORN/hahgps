@@ -25,6 +25,9 @@ ru.hahgps
 ├── config/                    — конфигурация
 │   ├── ConfigManager.java     — доступ к config.yml
 │   └── MessagesManager.java   — локализация (messages_ru/en.yml)
+├── item/                      — предметы и кастомные ID моделей
+│   ├── ItemIds.java           — CustomModelData всех предметов (ресурспак)
+│   └── ItemFactory.java       — iTrak и локатор, PDC-данные, чтение предмета
 ├── gui/                       — графический интерфейс
 │   ├── GuiManager.java        — реестр открытых GUI
 │   ├── GuiScreen.java         — базовый класс экрана
@@ -37,10 +40,13 @@ ru.hahgps
 │   ├── SearchGui.java         — поиск точек
 │   ├── SettingsGui.java       — настройки
 │   ├── TransportSelectGui.java— выбор транспорта
+│   ├── ItrakMenuGui.java      — список трекеров iTrak (живое обновление)
+│   ├── TrackerDetailGui.java  — карточка трекера: координаты, маршрут, слежение
 │   └── CategoriesGui.java     — категории
 ├── listener/                  — обработчики событий
 │   ├── ChatInputListener.java — перехват ввода в чате
 │   ├── GuiListener.java       — клики в GUI
+│   ├── TrackerListener.java   — установка iTrak, локатор, потеря привязки
 │   └── PlayerQuitListener.java— очистка при выходе
 ├── model/                     — модели данных
 │   ├── Category.java          — категория точек
@@ -50,6 +56,8 @@ ru.hahgps
 │   ├── Poi.java               — точка интереса
 │   ├── RoadGraph.java         — дорожный граф
 │   ├── Route.java             — маршрут
+│   ├── Tracker.java           — установленный трекер iTrak
+│   ├── TrackerColor.java      — 8 цветов трекера
 │   └── TransportType.java     — тип транспорта
 ├── service/                   — бизнес-логика
 │   ├── CategoryService.java   — операции с категориями
@@ -63,6 +71,7 @@ ru.hahgps
 │   ├── RouteService.java      — построение маршрутов (свой пул потоков)
 │   ├── SearchService.java     — поиск с fuzzy-matching
 │   ├── TerrainRenderer.java   — рендеринг карты (отменяемые задачи)
+│   ├── TrackerService.java    — трекеры iTrak: координаты, неподвижность, слежение
 │   └── VisualizationService.java — визуализация графа
 ├── storage/                   — слой данных
 │   ├── DataService.java       — кэш и асинхронные операции
@@ -108,12 +117,17 @@ ru.hahgps
 - **HelpCommand** — справка
 - **EdgeCommand** — управление рёбрами графа
 - **VisualCommand** — визуализация дорожной сети
+- **ItrakCommand** — трекеры iTrak: give, give-locator, scan, list, info, route, take, remove, watch
 
 ### 3. Слой данных (Storage)
 
 **StorageProvider** — интерфейс для работы с БД:
 - `SqliteStorageProvider` — файловая БД (по умолчанию)
 - `MysqlStorageProvider` — серверная БД
+
+Схема БД — **v3**: к таблицам точек, категорий, оценок, маршрутов и рёбер
+добавлена `trackers` (код, цвет, водозащита, координаты, привязка к сущности,
+время последнего движения). Старые базы мигрируют при открытии.
 
 **DataService** — асинхронный слой с кэшированием:
 - Кэширует категории и точки в памяти

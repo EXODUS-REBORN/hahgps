@@ -2,6 +2,7 @@ package ru.hahgps.storage;
 import ru.hahgps.model.Category;
 import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
+import ru.hahgps.model.Tracker;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -60,6 +61,17 @@ public interface StorageProvider extends AutoCloseable {
 
     /** Удалить ребро с этими концами. */
     void deleteEdge(ru.hahgps.model.EdgeRecord edge);
+
+    /** Установленные трекеры iTrak. */
+    List<Tracker> getTrackers();
+
+    /** Сохранить новый трекер; возвращает запись с присвоенным id. */
+    Tracker createTracker(Tracker tracker);
+
+    /** Обновить координаты и состояние существующего трекера. */
+    boolean updateTracker(Tracker tracker);
+
+    boolean deleteTracker(int id);
 
     @Override
     void close();

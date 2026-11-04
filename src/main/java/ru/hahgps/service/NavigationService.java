@@ -10,6 +10,7 @@ import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.config.ConfigManager;
 import ru.hahgps.config.MessagesManager;
 import ru.hahgps.model.NavigationSession;
+import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TransportType;
 import ru.hahgps.util.DirectionUtil;
 import ru.hahgps.util.LocationUtil;
@@ -67,10 +68,36 @@ public class NavigationService {
     public void startNavigation(Player player, String targetName, Location target,
                                 java.util.List<Location> path, double totalDistance,
                                 TransportType transport) {
+        start(player, targetName, target, path, totalDistance, transport, null);
+    }
+
+    /**
+     * Маршрут к трекеру iTrak: цель живая. Пока трекер движется, тик
+     * подменяет точку, а путь перестраивается не чаще, чем разрешено
+     * настройками и только если трекер ушёл достаточно далеко.
+     */
+    public void startTrackerNavigation(Player player, Tracker tracker, Location target,
+                                       java.util.List<Location> path, double totalDistance,
+                                       TransportType transport) {
+        if (tracker == null) {
+            return;
+        }
+        start(player, tracker.getDisplayName(), target, path, totalDistance, transport, tracker.getId());
+    }
+
+    private void start(Player player, String targetName, Location target,
+                       java.util.List<Location> path, double totalDistance,
+                       TransportType transport, Integer trackerId) {
         stopNavigation(player);
         NavigationSession session = new NavigationSession(player.getUniqueId(), targetName, target,
-                path, routeLengthOrDefault(path, totalDistance), transport);
+                path, routeLengthOrDefault(path, totalDistance), transport, trackerId);
         session.setLoggingEnabled(config.isLogHints());
+        if (trackerId != null) {
+            // Путь к трекеру уже построен командой: не перестраиваем его
+            // сразу же на первом тике.
+            session.setLastPathRebuild(System.currentTimeMillis());
+            session.setLastRebuildOrigin(target == null ? null : target.clone());
+        }
         sessions.put(player.getUniqueId(), session);
 
         BarColor color = parseColor(config.getBossbarColor());
@@ -162,6 +189,7 @@ public class NavigationService {
     }
 
     private void updateSession(Player player, NavigationSession session) {
+        updateLiveTarget(player, session);
         Location target = session.getTarget();
         Location playerLoc = player.getLocation();
         String targetName = session.getTargetName() == null ? "?"
@@ -223,6 +251,60 @@ public class NavigationService {
                 player.sendMessage(messages.getPrefixed(hintKey));
             }
         }
+    }
+
+    /**
+     * Живая цель трекера: координаты берутся у сущности прямо сейчас, а путь
+     * перестраивается асинхронно, чтобы A* не тормозил главный поток.
+     */
+    private void updateLiveTarget(Player player, NavigationSession session) {
+        Integer trackerId = session.getTrackerId();
+        if (trackerId == null) {
+            return;
+        }
+        TrackerService trackerService = plugin.getTrackerService();
+        if (trackerService == null) {
+            return;
+        }
+        Tracker tracker = trackerService.byId(trackerId);
+        if (tracker == null) {
+            return;
+        }
+        Location live = trackerService.liveLocation(tracker);
+        if (live != null && live.getWorld() != null) {
+            session.setTarget(live);
+        }
+        Location current = session.getTarget();
+        if (current == null || session.isRebuildInFlight()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - session.getLastPathRebuild() < config.getItrakLiveRouteRebuildMillis()) {
+            return;
+        }
+        Location origin = session.getLastRebuildOrigin();
+        double moved = origin == null ? Double.MAX_VALUE : LocationUtil.distance(origin, current);
+        if (moved < config.getItrakLiveRouteRebuildBlocks()) {
+            return;
+        }
+        RouteService routeService = plugin.getRouteService();
+        if (routeService == null) {
+            return;
+        }
+        session.setRebuildInFlight(true);
+        session.setLastPathRebuild(now);
+        session.setLastRebuildOrigin(current.clone());
+        routeService.buildMultiModalAsync(player, current.clone(), session.getTransport())
+                .whenComplete((path, error) -> plugin.getDataService().runSync(() -> {
+                    session.setRebuildInFlight(false);
+                    if (!player.isOnline() || plugin.getNavigationService().getSession(player) != session) {
+                        return;
+                    }
+                    if (error == null && path != null && !path.isEmpty()) {
+                        session.setPath(path);
+                        session.setTotalDistance(routeLengthOrDefault(path, session.getTotalDistance()));
+                    }
+                }));
     }
 
     /**

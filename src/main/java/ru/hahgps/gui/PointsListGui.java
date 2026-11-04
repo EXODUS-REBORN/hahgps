@@ -5,6 +5,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.model.Category;
+import ru.hahgps.item.ItemIds;
 import ru.hahgps.model.Poi;
 import ru.hahgps.util.LocationUtil;
 
@@ -89,7 +90,8 @@ public class PointsListGui extends GuiScreen {
         // на кнопке, уводящей в меню, — обман.
         inventory.setItem(navRow + 5, GuiUtil.item(Material.BOOK,
                 comp("gui.page-info",
-                        "page", String.valueOf(page + 1), "pages", String.valueOf(pages))));
+                        "page", String.valueOf(page + 1), "pages", String.valueOf(pages)),
+                null, ItemIds.PAGE_INFO));
         inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));
 
         for (int i = 0; i < size(); i++) {
@@ -120,8 +122,10 @@ public class PointsListGui extends GuiScreen {
                 plugin.getMessages().getComponent("gui.distance", "distance", distanceStr)
         );
 
+        int categoryIndex = Math.floorMod(poi.getCategoryId(), ItemIds.POI_ICON_COUNT);
         return GuiUtil.item(getIconForCategory(poi.getCategoryId()),
-                GuiUtil.tonedName(9, poi.getName()), lore);
+                GuiUtil.tonedName(9, poi.getName()), lore,
+                ItemIds.POI_ICON_BASE + categoryIndex);
     }
 
     private Material getIconForCategory(int categoryId) {

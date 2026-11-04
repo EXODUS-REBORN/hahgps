@@ -5,6 +5,8 @@ import org.bukkit.World;
 import ru.hahgps.model.Category;
 import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
+import ru.hahgps.model.Tracker;
+import ru.hahgps.model.TrackerColor;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -113,7 +115,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     }
 
     /** Текущая версия схемы: растёт при миграциях. */
-    public static final int SCHEMA_VERSION = 2;
+    public static final int SCHEMA_VERSION = 3;
 
     private void createTables() throws SQLException {
         try (Statement st = connection.createStatement()) {
@@ -169,6 +171,26 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                     "transports VARCHAR(64) NOT NULL, " +
                     "created_at BIGINT NOT NULL)");
 
+            // Схема v3: установленные трекеры iTrak. Код — стабильный
+            // человекочитаемый идентификатор, по нему трекер находят команды
+            // и GUI; координаты меняются, поэтому хранятся отдельными колонками.
+            st.execute("CREATE TABLE IF NOT EXISTS trackers (" +
+                    "id INTEGER PRIMARY KEY " + autoIncrement() + ", " +
+                    "code VARCHAR(16) UNIQUE NOT NULL, " +
+                    "name VARCHAR(64) NOT NULL DEFAULT '', " +
+                    "owner_uuid VARCHAR(36) NOT NULL, " +
+                    "owner_name VARCHAR(64) NOT NULL DEFAULT '', " +
+                    "color VARCHAR(16) NOT NULL DEFAULT 'BLUE', " +
+                    "waterproof TINYINT NOT NULL DEFAULT 0, " +
+                    "world VARCHAR(64) NOT NULL, " +
+                    "x DOUBLE NOT NULL DEFAULT 0, y DOUBLE NOT NULL DEFAULT 64, " +
+                    "z DOUBLE NOT NULL DEFAULT 0, " +
+                    "entity_uuid VARCHAR(36), " +
+                    "sunk TINYINT NOT NULL DEFAULT 0, " +
+                    "placed_at BIGINT NOT NULL DEFAULT 0, " +
+                    "moved_at BIGINT NOT NULL DEFAULT 0, " +
+                    "updated_at BIGINT NOT NULL DEFAULT 0)");
+
             st.execute("CREATE TABLE IF NOT EXISTS meta (" +
                     "key VARCHAR(32) PRIMARY KEY, " +
                     "value VARCHAR(64) NOT NULL)");
@@ -223,6 +245,21 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 new ColumnAdd("z2", "DOUBLE NOT NULL DEFAULT 0"),
                 new ColumnAdd("transports", "VARCHAR(64) NOT NULL DEFAULT ''"),
                 new ColumnAdd("created_at", "BIGINT NOT NULL DEFAULT 0")));
+        spec.put("trackers", List.of(
+                new ColumnAdd("name", "VARCHAR(64) NOT NULL DEFAULT ''"),
+                new ColumnAdd("owner_uuid", "VARCHAR(36) NOT NULL DEFAULT ''"),
+                new ColumnAdd("owner_name", "VARCHAR(64) NOT NULL DEFAULT ''"),
+                new ColumnAdd("color", "VARCHAR(16) NOT NULL DEFAULT 'BLUE'"),
+                new ColumnAdd("waterproof", "TINYINT NOT NULL DEFAULT 0"),
+                new ColumnAdd("world", "VARCHAR(64) NOT NULL DEFAULT 'world'"),
+                new ColumnAdd("x", "DOUBLE NOT NULL DEFAULT 0"),
+                new ColumnAdd("y", "DOUBLE NOT NULL DEFAULT 64"),
+                new ColumnAdd("z", "DOUBLE NOT NULL DEFAULT 0"),
+                new ColumnAdd("entity_uuid", "VARCHAR(36)"),
+                new ColumnAdd("sunk", "TINYINT NOT NULL DEFAULT 0"),
+                new ColumnAdd("placed_at", "BIGINT NOT NULL DEFAULT 0"),
+                new ColumnAdd("moved_at", "BIGINT NOT NULL DEFAULT 0"),
+                new ColumnAdd("updated_at", "BIGINT NOT NULL DEFAULT 0")));
         spec.put("meta", List.of(
                 new ColumnAdd("value", "VARCHAR(64) NOT NULL DEFAULT ''")));
         return spec;
@@ -358,6 +395,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         createIndex("idx_route_nodes_route", "route_nodes", "route_id");
         createIndex("idx_pois_category", "pois", "category_id");
         createIndex("idx_graph_edges_world", "graph_edges", "world");
+        createIndex("idx_trackers_owner", "trackers", "owner_uuid");
     }
 
     private void createIndex(String name, String table, String columns) {
@@ -769,6 +807,142 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         } catch (SQLException e) {
             markStale();
             throw new RuntimeException("Failed to delete graph edge", e);
+        }
+    }
+
+    @Override
+    public synchronized List<Tracker> getTrackers() {
+        List<Tracker> list = new ArrayList<>();
+        try {
+            ensureConnected();
+            try (Statement st = connection.createStatement();
+                 ResultSet rs = st.executeQuery("SELECT * FROM trackers ORDER BY id")) {
+                while (rs.next()) {
+                    list.add(mapTracker(rs));
+                }
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to load trackers", e);
+        }
+        return list;
+    }
+
+    @Override
+    public synchronized Tracker createTracker(Tracker tracker) {
+        String sql = "INSERT INTO trackers (code, name, owner_uuid, owner_name, color, waterproof, " +
+                "world, x, y, z, entity_uuid, sunk, placed_at, moved_at, updated_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try {
+            ensureConnected();
+            try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                ps.setString(1, tracker.getCode());
+                ps.setString(2, tracker.getName() == null ? "" : tracker.getName());
+                ps.setString(3, tracker.getOwnerUuid() == null ? "" : tracker.getOwnerUuid().toString());
+                ps.setString(4, tracker.getOwnerName());
+                ps.setString(5, tracker.getColor() == null ? "BLUE" : tracker.getColor().name());
+                ps.setInt(6, tracker.isWaterproof() ? 1 : 0);
+                ps.setString(7, tracker.getWorld());
+                ps.setDouble(8, tracker.getX());
+                ps.setDouble(9, tracker.getY());
+                ps.setDouble(10, tracker.getZ());
+                ps.setString(11, tracker.getEntityUuid() == null ? null : tracker.getEntityUuid().toString());
+                ps.setInt(12, tracker.isSunk() ? 1 : 0);
+                ps.setLong(13, tracker.getPlacedAt());
+                ps.setLong(14, tracker.getMovedAt());
+                ps.setLong(15, tracker.getUpdatedAt());
+                ps.executeUpdate();
+                try (ResultSet rs = ps.getGeneratedKeys()) {
+                    if (rs.next()) {
+                        return new Tracker(rs.getInt(1), tracker.getCode(), tracker.getName(),
+                                tracker.getColor(), tracker.isWaterproof(), tracker.getOwnerUuid(),
+                                tracker.getOwnerName(), tracker.getWorld(), tracker.getX(), tracker.getY(),
+                                tracker.getZ(), tracker.getEntityUuid(), tracker.isSunk(),
+                                tracker.getPlacedAt(), tracker.getMovedAt(), tracker.getUpdatedAt());
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to create tracker: " + tracker.getCode(), e);
+        }
+        return null;
+    }
+
+    @Override
+    public synchronized boolean updateTracker(Tracker tracker) {
+        String sql = "UPDATE trackers SET name = ?, world = ?, x = ?, y = ?, z = ?, entity_uuid = ?, " +
+                "sunk = ?, moved_at = ?, updated_at = ? WHERE id = ?";
+        try {
+            ensureConnected();
+            try (PreparedStatement ps = connection.prepareStatement(sql)) {
+                ps.setString(1, tracker.getName() == null ? "" : tracker.getName());
+                ps.setString(2, tracker.getWorld());
+                ps.setDouble(3, tracker.getX());
+                ps.setDouble(4, tracker.getY());
+                ps.setDouble(5, tracker.getZ());
+                ps.setString(6, tracker.getEntityUuid() == null ? null : tracker.getEntityUuid().toString());
+                ps.setInt(7, tracker.isSunk() ? 1 : 0);
+                ps.setLong(8, tracker.getMovedAt());
+                ps.setLong(9, tracker.getUpdatedAt());
+                ps.setInt(10, tracker.getId());
+                return ps.executeUpdate() > 0;
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to update tracker: " + tracker.getCode(), e);
+        }
+    }
+
+    @Override
+    public synchronized boolean deleteTracker(int id) {
+        try {
+            ensureConnected();
+            try (PreparedStatement ps = connection.prepareStatement("DELETE FROM trackers WHERE id = ?")) {
+                ps.setInt(1, id);
+                return ps.executeUpdate() > 0;
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to delete tracker: " + id, e);
+        }
+    }
+
+    private Tracker mapTracker(ResultSet rs) throws SQLException {
+        TrackerColor color;
+        try {
+            color = TrackerColor.valueOf(rs.getString("color"));
+        } catch (IllegalArgumentException | NullPointerException malformed) {
+            color = TrackerColor.BLUE;
+        }
+        UUID owner = parseUuid(rs.getString("owner_uuid"));
+        UUID entity = parseUuid(rs.getString("entity_uuid"));
+        return new Tracker(
+                rs.getInt("id"),
+                rs.getString("code"),
+                rs.getString("name"),
+                color,
+                rs.getInt("waterproof") == 1,
+                owner,
+                rs.getString("owner_name"),
+                rs.getString("world"),
+                rs.getDouble("x"), rs.getDouble("y"), rs.getDouble("z"),
+                entity,
+                rs.getInt("sunk") == 1,
+                rs.getLong("placed_at"),
+                rs.getLong("moved_at"),
+                rs.getLong("updated_at"));
+    }
+
+    /** UUID из БД: битые строки не должны ронять загрузку всех трекеров. */
+    private static UUID parseUuid(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(raw);
+        } catch (IllegalArgumentException malformed) {
+            return null;
         }
     }
 

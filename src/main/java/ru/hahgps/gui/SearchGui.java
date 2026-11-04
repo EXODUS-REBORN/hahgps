@@ -52,11 +52,11 @@ public class SearchGui extends GuiScreen {
     public void build() {
         inventory.setItem(11, GuiUtil.item(Material.PAPER,
                 comp("gui.search-input"),
-                lore("gui.lore-search-start")));
+                lore("gui.lore-search-start"), ru.hahgps.item.ItemIds.SEARCH_INPUT));
 
         inventory.setItem(15, GuiUtil.item(Material.COMPASS,
                 comp("gui.search-quick"),
-                lore("gui.lore-search-name")));
+                lore("gui.lore-search-name"), ru.hahgps.item.ItemIds.SEARCH_QUICK));
 
         inventory.setItem(22, GuiTheme.navBack(getMsg("gui.back")));
         inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));
@@ -136,7 +136,8 @@ public class SearchGui extends GuiScreen {
         inventory.clear();
         if (this.results.isEmpty()) {
             inventory.setItem(13, GuiUtil.item(Material.BARRIER,
-                    comp("search-no-results", "query", this.query)));
+                    comp("search-no-results", "query", this.query), null,
+                    ru.hahgps.item.ItemIds.SEARCH_EMPTY));
         } else {
             int slot = 0;
             for (SearchService.SearchResult result : this.results) {
@@ -149,10 +150,11 @@ public class SearchGui extends GuiScreen {
                         "percent", String.valueOf((int) (result.similarity * 100))));
                 inventory.setItem(slot++, GuiUtil.item(Material.COMPASS,
                         GuiUtil.tonedName(9, result.name),
-                        lines));
+                        lines, ru.hahgps.item.ItemIds.SEARCH_RESULT));
             }
             inventory.setItem(48, GuiUtil.item(Material.PAPER,
-                    comp("search-header", "count", String.valueOf(this.results.size()))));
+                    comp("search-header", "count", String.valueOf(this.results.size())),
+                    null, ru.hahgps.item.ItemIds.SEARCH_RESULT));
         }
         inventory.setItem(53, GuiTheme.navBack(getMsg("gui.back")));
         inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));

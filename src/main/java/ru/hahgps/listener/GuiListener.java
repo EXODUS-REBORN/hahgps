@@ -56,8 +56,12 @@ public class GuiListener implements Listener {
             return;
         }
 
-        if (!(event.getInventory().getHolder() instanceof GuiScreen)) {
+        if (!(event.getInventory().getHolder() instanceof GuiScreen screen)) {
             return;
+        }
+        try {
+            screen.onClose();
+        } catch (Throwable ignored) {
         }
         GuiManager.getInstance().unregister(player);
     }

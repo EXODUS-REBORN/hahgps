@@ -3,6 +3,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import ru.hahgps.HahGpsPlugin;
+import ru.hahgps.item.ItemIds;
 import ru.hahgps.model.TransportType;
 
 import java.util.ArrayList;
@@ -77,7 +78,8 @@ public class TransportSelectGui extends GuiScreen {
             slotToType.put(slots[i], type);
             inventory.setItem(slots[i], GuiUtil.item(iconFor(type),
                     comp("gui.transport-" + type.getKey()),
-                    lore("gui.lore-transport-" + type.getKey())));
+                    lore("gui.lore-transport-" + type.getKey()),
+                    ItemIds.TRANSPORT_BASE + type.ordinal()));
         }
 
         inventory.setItem(22, GuiTheme.navBack(getMsg("gui.back")));

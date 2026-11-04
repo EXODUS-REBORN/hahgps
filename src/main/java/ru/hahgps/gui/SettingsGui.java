@@ -3,6 +3,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import ru.hahgps.HahGpsPlugin;
+import ru.hahgps.item.ItemIds;
 
 public class SettingsGui extends GuiScreen {
 
@@ -30,15 +31,15 @@ public class SettingsGui extends GuiScreen {
 
         inventory.setItem(11, GuiUtil.item(Material.BOOK,
                 comp("gui.language", "language", lang.toUpperCase(java.util.Locale.ROOT)),
-                lore("gui.lore-language")));
+                lore("gui.lore-language"), ItemIds.SETTINGS_LANGUAGE));
 
         inventory.setItem(13, GuiUtil.item(Material.PAPER,
                 comp("gui.logging", "state", logging ? getMsg("gui.state-on") : getMsg("gui.state-off")),
-                lore("gui.lore-logging")));
+                lore("gui.lore-logging"), ItemIds.SETTINGS_LOGGING));
 
         inventory.setItem(15, GuiUtil.item(Material.MAP,
                 comp("gui.map-scale"),
-                lore("gui.lore-toggle")));
+                lore("gui.lore-toggle"), ItemIds.SETTINGS_MAP));
 
         inventory.setItem(22, GuiTheme.navBack(getMsg("gui.back")));
 

@@ -257,6 +257,14 @@ public final class GuiTheme {
             java.util.regex.Pattern.compile("</?(#[0-9a-fA-F]{6})>");
 
     public static ItemStack named(Material mat, String name, List<String> lore) {
+        return named(mat, name, lore, null);
+    }
+
+    /**
+     * @param modelId CustomModelData предмета (см. {@code ItemIds}) или null,
+     *                если предмету модель не нужна
+     */
+    public static ItemStack named(Material mat, String name, List<String> lore, Integer modelId) {
         ItemStack it = new ItemStack(mat);
         ItemMeta m = it.getItemMeta();
         if (m != null) {
@@ -267,6 +275,9 @@ public final class GuiTheme {
                     out.add(s == null ? Component.empty() : text(clipMini(s, LORE_MAX)));
                 }
                 m.lore(out);
+            }
+            if (modelId != null) {
+                m.setCustomModelData(modelId);
             }
             it.setItemMeta(m);
         }
@@ -372,6 +383,7 @@ public final class GuiTheme {
         ItemMeta m = it.getItemMeta();
         if (m != null) {
             m.displayName(Component.empty());
+            m.setCustomModelData(ru.hahgps.item.ItemIds.FILLER);
             it.setItemMeta(m);
         }
         return it;
@@ -400,14 +412,16 @@ public final class GuiTheme {
     public static ItemStack navBack(String miniLabel) {
         String text = stripArrow(plainOf(miniLabel));
         if (text.isEmpty()) text = "Назад";
-        return glow(named(Material.SPECTRAL_ARROW, gradient("\u25c0 " + text, 3, 8)));
+        return glow(named(Material.SPECTRAL_ARROW, gradient("\u25c0 " + text, 3, 8),
+                List.of(), ru.hahgps.item.ItemIds.NAV_BACK));
     }
 
 
     public static ItemStack navForward(String miniLabel) {
         String text = stripArrow(plainOf(miniLabel));
         if (text.isEmpty()) text = "Вперёд";
-        return glow(named(Material.SPECTRAL_ARROW, gradient(text + " \u25b6", 3, 8)));
+        return glow(named(Material.SPECTRAL_ARROW, gradient(text + " \u25b6", 3, 8),
+                List.of(), ru.hahgps.item.ItemIds.NAV_FORWARD));
     }
 
     private static String stripArrow(String text) {
@@ -420,21 +434,24 @@ public final class GuiTheme {
         if (lines != null) {
             for (String l : lines) lore.add(l);
         }
-        return named(Material.LIME_DYE, gradient("Инфо", 4, 9), lore);
+        return named(Material.LIME_DYE, gradient("Инфо", 4, 9), lore,
+                ru.hahgps.item.ItemIds.NAV_INFO);
     }
 
 
     public static ItemStack navClose(String miniLabel) {
         String text = plainOf(miniLabel);
         if (text.isEmpty()) text = "\u2716 Закрыть";
-        return named(Material.BARRIER, toned(5, text));
+        return named(Material.BARRIER, toned(5, text), List.of(),
+                ru.hahgps.item.ItemIds.NAV_CLOSE);
     }
 
 
     public static ItemStack brand(List<String> loreLines) {
         List<String> lore = loreLines == null ? List.of() : loreLines;
         return named(Material.PAPER,
-                "<bold>" + gradient("HahGPS") + "</bold>", lore);
+                "<bold>" + gradient("HahGPS") + "</bold>", lore,
+                ru.hahgps.item.ItemIds.BRAND);
     }
 
     public static void click(Player p) {

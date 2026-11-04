@@ -31,6 +31,9 @@ public class PlayerQuitListener implements Listener {
             if (plugin.getVisualizationService() != null) {
                 plugin.getVisualizationService().disableAll(event.getPlayer());
             }
+            if (plugin.getTrackerService() != null) {
+                plugin.getTrackerService().forget(event.getPlayer());
+            }
         } catch (Throwable ignored) {
 
         }

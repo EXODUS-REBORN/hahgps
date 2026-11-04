@@ -10,6 +10,7 @@ import ru.hahgps.listener.ChatInputListener;
 import ru.hahgps.listener.GuiListener;
 import ru.hahgps.listener.PlayerQuitListener;
 import ru.hahgps.listener.RouteRecordListener;
+import ru.hahgps.listener.TrackerListener;
 import ru.hahgps.listener.WorldLoadListener;
 import ru.hahgps.service.*;
 import ru.hahgps.storage.DataService;
@@ -45,6 +46,7 @@ public class HahGpsPlugin extends JavaPlugin {
     private VisualizationService visualizationService;
     private HudService hudService;
     private RouteRecordingService routeRecordingService;
+    private TrackerService trackerService;
 
     private volatile boolean hotSwapping;
 
@@ -71,12 +73,26 @@ public class HahGpsPlugin extends JavaPlugin {
 
 
         registerPendingCommand();
+        registerPendingItrakCommand();
 
         initStorage();
     }
 
     private void registerPendingCommand() {
         var cmd = getCommand("gps");
+        if (cmd == null) {
+            return;
+        }
+        cmd.setExecutor((sender, command, label, args) -> {
+            sender.sendMessage(getMessages().getPrefixed("loading-data"));
+            return true;
+        });
+        cmd.setTabCompleter((sender, command, label, args) -> new java.util.ArrayList<>());
+    }
+
+    /** До подъёма хранилища /itrak тоже должен отвечать, а не молчать. */
+    private void registerPendingItrakCommand() {
+        var cmd = getCommand("itrak");
         if (cmd == null) {
             return;
         }
@@ -203,7 +219,21 @@ public class HahGpsPlugin extends JavaPlugin {
             visualizationService = new VisualizationService(graphService);
             hudService = new HudService();
             routeRecordingService = new RouteRecordingService();
+            trackerService = new TrackerService(this, dataService);
             commandManager = new CommandManager(this);
+
+            dataService.getTrackers().whenComplete((loaded, error) -> {
+                if (error != null) {
+                    getLogger().log(Level.WARNING, "HahGps: трекеры iTrak не загрузились", error);
+                }
+                Bukkit.getScheduler().runTask(this, () -> {
+                    if (!isEnabled() || stopping || trackerService == null) {
+                        return;
+                    }
+                    trackerService.load(loaded);
+                    trackerService.start();
+                });
+            });
 
             categoryService.seedDefaults(configManager.getDefaultCategories())
                     .whenComplete((v, error) -> {
@@ -218,6 +248,22 @@ public class HahGpsPlugin extends JavaPlugin {
                 cmd.setExecutor(commandManager);
                 cmd.setTabCompleter(commandManager);
             }
+            // /itrak — короткий вход в те же подкоманды: /itrak = /gps itrak.
+            var itrak = getCommand("itrak");
+            if (itrak != null) {
+                itrak.setExecutor((sender, command, label, args) -> {
+                    String[] full = new String[args.length + 1];
+                    full[0] = "itrak";
+                    System.arraycopy(args, 0, full, 1, args.length);
+                    return commandManager.onCommand(sender, command, "gps", full);
+                });
+                itrak.setTabCompleter((sender, command, label, args) -> {
+                    String[] full = new String[args.length + 1];
+                    full[0] = "itrak";
+                    System.arraycopy(args, 0, full, 1, args.length);
+                    return commandManager.onTabComplete(sender, command, "gps", full);
+                });
+            }
 
             // Отложенная регистрация слушателей и запуск таймеров: регистрация
             // событий и создание задач в главном потоке дают вклад в скачок MSPT
@@ -229,6 +275,7 @@ public class HahGpsPlugin extends JavaPlugin {
                     Bukkit.getPluginManager().registerEvents(new PlayerQuitListener(), this);
                     Bukkit.getPluginManager().registerEvents(new WorldLoadListener(this), this);
                     Bukkit.getPluginManager().registerEvents(new RouteRecordListener(this), this);
+                    Bukkit.getPluginManager().registerEvents(new TrackerListener(this), this);
                 } catch (Throwable t) {
                     getLogger().log(Level.WARNING, "HahGps: не удалось зарегистрировать слушателей", t);
                 }
@@ -288,6 +335,13 @@ public class HahGpsPlugin extends JavaPlugin {
             visualizationTask = null;
         }
 
+        try {
+            if (trackerService != null) {
+                trackerService.stop();
+            }
+        } catch (Throwable t) {
+            getLogger().log(Level.WARNING, "HahGps: tracker stop failed", t);
+        }
         try {
             if (navigationService != null) {
                 navigationService.stop();
@@ -426,6 +480,10 @@ public class HahGpsPlugin extends JavaPlugin {
 
     public RouteRecordingService getRouteRecordingService() {
         return routeRecordingService;
+    }
+
+    public TrackerService getTrackerService() {
+        return trackerService;
     }
 
     public boolean isHotSwapping() {

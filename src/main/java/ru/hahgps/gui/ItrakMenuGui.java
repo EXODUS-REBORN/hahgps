@@ -1,0 +1,239 @@
+package ru.hahgps.gui;
+
+import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.ClickType;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.scheduler.BukkitTask;
+import ru.hahgps.HahGpsPlugin;
+import ru.hahgps.command.subcommands.ItrakCommand;
+import ru.hahgps.item.ItemIds;
+import ru.hahgps.model.Tracker;
+import ru.hahgps.service.TrackerService;
+import ru.hahgps.util.LocationUtil;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Список трекеров iTrak. Экран обновляется раз в секунду, пока открыт:
+ * координаты трекера, привязанного к существу, живые, и снимок «на момент
+ * открытия» быстро врал бы.
+ */
+public class ItrakMenuGui extends GuiScreen {
+
+    private static final int PER_PAGE = 45;
+
+    private List<Tracker> trackers = new ArrayList<>();
+    private int page;
+    private BukkitTask refreshTask;
+
+    public ItrakMenuGui(Player player) {
+        super(player);
+    }
+
+    @Override
+    public String title() {
+        return HahGpsPlugin.getInstance().getMessages().get("gui.itrak-title");
+    }
+
+    @Override
+    public int size() {
+        return 54;
+    }
+
+    @Override
+    public void open() {
+        super.open();
+        startRefresh();
+    }
+
+    @Override
+    public void onClose() {
+        stopRefresh();
+    }
+
+    private void startRefresh() {
+        stopRefresh();
+        HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+        if (plugin == null || !plugin.isEnabled()) {
+            return;
+        }
+        refreshTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (!player.isOnline() || GuiManager.getInstance().get(player) != this) {
+                stopRefresh();
+                return;
+            }
+            try {
+                buildPage();
+            } catch (Throwable t) {
+                plugin.getLogger().warning("HahGps: iTrak GUI не обновился: " + t);
+            }
+        }, 20L, 20L);
+    }
+
+    private void stopRefresh() {
+        BukkitTask task = refreshTask;
+        refreshTask = null;
+        if (task != null) {
+            try {
+                task.cancel();
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    @Override
+    public void build() {
+        HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+        TrackerService service = plugin.getTrackerService();
+        if (service == null) {
+            fillEmpty();
+            return;
+        }
+        boolean admin = player.hasPermission("gps.itrak.admin");
+        trackers = admin ? service.all() : service.byOwner(player.getUniqueId());
+        page = 0;
+        buildPage();
+    }
+
+    private void buildPage() {
+        HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+        TrackerService service = plugin.getTrackerService();
+        if (service == null || inventory == null) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        int pages = Math.max(1, (trackers.size() + PER_PAGE - 1) / PER_PAGE);
+        page = Math.max(0, Math.min(page, pages - 1));
+        inventory.clear();
+
+        int start = page * PER_PAGE;
+        for (int i = start; i < Math.min(start + PER_PAGE, trackers.size()); i++) {
+            inventory.setItem(i - start, entry(trackers.get(i), service, now));
+        }
+
+        if (trackers.isEmpty()) {
+            inventory.setItem(22, GuiUtil.item(Material.BARRIER,
+                    comp("gui.itrak-none"), lore("gui.lore-itrak-none"), ItemIds.ITRAK_EMPTY));
+        }
+
+        inventory.setItem(45, GuiTheme.navBack(getMsg("gui.back")));
+        if (page > 0) {
+            inventory.setItem(46, GuiTheme.navBack(getMsg("gui.prev-page")));
+        }
+        if (page < pages - 1) {
+            inventory.setItem(52, GuiTheme.navForward(getMsg("gui.next-page")));
+        }
+        inventory.setItem(48, GuiUtil.item(Material.COMPASS,
+                comp("gui.itrak-scan"), lore("gui.lore-itrak-scan"), ItemIds.ITRAK_SCAN));
+        inventory.setItem(49, GuiUtil.item(Material.BOOK,
+                comp("gui.page-info", "page", String.valueOf(page + 1),
+                        "pages", String.valueOf(pages)), null, ItemIds.PAGE_INFO));
+        if (player.hasPermission("gps.itrak.give")) {
+            inventory.setItem(50, GuiUtil.item(Material.RECOVERY_COMPASS,
+                    comp("gui.itrak-give"), lore("gui.lore-itrak-give"), ItemIds.ITRAK_GIVE));
+        }
+        inventory.setItem(51, GuiUtil.item(Material.SPYGLASS,
+                comp("gui.itrak-refresh"), lore("gui.lore-itrak-refresh"), ItemIds.ITRAK_REFRESH));
+        inventory.setItem(53, GuiTheme.navClose(getMsg("gui.close")));
+
+        for (int i = 0; i < size(); i++) {
+            if (inventory.getItem(i) == null) {
+                inventory.setItem(i, GuiUtil.filler());
+            }
+        }
+        putBrand();
+    }
+
+    private ItemStack entry(Tracker tracker, TrackerService service, long now) {
+        ItemStack icon = new ItemStack(tracker.getColor().getMaterial());
+        ItemMeta meta = icon.getItemMeta();
+        if (meta != null) {
+            String label = GuiTheme.escapeForMini(GuiTheme.clipPlain(tracker.getDisplayName(), GuiTheme.NAME_MAX));
+            meta.displayName(GuiTheme.mm("<bold><color:" + tracker.getColor().hex() + ">" + label
+                    + "</color></bold> <dark_gray>·</dark_gray> <#8fc6ff>"
+                    + tracker.getCode() + "</#8fc6ff>"));
+            List<Component> lines = new ArrayList<>();
+            lines.add(comp("gui.lore-itrak-status", "status", service.statusText(tracker)));
+            lines.add(comp("gui.lore-itrak-state", "state", service.stateText(tracker, now)));
+            lines.add(comp("gui.lore-itrak-coords",
+                    "x", TrackerService.formatCoord(tracker.getX()),
+                    "y", TrackerService.formatCoord(tracker.getY()),
+                    "z", TrackerService.formatCoord(tracker.getZ())));
+            lines.add(comp("gui.lore-itrak-world",
+                    "world", tracker.getWorld() == null ? "?" : tracker.getWorld()));
+            lines.add(comp("gui.lore-itrak-distance",
+                    "distance", LocationUtil.formatDistance(distance(tracker))));
+            meta.lore(lines);
+            meta.setCustomModelData(ItemIds.tracker(tracker.getColor(), tracker.isWaterproof()));
+            icon.setItemMeta(meta);
+        }
+        if (tracker.isWaterproof()) {
+            icon = GuiTheme.glow(icon);
+        }
+        return icon;
+    }
+
+    private double distance(Tracker tracker) {
+        org.bukkit.Location location = tracker.getLocation();
+        return location == null ? Double.MAX_VALUE
+                : LocationUtil.distance(player.getLocation(), location);
+    }
+
+    @Override
+    public void onClick(int slot, ClickType clickType) {
+        HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+        TrackerService service = plugin.getTrackerService();
+        if (service == null) {
+            return;
+        }
+        if (slot == 45) {
+            new MainMenuGui(player).open();
+            GuiTheme.click(player);
+            return;
+        }
+        if (slot == 48) {
+            ItrakCommand.reportScan(plugin, player);
+            return;
+        }
+        if (slot == 50 && player.hasPermission("gps.itrak.give")) {
+            player.closeInventory();
+            InputManager.getInstance().request(player,
+                    plugin.getMessages().getPrefixed("input-itrak-give"),
+                    input -> ItrakCommand.giveFromInput(plugin, player, input));
+            return;
+        }
+        if (slot == 46 && page > 0) {
+            page--;
+            buildPage();
+            GuiTheme.page(player);
+            return;
+        }
+        if (slot == 52 && page < (Math.max(1, (trackers.size() + PER_PAGE - 1) / PER_PAGE)) - 1) {
+            page++;
+            buildPage();
+            GuiTheme.page(player);
+            return;
+        }
+        if (slot == 51) {
+            page = 0;
+            buildPage();
+            GuiTheme.click(player);
+            return;
+        }
+        if (slot == 53) {
+            player.closeInventory();
+            return;
+        }
+        int start = page * PER_PAGE;
+        int shown = Math.max(0, Math.min(PER_PAGE, trackers.size() - start));
+        if (slot >= 0 && slot < shown) {
+            new TrackerDetailGui(player, trackers.get(start + slot).getId()).open();
+            GuiTheme.click(player);
+        }
+    }
+}
