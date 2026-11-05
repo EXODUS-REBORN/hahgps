@@ -225,6 +225,7 @@ itrak-item-hint: "ПКМ по блоку — прицепить, ПКМ в во�
 itrak-locator-name: "Локатор"
 itrak-locator-lore: "Ищет трекеры iTrak поблизости"
 itrak-locator-hint: "ПКМ — просканировать"
+itrak-locator-upgraded: "<#66aaff>→</#66aaff> <gray>Старый локатор-компас заменён на новый: компас — навигационная палочка WorldEdit, клик им телепортировал игрока.</gray>"
 input-itrak-give: "<#66aaff>→</#66aaff> <gray>Напиши: цвет, признак waterproof и имя — например</gray> <white>red waterproof Мой</white>"
 help-itrak: "Трекеры iTrak, локатор и слежение"
 

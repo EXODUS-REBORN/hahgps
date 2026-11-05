@@ -49,17 +49,31 @@ public class TrackerListener implements Listener {
     // Клик по блоку
     // ------------------------------------------------------------------
 
-    @EventHandler(priority = EventPriority.NORMAL)
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onInteractBlock(PlayerInteractEvent event) {
         Player player = event.getPlayer();
-        if (event.getHand() != EquipmentSlot.HAND || !plugin.getConfigManager().isItrakEnabled()) {
+        if (!plugin.getConfigManager().isItrakEnabled()) {
+            return;
+        }
+        if (event.getHand() != EquipmentSlot.HAND) {
+            // Предмет iTrak во второй руке не должен срабатывать как чужой
+            // инструмент: компас — навигационная палочка WorldEdit, заряд —
+            // редстоун и т.п. Гасим использование, скана тут нет.
+            if (ItemFactory.isItrakItem(player.getInventory().getItemInOffHand())) {
+                denyUse(event);
+            }
             return;
         }
         Block clicked = event.getClickedBlock();
         ItemStack item = player.getInventory().getItemInMainHand();
+        boolean rightClick = event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK
+                || event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_AIR;
 
         if (ItemFactory.isTerminalItem(item)) {
-            event.setCancelled(true);
+            denyUse(event);
+            if (!rightClick) {
+                return;
+            }
             if (clicked == null) {
                 player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-use-hint"));
                 return;
@@ -68,12 +82,10 @@ public class TrackerListener implements Listener {
             return;
         }
 
-        boolean rightClick = event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK
-                || event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_AIR;
         if (clicked != null && rightClick && player.hasPermission("gps.itrak")) {
             ItrakTerminalService terminals = plugin.getTerminalService();
             if (terminals != null && terminals.isTerminal(clicked)) {
-                event.setCancelled(true);
+                denyUse(event);
                 ItrakCommand.reportTerminal(plugin, player, clicked);
                 return;
             }
@@ -81,12 +93,12 @@ public class TrackerListener implements Listener {
             if (service != null) {
                 Tracker onBlock = service.trackerOnBlock(clicked);
                 if (onBlock != null && ItemFactory.isChargeItem(item)) {
-                    event.setCancelled(true);
+                    denyUse(event);
                     ItrakCommand.chargeTracker(plugin, player, onBlock);
                     return;
                 }
                 if (onBlock != null && item.getType().isAir()) {
-                    event.setCancelled(true);
+                    denyUse(event);
                     takeTracker(player, onBlock);
                     return;
                 }
@@ -97,7 +109,11 @@ public class TrackerListener implements Listener {
             if (!player.hasPermission("gps.itrak")) {
                 return;
             }
-            event.setCancelled(true);
+            denyUse(event);
+            if (!rightClick) {
+                return;
+            }
+            upgradeLegacyLocator(player);
             runScan(player);
             return;
         }
@@ -107,14 +123,14 @@ public class TrackerListener implements Listener {
             return;
         }
         if (event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_AIR) {
-            event.setCancelled(true);
+            denyUse(event);
             throwTracker(player, spec);
             return;
         }
         if (event.getAction() != org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) {
             return;
         }
-        event.setCancelled(true);
+        denyUse(event);
         if (clicked == null) {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-place-air"));
             return;
@@ -125,13 +141,45 @@ public class TrackerListener implements Listener {
         place(player, spec, clicked, event.getBlockFace(), null);
     }
 
+    /**
+     * Отменить и событие, и ванильное использование предмета/блока: так клик
+     * предметом iTrak не дойдёт ни до ванили, ни до чужих плагинов, которые
+     * смотрят на результат использования (WorldEdit, лодестоун-компасы и т.п.).
+     */
+    private static void denyUse(PlayerInteractEvent event) {
+        event.setCancelled(true);
+        try {
+            event.setUseItemInHand(org.bukkit.event.Event.Result.DENY);
+            event.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /**
+     * Локатор раньше был компасом — а компас по умолчанию «навигационная
+     * палочка» WorldEdit: её ПКМ/ЛКМ телепортируют к блоку под прицелом (вниз —
+     * внутрь земли). Меняем старый предмет на актуальный прямо в руке.
+     */
+    private void upgradeLegacyLocator(Player player) {
+        ItemStack item = player.getInventory().getItemInMainHand();
+        if (!ItemFactory.isLegacyLocator(item)) {
+            return;
+        }
+        player.getInventory().setItemInMainHand(ItemFactory.locatorItem());
+        player.sendMessage(plugin.getMessages().getPrefixed("itrak-locator-upgraded"));
+    }
+
     // ------------------------------------------------------------------
     // Клик по существу: прицепить или снять
     // ------------------------------------------------------------------
 
-    @EventHandler(priority = EventPriority.NORMAL)
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onInteractEntity(PlayerInteractEntityEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) {
+            if (plugin.getConfigManager().isItrakEnabled()
+                    && ItemFactory.isItrakItem(event.getPlayer().getInventory().getItemInOffHand())) {
+                event.setCancelled(true);
+            }
             return;
         }
         Player player = event.getPlayer();

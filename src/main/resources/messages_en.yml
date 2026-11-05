@@ -225,6 +225,7 @@ itrak-item-hint: "Right-click a block to attach, right-click the air to throw"
 itrak-locator-name: "Locator"
 itrak-locator-lore: "Finds nearby iTrak trackers"
 itrak-locator-hint: "Right-click to scan"
+itrak-locator-upgraded: "<#66aaff>→</#66aaff> <gray>The old compass locator was replaced: a compass is WorldEdit's navigation wand, clicking it teleported the player.</gray>"
 input-itrak-give: "<#66aaff>→</#66aaff> <gray>Type: color, waterproof flag and name — e.g.</gray> <white>red waterproof Mine</white>"
 help-itrak: "iTrak trackers, locator and live tracking"
 

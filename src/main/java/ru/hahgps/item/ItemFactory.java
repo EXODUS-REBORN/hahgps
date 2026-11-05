@@ -43,6 +43,18 @@ public final class ItemFactory {
     public static final NamespacedKey TERMINAL = NamespacedKey.fromString("hahgps:itrak_terminal");
     public static final NamespacedKey THROWER = NamespacedKey.fromString("hahgps:itrak_thrower");
 
+    /**
+     * Материал локатора. Намеренно не {@link Material#COMPASS}: компас — это
+     * «навигационная палочка» WorldEdit (по умолчанию), и её ПКМ/ЛКМ
+     * телепортируют игрока к блоку под прицелом — то есть внутрь земли, если
+     * смотреть вниз. С {@link Material#RECOVERY_COMPASS} клик локатором больше
+     * ни с чем не конфликтует.
+     */
+    public static final Material LOCATOR_MATERIAL = Material.RECOVERY_COMPASS;
+
+    /** Старый локатор-компас: работает, но подменяется на актуальный при клике. */
+    public static final Material LEGACY_LOCATOR_MATERIAL = Material.COMPASS;
+
     /** То, что записано в предмет-трекер до его установки (и переносится с ним). */
     public record TrackerSpec(String code, String name, TrackerColor color, boolean waterproof, int charge) {
 
@@ -108,7 +120,7 @@ public final class ItemFactory {
     }
 
     public static ItemStack locatorItem() {
-        ItemStack item = new ItemStack(Material.COMPASS);
+        ItemStack item = new ItemStack(LOCATOR_MATERIAL);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(GuiTheme.mm("<bold>" + GuiTheme.gradient("iTrak")
@@ -168,6 +180,19 @@ public final class ItemFactory {
         }
         Byte marker = meta.getPersistentDataContainer().get(LOCATOR, PersistentDataType.BYTE);
         return marker != null && marker != 0;
+    }
+
+    /** Старый локатор (компас) — подменяется на {@link #LOCATOR_MATERIAL} при первом клике. */
+    public static boolean isLegacyLocator(ItemStack item) {
+        return item != null && item.getType() == LEGACY_LOCATOR_MATERIAL && isLocator(item);
+    }
+
+    /** Любой наш предмет iTrak: локатор, терминал, заряд или трекер. */
+    public static boolean isItrakItem(ItemStack item) {
+        if (item == null || item.getType() == Material.AIR) {
+            return false;
+        }
+        return isLocator(item) || isTerminalItem(item) || isChargeItem(item) || readTracker(item) != null;
     }
 
     /** Заряд: восстанавливает tracker'у часть заряда. */
