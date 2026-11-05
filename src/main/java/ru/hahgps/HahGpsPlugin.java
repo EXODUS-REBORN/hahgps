@@ -11,11 +11,14 @@ import ru.hahgps.listener.GuiListener;
 import ru.hahgps.listener.PlayerQuitListener;
 import ru.hahgps.listener.RouteRecordListener;
 import ru.hahgps.listener.TrackerListener;
+import ru.hahgps.listener.ItrakCraftingListener;
 import ru.hahgps.listener.WorldLoadListener;
 import ru.hahgps.service.*;
 import ru.hahgps.storage.DataService;
 import ru.hahgps.storage.MysqlStorageProvider;
 import ru.hahgps.storage.SqliteStorageProvider;
+import ru.hahgps.model.Tracker;
+import ru.hahgps.model.TrackerTerminal;
 import ru.hahgps.storage.StorageProvider;
 import ru.hahgps.update.HotSwap;
 import ru.hahgps.update.UpdaterService;
@@ -47,6 +50,7 @@ public class HahGpsPlugin extends JavaPlugin {
     private HudService hudService;
     private RouteRecordingService routeRecordingService;
     private TrackerService trackerService;
+    private ItrakTerminalService terminalService;
 
     private volatile boolean hotSwapping;
 
@@ -220,19 +224,29 @@ public class HahGpsPlugin extends JavaPlugin {
             hudService = new HudService();
             routeRecordingService = new RouteRecordingService();
             trackerService = new TrackerService(this, dataService);
+            terminalService = new ItrakTerminalService(this, dataService);
             commandManager = new CommandManager(this);
 
-            dataService.getTrackers().whenComplete((loaded, error) -> {
-                if (error != null) {
-                    getLogger().log(Level.WARNING, "HahGps: трекеры iTrak не загрузились", error);
-                }
+            var trackersFuture = dataService.getTrackers().exceptionally(error -> {
+                getLogger().log(Level.WARNING, "HahGps: трекеры iTrak не загрузились", error);
+                return java.util.List.<Tracker>of();
+            });
+            var terminalsFuture = dataService.getTerminals().exceptionally(error -> {
+                getLogger().log(Level.WARNING, "HahGps: терминалы iTrak не загрузились", error);
+                return java.util.List.<TrackerTerminal>of();
+            });
+            trackersFuture.thenCombine(terminalsFuture, (loadedTrackers, loadedTerminals) -> {
                 Bukkit.getScheduler().runTask(this, () -> {
                     if (!isEnabled() || stopping || trackerService == null) {
                         return;
                     }
-                    trackerService.load(loaded);
+                    trackerService.load(loadedTrackers);
                     trackerService.start();
+                    if (terminalService != null) {
+                        terminalService.load(loadedTerminals);
+                    }
                 });
+                return null;
             });
 
             categoryService.seedDefaults(configManager.getDefaultCategories())
@@ -276,6 +290,9 @@ public class HahGpsPlugin extends JavaPlugin {
                     Bukkit.getPluginManager().registerEvents(new WorldLoadListener(this), this);
                     Bukkit.getPluginManager().registerEvents(new RouteRecordListener(this), this);
                     Bukkit.getPluginManager().registerEvents(new TrackerListener(this), this);
+                    ItrakCraftingListener crafting = new ItrakCraftingListener(this);
+                    Bukkit.getPluginManager().registerEvents(crafting, this);
+                    crafting.registerRecipes();
                 } catch (Throwable t) {
                     getLogger().log(Level.WARNING, "HahGps: не удалось зарегистрировать слушателей", t);
                 }
@@ -341,6 +358,13 @@ public class HahGpsPlugin extends JavaPlugin {
             }
         } catch (Throwable t) {
             getLogger().log(Level.WARNING, "HahGps: tracker stop failed", t);
+        }
+        try {
+            if (terminalService != null) {
+                terminalService.stop();
+            }
+        } catch (Throwable t) {
+            getLogger().log(Level.WARNING, "HahGps: terminal stop failed", t);
         }
         try {
             if (navigationService != null) {
@@ -484,6 +508,10 @@ public class HahGpsPlugin extends JavaPlugin {
 
     public TrackerService getTrackerService() {
         return trackerService;
+    }
+
+    public ItrakTerminalService getTerminalService() {
+        return terminalService;
     }
 
     public boolean isHotSwapping() {

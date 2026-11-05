@@ -83,6 +83,9 @@ public final class ItemIds {
     public static final int ITRAK_GIVE = 2037;
     public static final int ITRAK_REFRESH = 2038;
     public static final int ITRAK_EMPTY = 2039;
+    public static final int ITRAK_CHARGE = 2041;
+    public static final int ITRAK_TERMINAL = 2042;
+    public static final int ITRAK_CRAFT = 2043;
 
     /** ID предмета-трекера: цвет и водозащита различаются номером модели. */
     public static int tracker(TrackerColor color, boolean waterproof) {
@@ -140,6 +143,9 @@ public final class ItemIds {
         ids.add(ITRAK_GIVE);
         ids.add(ITRAK_REFRESH);
         ids.add(ITRAK_EMPTY);
+        ids.add(ITRAK_CHARGE);
+        ids.add(ITRAK_TERMINAL);
+        ids.add(ITRAK_CRAFT);
         return ids;
     }
 }

@@ -11,6 +11,8 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Waterlogged;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
+import org.bukkit.entity.Snowball;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 import ru.hahgps.HahGpsPlugin;
@@ -25,6 +27,7 @@ import ru.hahgps.util.LocationUtil;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +72,11 @@ public class TrackerService {
     private final Map<UUID, Long> scanCooldown = new ConcurrentHashMap<>();
     private final Set<Integer> stationaryNotified = ConcurrentHashMap.newKeySet();
     private final Set<Integer> dirty = ConcurrentHashMap.newKeySet();
+    /** Подсветка трекеров конкретному игроку: терминал показал координаты. */
+    private final Map<UUID, List<Highlight>> highlights = new ConcurrentHashMap<>();
+
+    private record Highlight(int trackerId, long until) {
+    }
 
     private volatile BukkitTask task;
     private volatile long lastSaveAt;
@@ -166,11 +174,128 @@ public class TrackerService {
             }
         }
 
+        drainCharges(now);
         if (plugin.getConfigManager().isItrakParticles()) {
             spawnParticles();
         }
+        spawnHighlights(now);
         pushWatchMessages(now);
         saveDirty(now);
+    }
+
+    /**
+     * Заряд тратится только у трекера, который реально передаёт сигнал:
+     * затонувший или разряженный лежит и не «ест» заряд. Время последнего
+     * расхода сдвигается каждый тик, чтобы после простоя не списался
+     * накопленный заряд.
+     */
+    private void drainCharges(long now) {
+        if (!plugin.getConfigManager().isItrakChargeEnabled()) {
+            for (Tracker tracker : trackers.values()) {
+                tracker.setLastChargeAt(now);
+            }
+            return;
+        }
+        long perPercent = plugin.getConfigManager().getItrakChargeDrainMillisPerPercent();
+        if (perPercent <= 0) {
+            return;
+        }
+        for (Tracker tracker : trackers.values()) {
+            if (tracker.status() != Tracker.Status.LIVE) {
+                tracker.setLastChargeAt(now);
+                continue;
+            }
+            long elapsed = now - tracker.getLastChargeAt();
+            if (elapsed < perPercent) {
+                continue;
+            }
+            int steps = (int) Math.min(Tracker.CHARGE_MAX, elapsed / perPercent);
+            int before = tracker.getCharge();
+            tracker.addCharge(-steps);
+            tracker.setLastChargeAt(now);
+            if (tracker.getCharge() != before) {
+                dirty.add(tracker.getId());
+            }
+            if (before > 0 && tracker.getCharge() == 0) {
+                notifyEmpty(tracker);
+            }
+        }
+    }
+
+    private void notifyEmpty(Tracker tracker) {
+        Set<UUID> recipients = recipientsOf(tracker);
+        for (UUID id : recipients) {
+            Player player = Bukkit.getPlayer(id);
+            if (player != null && player.isOnline()) {
+                player.sendMessage(plugin.getMessages().getPrefixed("itrak-charge-empty",
+                        "name", tracker.getDisplayName(), "code", tracker.getCode()));
+            }
+        }
+    }
+
+    /** Кому сообщать о событиях трекера: владелец и все следящие. */
+    private Set<UUID> recipientsOf(Tracker tracker) {
+        Set<UUID> recipients = new LinkedHashSet<>();
+        if (tracker.getOwnerUuid() != null) {
+            recipients.add(tracker.getOwnerUuid());
+        }
+        for (Map.Entry<UUID, Set<Integer>> entry : watchedByPlayer.entrySet()) {
+            if (entry.getValue().contains(tracker.getId())) {
+                recipients.add(entry.getKey());
+            }
+        }
+        return recipients;
+    }
+
+    /** Подсветка по нажатию на терминал: цветные частицы вокруг трекеров. */
+    private void spawnHighlights(long now) {
+        if (highlights.isEmpty()) {
+            return;
+        }
+        Iterator<Map.Entry<UUID, List<Highlight>>> iterator = highlights.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<UUID, List<Highlight>> entry = iterator.next();
+            Player player = Bukkit.getPlayer(entry.getKey());
+            List<Highlight> active = entry.getValue();
+            active.removeIf(highlight -> now > highlight.until() || trackers.get(highlight.trackerId()) == null);
+            if (player == null || !player.isOnline() || active.isEmpty()) {
+                iterator.remove();
+                continue;
+            }
+            for (Highlight highlight : active) {
+                Tracker tracker = trackers.get(highlight.trackerId());
+                Location location = tracker.getLocation();
+                if (location == null || location.getWorld() == null
+                        || !LocationUtil.sameWorld(player.getWorld(), location.getWorld())) {
+                    continue;
+                }
+                Particle.DustOptions dust = new Particle.DustOptions(tracker.getColor().bukkitColor(), 1.1f);
+                player.spawnParticle(Particle.DUST, location.clone().add(0, 0.7, 0),
+                        24, 0.9, 0.9, 0.9, 0, dust);
+                player.spawnParticle(Particle.END_ROD, location.clone().add(0, 1.1, 0),
+                        4, 0.25, 0.35, 0.25, 0.01);
+            }
+        }
+    }
+
+    /** Показать игроку трекер на несколько секунд (после терминала). */
+    public void highlight(Player player, Tracker tracker, int seconds) {
+        if (player == null || tracker == null) {
+            return;
+        }
+        long until = System.currentTimeMillis() + Math.max(1, seconds) * 1000L;
+        List<Highlight> list = highlights.computeIfAbsent(player.getUniqueId(),
+                key -> java.util.Collections.synchronizedList(new ArrayList<>()));
+        list.removeIf(existing -> existing.trackerId() == tracker.getId());
+        list.add(new Highlight(tracker.getId(), until));
+    }
+
+    /** Убрать подсветку трекера у всех игроков (трекер снят). */
+    private void clearHighlights(int trackerId) {
+        highlights.entrySet().removeIf(entry -> {
+            entry.getValue().removeIf(highlight -> highlight.trackerId() == trackerId);
+            return entry.getValue().isEmpty();
+        });
     }
 
     private void updateFromEntity(Tracker tracker, long now) {
@@ -303,16 +428,7 @@ public class TrackerService {
 
     private void notifyStationary(Tracker tracker, long now) {
         MessagesManager messages = plugin.getMessages();
-        Set<UUID> recipients = new LinkedHashSet<>();
-        if (tracker.getOwnerUuid() != null) {
-            recipients.add(tracker.getOwnerUuid());
-        }
-        for (Map.Entry<UUID, Set<Integer>> entry : watchedByPlayer.entrySet()) {
-            if (entry.getValue().contains(tracker.getId())) {
-                recipients.add(entry.getKey());
-            }
-        }
-        for (UUID id : recipients) {
+        for (UUID id : recipientsOf(tracker)) {
             Player player = Bukkit.getPlayer(id);
             if (player == null || !player.isOnline()) {
                 continue;
@@ -351,6 +467,7 @@ public class TrackerService {
         }
 
         Location location;
+        Tracker.SupportBlock support = null;
         boolean sunk = false;
         if (target != null) {
             location = target.getLocation().clone()
@@ -370,6 +487,7 @@ public class TrackerService {
             } else {
                 location = placed.getLocation().add(0.5, 0.5, 0.5);
             }
+            support = new Tracker.SupportBlock(clicked.getX(), clicked.getY(), clicked.getZ());
         }
         if (location.getWorld() == null) {
             return CompletableFuture.completedFuture(new PlaceOutcome(null, PlaceResult.FAILED));
@@ -383,7 +501,8 @@ public class TrackerService {
         Tracker candidate = new Tracker(0, spec.code(), label, spec.color(), spec.waterproof(),
                 player.getUniqueId(), player.getName(), location.getWorld().getName(),
                 location.getX(), location.getY(), location.getZ(),
-                target == null ? null : target.getUniqueId(), sunk, now, now, now);
+                target == null ? null : target.getUniqueId(), sunk, now, now, now,
+                spec.charge(), now, support);
 
         return data.createTracker(candidate).thenApply(created -> {
             if (created == null) {
@@ -417,14 +536,61 @@ public class TrackerService {
         }
         unwatchAll(tracker.getId());
         stationaryNotified.remove(tracker.getId());
+        clearHighlights(tracker.getId());
         trackers.remove(tracker.getId());
         ItemStack item = ItemFactory.trackerItem(new ItemFactory.TrackerSpec(tracker.getCode(),
-                tracker.getName(), tracker.getColor(), tracker.isWaterproof()));
+                tracker.getName(), tracker.getColor(), tracker.isWaterproof(), tracker.getCharge()));
         Map<Integer, ItemStack> leftover = player.getInventory().addItem(item);
         for (ItemStack drop : leftover.values()) {
             player.getWorld().dropItemNaturally(player.getLocation(), drop);
         }
         return data.deleteTracker(tracker.getId()).thenApply(ok -> true);
+    }
+
+    /** Снять трекер и выронить предмет: сломали блок, на котором он держался. */
+    public CompletableFuture<Boolean> removeDropping(Tracker tracker, Location dropAt) {
+        if (tracker == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+        unwatchAll(tracker.getId());
+        stationaryNotified.remove(tracker.getId());
+        clearHighlights(tracker.getId());
+        trackers.remove(tracker.getId());
+        ItemStack item = ItemFactory.trackerItem(new ItemFactory.TrackerSpec(tracker.getCode(),
+                tracker.getName(), tracker.getColor(), tracker.isWaterproof(), tracker.getCharge()));
+        Location where = dropAt != null ? dropAt : tracker.getLocation();
+        if (where != null && where.getWorld() != null) {
+            where.getWorld().dropItemNaturally(where, item);
+        }
+        return data.deleteTracker(tracker.getId());
+    }
+
+    /** Трекер, прицепленный к этому блоку (для снятия и поломки). */
+    public Tracker trackerOnBlock(Block block) {
+        if (block == null || block.getWorld() == null) {
+            return null;
+        }
+        String worldName = block.getWorld().getName();
+        for (Tracker tracker : trackers.values()) {
+            if (tracker.getWorld() != null && tracker.getWorld().equals(worldName)
+                    && tracker.isOnBlock(block.getX(), block.getY(), block.getZ())) {
+                return tracker;
+            }
+        }
+        return null;
+    }
+
+    /** Трекер, прицепленный к существу. */
+    public Tracker trackerOnEntity(UUID entityId) {
+        if (entityId == null) {
+            return null;
+        }
+        for (Tracker tracker : trackers.values()) {
+            if (entityId.equals(tracker.getEntityUuid())) {
+                return tracker;
+            }
+        }
+        return null;
     }
 
     /** Удалить трекер без выдачи предмета (админ, потерянный трекер). */
@@ -434,6 +600,7 @@ public class TrackerService {
         }
         unwatchAll(tracker.getId());
         stationaryNotified.remove(tracker.getId());
+        clearHighlights(tracker.getId());
         trackers.remove(tracker.getId());
         return data.deleteTracker(tracker.getId());
     }
@@ -521,15 +688,15 @@ public class TrackerService {
                 || (tracker.getOwnerUuid() != null && tracker.getOwnerUuid().equals(player.getUniqueId())));
     }
 
-    /** Трекеры в этом мире в радиусе, ближние первыми. */
-    public List<Nearby> scan(Player player, double radius) {
+    /** Трекеры в этом мире в радиусе точки, ближние первыми. */
+    public List<Nearby> scanAround(Location origin, double radius) {
         List<Nearby> out = new ArrayList<>();
-        if (player == null || player.getWorld() == null) {
+        if (origin == null || origin.getWorld() == null) {
             return out;
         }
-        Location origin = player.getLocation();
+        String worldName = origin.getWorld().getName();
         for (Tracker tracker : trackers.values()) {
-            if (tracker.getWorld() == null || !tracker.getWorld().equals(player.getWorld().getName())) {
+            if (tracker.getWorld() == null || !tracker.getWorld().equals(worldName)) {
                 continue;
             }
             Location location = tracker.getLocation();
@@ -543,6 +710,30 @@ public class TrackerService {
         }
         out.sort(Comparator.comparingDouble(Nearby::distance));
         return out;
+    }
+
+    /** Трекеры рядом с игроком. */
+    public List<Nearby> scan(Player player, double radius) {
+        return player == null ? List.of() : scanAround(player.getLocation(), radius);
+    }
+
+    /**
+     * Вставить заряд. Ограничение 100% считает модель, здесь только
+     * сбрасывается время последнего расхода, чтобы новый заряд не «таял»
+     * за время, пока трекер лежал.
+     * @return сколько процентов реально добавилось
+     */
+    public int charge(Tracker tracker, int amount) {
+        if (tracker == null) {
+            return 0;
+        }
+        int added = tracker.addCharge(amount);
+        tracker.setLastChargeAt(System.currentTimeMillis());
+        if (added > 0) {
+            stationaryNotified.remove(tracker.getId());
+        }
+        dirty.add(tracker.getId());
+        return added;
     }
 
     public boolean isScanReady(Player player) {
@@ -618,6 +809,60 @@ public class TrackerService {
     }
 
     // ------------------------------------------------------------------
+    // Бросок трекера
+    // ------------------------------------------------------------------
+
+    /**
+     * Бросить трекер: он летит как снежок и цепляется к тому, во что попал
+     * (блок, существо или игрок). Предмет расходуется вызывающей стороной.
+     * @param gentle аккуратный бросок под ноги (Shift+ПКМ)
+     */
+    public boolean throwTracker(Player player, ItemFactory.TrackerSpec spec, boolean gentle) {
+        if (player == null || spec == null || !plugin.getConfigManager().isItrakEnabled()) {
+            return false;
+        }
+        if (byCode(spec.code()) != null) {
+            return false;
+        }
+        World world = player.getWorld();
+        Location eye = player.getEyeLocation();
+        Snowball snowball = world.spawn(eye, Snowball.class);
+        snowball.setShooter(player);
+        snowball.setGravity(true);
+        double speed = plugin.getConfigManager().getItrakThrowSpeed();
+        if (gentle) {
+            speed = Math.max(0.4, speed * 0.4);
+        }
+        snowball.setVelocity(eye.getDirection().multiply(speed));
+        ItemFactory.writeSpec(snowball, spec, player.getUniqueId());
+        return true;
+    }
+
+    /** Попадание брошенного трекера: к существу, к блоку или на землю. */
+    public CompletableFuture<PlaceOutcome> placeThrown(Player thrower, ItemFactory.TrackerSpec spec,
+                                                       Block hitBlock, BlockFace face,
+                                                       Entity hitEntity, Location fallback) {
+        if (thrower == null || spec == null) {
+            return CompletableFuture.completedFuture(new PlaceOutcome(null, PlaceResult.FAILED));
+        }
+        boolean attachPlayers = plugin.getConfigManager().isItrakAttachPlayers();
+        if (hitEntity != null && hitEntity.isValid() && !hitEntity.isDead()
+                && (hitEntity instanceof org.bukkit.entity.LivingEntity
+                || hitEntity instanceof org.bukkit.entity.Vehicle)
+                && (!(hitEntity instanceof Player) || attachPlayers)) {
+            return place(thrower, spec, hitEntity.getLocation().getBlock(), BlockFace.UP, hitEntity);
+        }
+        if (hitBlock != null) {
+            return place(thrower, spec, hitBlock, face == null ? BlockFace.UP : face, null);
+        }
+        Location landing = fallback;
+        if (landing != null && landing.getWorld() != null) {
+            return place(thrower, spec, landing.getBlock(), BlockFace.UP, null);
+        }
+        return CompletableFuture.completedFuture(new PlaceOutcome(null, PlaceResult.FAILED));
+    }
+
+    // ------------------------------------------------------------------
     // Тексты и форматирование
     // ------------------------------------------------------------------
 
@@ -626,6 +871,7 @@ public class TrackerService {
         return switch (tracker.status()) {
             case LIVE -> messages.get("itrak-status-live");
             case SUNK -> messages.get("itrak-status-sunk");
+            case EMPTY -> messages.get("itrak-status-empty");
             case NO_SIGNAL -> messages.get("itrak-status-no-signal");
         };
     }

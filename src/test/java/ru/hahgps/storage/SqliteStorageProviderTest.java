@@ -11,6 +11,7 @@ import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
 import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TrackerColor;
+import ru.hahgps.model.TrackerTerminal;
 import ru.hahgps.model.TransportType;
 import ru.hahgps.testsupport.FakeWorld;
 
@@ -237,6 +238,54 @@ class SqliteStorageProviderTest {
     }
 
     @Test
+    void trackerChargeAndSupportBlockSurviveRoundTrip() {
+        Tracker tracker = new Tracker(0, "TRK-CHRG", "", TrackerColor.PURPLE, true,
+                UUID.randomUUID(), "tester", "world", 1, 64, 2, null, false,
+                1L, 2L, 3L, 42, 777L, new Tracker.SupportBlock(10, 63, -4));
+        provider.createTracker(tracker);
+
+        Tracker saved = provider.getTrackers().get(0);
+        assertEquals(42, saved.getCharge());
+        assertEquals(777L, saved.getLastChargeAt());
+        assertEquals(new Tracker.SupportBlock(10, 63, -4), saved.getSupportBlock());
+        assertTrue(saved.isOnBlock());
+
+        saved.setCharge(0);
+        assertTrue(provider.updateTracker(saved));
+        assertEquals(0, provider.getTrackers().get(0).getCharge());
+    }
+
+    @Test
+    void terminalsSurviveRoundTrip() {
+        TrackerTerminal created = provider.createTerminal(new TrackerTerminal(0, "world",
+                100, 64, -20, UUID.randomUUID(), "tester", 5L));
+        assertNotNull(created);
+        assertTrue(created.id() > 0);
+
+        List<TrackerTerminal> all = provider.getTerminals();
+        assertEquals(1, all.size());
+        TrackerTerminal loaded = all.get(0);
+        assertEquals("world", loaded.world());
+        assertEquals(100, loaded.x());
+        assertEquals(64, loaded.y());
+        assertEquals(-20, loaded.z());
+        assertEquals("tester", loaded.ownerName());
+
+        assertTrue(provider.deleteTerminal("world", 100, 64, -20));
+        assertTrue(provider.getTerminals().isEmpty());
+    }
+
+    @Test
+    void duplicateTerminalAtSameBlockIsRejected() {
+        provider.createTerminal(new TrackerTerminal(0, "world", 1, 64, 1,
+                UUID.randomUUID(), "tester", 1L));
+        RuntimeException error = org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class,
+                () -> provider.createTerminal(new TrackerTerminal(0, "world", 1, 64, 1,
+                        UUID.randomUUID(), "tester", 2L)));
+        assertNotNull(error.getMessage());
+    }
+
+    @Test
     void duplicateTrackerCodeIsRejected() {
         Tracker first = new Tracker(0, "TRK-DUP1", "", TrackerColor.BLUE, false,
                 UUID.randomUUID(), "tester", "world", 0, 64, 0, null, false, 1L, 1L, 1L);
@@ -391,6 +440,7 @@ class SqliteStorageProviderTest {
             assertEquals(2, legacy.getRoutes().get(0).getNodeCount());
             assertTrue(legacy.getEdges().isEmpty(), "graph_edges создаётся пустым для старой базы");
             assertTrue(legacy.getTrackers().isEmpty(), "таблица трекеров появляется пустой");
+            assertTrue(legacy.getTerminals().isEmpty(), "таблица терминалов появляется пустой");
         } finally {
             legacy.close();
         }

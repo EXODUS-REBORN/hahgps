@@ -160,6 +160,7 @@ public class ItrakMenuGui extends GuiScreen {
             List<Component> lines = new ArrayList<>();
             lines.add(comp("gui.lore-itrak-status", "status", service.statusText(tracker)));
             lines.add(comp("gui.lore-itrak-state", "state", service.stateText(tracker, now)));
+            lines.add(comp("gui.lore-itrak-charge", "charge", String.valueOf(tracker.getCharge())));
             lines.add(comp("gui.lore-itrak-coords",
                     "x", TrackerService.formatCoord(tracker.getX()),
                     "y", TrackerService.formatCoord(tracker.getY()),

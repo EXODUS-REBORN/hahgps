@@ -93,6 +93,10 @@ public class ConfigManager {
         checkRange("itrak.save-interval-seconds", 30, 5, 3600);
         checkRange("itrak.live-route-rebuild-seconds", 10, 2, 300);
         checkRange("itrak.live-route-rebuild-blocks", 16, 2, 256);
+        checkRange("itrak.charge-drain-minutes", 120, 1, 10000);
+        checkRange("itrak.charge-per-item", 25, 1, 100);
+        checkRange("itrak.terminal-radius", 5, 1, 32);
+        checkRange("itrak.terminal-highlight-seconds", 10, 1, 120);
     }
 
     /** Числовая настройка с диапазоном: опечатка не должна ронять игру. */
@@ -321,5 +325,42 @@ public class ConfigManager {
     /** Можно ли прицепить трекер к игроку (слежка за игроком). */
     public boolean isItrakAttachPlayers() {
         return config.getBoolean("itrak.attach-players", true);
+    }
+
+    /** Тратятся ли заряды у трекеров. */
+    public boolean isItrakChargeEnabled() {
+        return config.getBoolean("itrak.charge-enabled", true);
+    }
+
+    /** Сколько миллисекунд живёт один процент заряда. */
+    public long getItrakChargeDrainMillisPerPercent() {
+        int minutes = Math.max(1, Math.min(10000,
+                config.getInt("itrak.charge-drain-minutes", 120)));
+        return minutes * 60_000L / 100L;
+    }
+
+    /** Сколько процентов восстанавливает один предмет-заряд. */
+    public int getItrakChargePerItem() {
+        return Math.max(1, Math.min(100, config.getInt("itrak.charge-per-item", 25)));
+    }
+
+    /** Радиус терминала: трекеры в нём показываются по нажатию на блок. */
+    public double getItrakTerminalRadius() {
+        return Math.max(1, Math.min(32, config.getInt("itrak.terminal-radius", 5)));
+    }
+
+    public int getItrakTerminalHighlightSeconds() {
+        return Math.max(1, Math.min(120, config.getInt("itrak.terminal-highlight-seconds", 10)));
+    }
+
+    /** Включены ли крафты iTrak. */
+    public boolean isItrakCrafting() {
+        return config.getBoolean("itrak.crafting", true);
+    }
+
+    /** Скорость броска трекера. */
+    public double getItrakThrowSpeed() {
+        double value = config.getDouble("itrak.throw-speed", 1.8);
+        return Double.isFinite(value) ? Math.max(0.5, Math.min(4.0, value)) : 1.8;
     }
 }

@@ -14,17 +14,26 @@ import java.util.UUID;
  * Положение меняется в главном потоке (тик {@code TrackerService}): трекер,
  * прицепленный к существу, повторяет его координаты, трекер на блоке стоит на
  * месте. {@code movedAt} — время последнего смещения больше порога, по нему
- * считается «неподвижен N».
+ * считается «неподвижен N». Заряд тратится, пока трекер передаёт сигнал, и
+ * без заряда трекер молчит (статус «разряжен»).
  */
 public class Tracker {
 
     /** Порог смещения: дрожание сущности на месте не считается движением. */
     public static final double MOVE_THRESHOLD = 0.35;
 
+    /** Полный заряд. */
+    public static final int CHARGE_MAX = 100;
+
     public enum Status {
         LIVE,
         NO_SIGNAL,
-        SUNK
+        SUNK,
+        EMPTY
+    }
+
+    /** Блок, к которому прицеплен трекер (null — прицеплен к существу или потерял опору). */
+    public record SupportBlock(int x, int y, int z) {
     }
 
     private final int id;
@@ -39,10 +48,14 @@ public class Tracker {
     private double y;
     private double z;
     private UUID entityUuid;
+    private SupportBlock supportBlock;
     private boolean sunk;
     private final long placedAt;
     private long movedAt;
     private long updatedAt;
+
+    private int charge;
+    private long lastChargeAt;
 
     /** Живой сигнал: у привязанного к сущности трекера снимается, если сущности нет. */
     private transient boolean signal = true;
@@ -50,6 +63,15 @@ public class Tracker {
     public Tracker(int id, String code, String name, TrackerColor color, boolean waterproof,
                    UUID ownerUuid, String ownerName, String world, double x, double y, double z,
                    UUID entityUuid, boolean sunk, long placedAt, long movedAt, long updatedAt) {
+        this(id, code, name, color, waterproof, ownerUuid, ownerName, world, x, y, z,
+                entityUuid, sunk, placedAt, movedAt, updatedAt,
+                CHARGE_MAX, placedAt, null);
+    }
+
+    public Tracker(int id, String code, String name, TrackerColor color, boolean waterproof,
+                   UUID ownerUuid, String ownerName, String world, double x, double y, double z,
+                   UUID entityUuid, boolean sunk, long placedAt, long movedAt, long updatedAt,
+                   int charge, long lastChargeAt, SupportBlock supportBlock) {
         this.id = id;
         this.code = code;
         this.name = name == null ? "" : name;
@@ -62,10 +84,13 @@ public class Tracker {
         this.y = y;
         this.z = z;
         this.entityUuid = entityUuid;
+        this.supportBlock = supportBlock;
         this.sunk = sunk;
         this.placedAt = placedAt;
         this.movedAt = movedAt;
         this.updatedAt = updatedAt;
+        this.charge = Math.max(0, Math.min(CHARGE_MAX, charge));
+        this.lastChargeAt = lastChargeAt <= 0 ? placedAt : lastChargeAt;
         this.signal = !sunk;
     }
 
@@ -138,6 +163,24 @@ public class Tracker {
         return entityUuid != null;
     }
 
+    public SupportBlock getSupportBlock() {
+        return supportBlock;
+    }
+
+    public void setSupportBlock(SupportBlock supportBlock) {
+        this.supportBlock = supportBlock;
+    }
+
+    public boolean isOnBlock() {
+        return supportBlock != null;
+    }
+
+    /** Стоит ли этот трекер на данном блоке (для снятия кликом и поломки блока). */
+    public boolean isOnBlock(int blockX, int blockY, int blockZ) {
+        return supportBlock != null && supportBlock.x() == blockX
+                && supportBlock.y() == blockY && supportBlock.z() == blockZ;
+    }
+
     public boolean isSunk() {
         return sunk;
     }
@@ -161,8 +204,35 @@ public class Tracker {
         return updatedAt;
     }
 
+    public int getCharge() {
+        return charge;
+    }
+
+    public void setCharge(int charge) {
+        this.charge = Math.max(0, Math.min(CHARGE_MAX, charge));
+    }
+
+    /** @return сколько процентов реально добавилось (может быть меньше запрошенного) */
+    public int addCharge(int delta) {
+        int before = charge;
+        setCharge(charge + delta);
+        return charge - before;
+    }
+
+    public long getLastChargeAt() {
+        return lastChargeAt;
+    }
+
+    public void setLastChargeAt(long lastChargeAt) {
+        this.lastChargeAt = lastChargeAt;
+    }
+
+    public boolean isPowered() {
+        return charge > 0;
+    }
+
     public boolean hasSignal() {
-        return signal && !sunk;
+        return signal && !sunk && charge > 0;
     }
 
     public void setSignal(boolean signal) {
@@ -172,6 +242,9 @@ public class Tracker {
     public Status status() {
         if (sunk) {
             return Status.SUNK;
+        }
+        if (charge <= 0) {
+            return Status.EMPTY;
         }
         return signal ? Status.LIVE : Status.NO_SIGNAL;
     }
@@ -240,6 +313,6 @@ public class Tracker {
     @Override
     public String toString() {
         return "Tracker{" + code + " " + color.getKey() + (waterproof ? " waterproof" : "")
-                + " " + getFormattedCoords() + " @ " + world + "}";
+                + " " + getFormattedCoords() + " @ " + world + " charge=" + charge + "}";
     }
 }

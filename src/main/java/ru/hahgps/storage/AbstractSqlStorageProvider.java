@@ -7,6 +7,7 @@ import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
 import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TrackerColor;
+import ru.hahgps.model.TrackerTerminal;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -115,7 +116,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     }
 
     /** Текущая версия схемы: растёт при миграциях. */
-    public static final int SCHEMA_VERSION = 3;
+    public static final int SCHEMA_VERSION = 4;
 
     private void createTables() throws SQLException {
         try (Statement st = connection.createStatement()) {
@@ -191,6 +192,17 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                     "moved_at BIGINT NOT NULL DEFAULT 0, " +
                     "updated_at BIGINT NOT NULL DEFAULT 0)");
 
+            // Схема v4: терминалы iTrak. В мире это обычный блок, поэтому
+            // привязка — по координатам в отдельной таблице.
+            st.execute("CREATE TABLE IF NOT EXISTS itrak_terminals (" +
+                    "id INTEGER PRIMARY KEY " + autoIncrement() + ", " +
+                    "world VARCHAR(64) NOT NULL, " +
+                    "x INTEGER NOT NULL, y INTEGER NOT NULL, z INTEGER NOT NULL, " +
+                    "owner_uuid VARCHAR(36) NOT NULL DEFAULT '', " +
+                    "owner_name VARCHAR(64) NOT NULL DEFAULT '', " +
+                    "placed_at BIGINT NOT NULL DEFAULT 0, " +
+                    "UNIQUE (world, x, y, z))");
+
             st.execute("CREATE TABLE IF NOT EXISTS meta (" +
                     "key VARCHAR(32) PRIMARY KEY, " +
                     "value VARCHAR(64) NOT NULL)");
@@ -259,7 +271,20 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 new ColumnAdd("sunk", "TINYINT NOT NULL DEFAULT 0"),
                 new ColumnAdd("placed_at", "BIGINT NOT NULL DEFAULT 0"),
                 new ColumnAdd("moved_at", "BIGINT NOT NULL DEFAULT 0"),
-                new ColumnAdd("updated_at", "BIGINT NOT NULL DEFAULT 0")));
+                new ColumnAdd("updated_at", "BIGINT NOT NULL DEFAULT 0"),
+                new ColumnAdd("charge", "INTEGER NOT NULL DEFAULT 100"),
+                new ColumnAdd("last_charge_at", "BIGINT NOT NULL DEFAULT 0"),
+                new ColumnAdd("block_x", "INTEGER"),
+                new ColumnAdd("block_y", "INTEGER"),
+                new ColumnAdd("block_z", "INTEGER")));
+        spec.put("itrak_terminals", List.of(
+                new ColumnAdd("world", "VARCHAR(64) NOT NULL DEFAULT 'world'"),
+                new ColumnAdd("x", "INTEGER NOT NULL DEFAULT 0"),
+                new ColumnAdd("y", "INTEGER NOT NULL DEFAULT 64"),
+                new ColumnAdd("z", "INTEGER NOT NULL DEFAULT 0"),
+                new ColumnAdd("owner_uuid", "VARCHAR(36) NOT NULL DEFAULT ''"),
+                new ColumnAdd("owner_name", "VARCHAR(64) NOT NULL DEFAULT ''"),
+                new ColumnAdd("placed_at", "BIGINT NOT NULL DEFAULT 0")));
         spec.put("meta", List.of(
                 new ColumnAdd("value", "VARCHAR(64) NOT NULL DEFAULT ''")));
         return spec;
@@ -396,6 +421,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         createIndex("idx_pois_category", "pois", "category_id");
         createIndex("idx_graph_edges_world", "graph_edges", "world");
         createIndex("idx_trackers_owner", "trackers", "owner_uuid");
+        createIndex("idx_terminals_world", "itrak_terminals", "world");
     }
 
     private void createIndex(String name, String table, String columns) {
@@ -831,8 +857,9 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     @Override
     public synchronized Tracker createTracker(Tracker tracker) {
         String sql = "INSERT INTO trackers (code, name, owner_uuid, owner_name, color, waterproof, " +
-                "world, x, y, z, entity_uuid, sunk, placed_at, moved_at, updated_at) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "world, x, y, z, entity_uuid, sunk, placed_at, moved_at, updated_at, " +
+                "charge, last_charge_at, block_x, block_y, block_z) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try {
             ensureConnected();
             try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -851,6 +878,12 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 ps.setLong(13, tracker.getPlacedAt());
                 ps.setLong(14, tracker.getMovedAt());
                 ps.setLong(15, tracker.getUpdatedAt());
+                ps.setInt(16, tracker.getCharge());
+                ps.setLong(17, tracker.getLastChargeAt());
+                Tracker.SupportBlock support = tracker.getSupportBlock();
+                ps.setObject(18, support == null ? null : support.x());
+                ps.setObject(19, support == null ? null : support.y());
+                ps.setObject(20, support == null ? null : support.z());
                 ps.executeUpdate();
                 try (ResultSet rs = ps.getGeneratedKeys()) {
                     if (rs.next()) {
@@ -858,7 +891,8 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                                 tracker.getColor(), tracker.isWaterproof(), tracker.getOwnerUuid(),
                                 tracker.getOwnerName(), tracker.getWorld(), tracker.getX(), tracker.getY(),
                                 tracker.getZ(), tracker.getEntityUuid(), tracker.isSunk(),
-                                tracker.getPlacedAt(), tracker.getMovedAt(), tracker.getUpdatedAt());
+                                tracker.getPlacedAt(), tracker.getMovedAt(), tracker.getUpdatedAt(),
+                                tracker.getCharge(), tracker.getLastChargeAt(), tracker.getSupportBlock());
                     }
                 }
             }
@@ -872,7 +906,8 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     @Override
     public synchronized boolean updateTracker(Tracker tracker) {
         String sql = "UPDATE trackers SET name = ?, world = ?, x = ?, y = ?, z = ?, entity_uuid = ?, " +
-                "sunk = ?, moved_at = ?, updated_at = ? WHERE id = ?";
+                "sunk = ?, moved_at = ?, updated_at = ?, charge = ?, last_charge_at = ?, " +
+                "block_x = ?, block_y = ?, block_z = ? WHERE id = ?";
         try {
             ensureConnected();
             try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -885,7 +920,13 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 ps.setInt(7, tracker.isSunk() ? 1 : 0);
                 ps.setLong(8, tracker.getMovedAt());
                 ps.setLong(9, tracker.getUpdatedAt());
-                ps.setInt(10, tracker.getId());
+                ps.setInt(10, tracker.getCharge());
+                ps.setLong(11, tracker.getLastChargeAt());
+                Tracker.SupportBlock support = tracker.getSupportBlock();
+                ps.setObject(12, support == null ? null : support.x());
+                ps.setObject(13, support == null ? null : support.y());
+                ps.setObject(14, support == null ? null : support.z());
+                ps.setInt(15, tracker.getId());
                 return ps.executeUpdate() > 0;
             }
         } catch (SQLException e) {
@@ -917,6 +958,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         }
         UUID owner = parseUuid(rs.getString("owner_uuid"));
         UUID entity = parseUuid(rs.getString("entity_uuid"));
+        Tracker.SupportBlock support = mapSupportBlock(rs);
         return new Tracker(
                 rs.getInt("id"),
                 rs.getString("code"),
@@ -931,7 +973,10 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 rs.getInt("sunk") == 1,
                 rs.getLong("placed_at"),
                 rs.getLong("moved_at"),
-                rs.getLong("updated_at"));
+                rs.getLong("updated_at"),
+                rs.getInt("charge"),
+                rs.getLong("last_charge_at"),
+                support);
     }
 
     /** UUID из БД: битые строки не должны ронять загрузку всех трекеров. */
@@ -944,6 +989,95 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         } catch (IllegalArgumentException malformed) {
             return null;
         }
+    }
+
+    private static Tracker.SupportBlock mapSupportBlock(ResultSet rs) throws SQLException {
+        int x = rs.getInt("block_x");
+        boolean xNull = rs.wasNull();
+        int y = rs.getInt("block_y");
+        boolean yNull = rs.wasNull();
+        int z = rs.getInt("block_z");
+        boolean zNull = rs.wasNull();
+        if (xNull || yNull || zNull) {
+            return null;
+        }
+        return new Tracker.SupportBlock(x, y, z);
+    }
+
+    @Override
+    public synchronized List<TrackerTerminal> getTerminals() {
+        List<TrackerTerminal> list = new ArrayList<>();
+        try {
+            ensureConnected();
+            try (Statement st = connection.createStatement();
+                 ResultSet rs = st.executeQuery("SELECT * FROM itrak_terminals ORDER BY id")) {
+                while (rs.next()) {
+                    list.add(mapTerminal(rs));
+                }
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to load itrak terminals", e);
+        }
+        return list;
+    }
+
+    @Override
+    public synchronized TrackerTerminal createTerminal(TrackerTerminal terminal) {
+        String sql = "INSERT INTO itrak_terminals (world, x, y, z, owner_uuid, owner_name, placed_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?)";
+        try {
+            ensureConnected();
+            try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                ps.setString(1, terminal.world());
+                ps.setInt(2, terminal.x());
+                ps.setInt(3, terminal.y());
+                ps.setInt(4, terminal.z());
+                ps.setString(5, terminal.ownerUuid() == null ? "" : terminal.ownerUuid().toString());
+                ps.setString(6, terminal.ownerName() == null ? "" : terminal.ownerName());
+                ps.setLong(7, terminal.placedAt());
+                ps.executeUpdate();
+                try (ResultSet rs = ps.getGeneratedKeys()) {
+                    if (rs.next()) {
+                        return new TrackerTerminal(rs.getInt(1), terminal.world(), terminal.x(),
+                                terminal.y(), terminal.z(), terminal.ownerUuid(),
+                                terminal.ownerName(), terminal.placedAt());
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to create itrak terminal", e);
+        }
+        return null;
+    }
+
+    @Override
+    public synchronized boolean deleteTerminal(String world, int x, int y, int z) {
+        try {
+            ensureConnected();
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "DELETE FROM itrak_terminals WHERE world = ? AND x = ? AND y = ? AND z = ?")) {
+                ps.setString(1, world);
+                ps.setInt(2, x);
+                ps.setInt(3, y);
+                ps.setInt(4, z);
+                return ps.executeUpdate() > 0;
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to delete itrak terminal", e);
+        }
+    }
+
+    private TrackerTerminal mapTerminal(ResultSet rs) throws SQLException {
+        return new TrackerTerminal(
+                rs.getInt("id"),
+                rs.getString("world"),
+                rs.getInt("x"), rs.getInt("y"), rs.getInt("z"),
+                parseUuid(rs.getString("owner_uuid")),
+                rs.getString("owner_name"),
+                rs.getLong("placed_at"));
     }
 
     private Poi mapPoi(ResultSet rs) throws SQLException {

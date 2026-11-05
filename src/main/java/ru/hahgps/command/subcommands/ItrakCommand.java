@@ -2,7 +2,9 @@ package ru.hahgps.command.subcommands;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.SubCommand;
 import ru.hahgps.gui.GuiTheme;
@@ -35,7 +37,7 @@ public class ItrakCommand implements SubCommand {
 
     @Override
     public String usage() {
-        return "/gps itrak [give|give-locator|scan|list|info|route|take|remove|watch|unwatch]";
+        return "/gps itrak [give|give-locator|give-charge|give-terminal|scan|list|info|route|take|charge|remove|watch|unwatch]";
     }
 
     @Override
@@ -45,8 +47,9 @@ public class ItrakCommand implements SubCommand {
 
     @Override
     public List<SubCommand> children() {
-        return List.of(new GiveCommand(), new GiveLocatorCommand(), new ScanCommand(),
-                new ListCommand(), new InfoCommand(), new RouteCommand(), new TakeCommand(),
+        return List.of(new GiveCommand(), new GiveLocatorCommand(), new GiveChargeCommand(),
+                new GiveTerminalCommand(), new ScanCommand(), new ListCommand(),
+                new InfoCommand(), new RouteCommand(), new TakeCommand(), new ChargeCommand(),
                 new RemoveCommand(), new WatchCommand(), new UnwatchCommand());
     }
 
@@ -100,6 +103,71 @@ public class ItrakCommand implements SubCommand {
                     "z", TrackerService.formatCoord(tracker.getZ()),
                     "status", service.statusText(tracker)));
         }
+        GuiTheme.click(player);
+    }
+
+    /**
+     * Нажатие на терминал: координаты трекеров в радиусе и подсветка.
+     * Тот же путь использует сам блок-терминал из слушателя.
+     */
+    public static void reportTerminal(HahGpsPlugin plugin, Player player, Block block) {
+        TrackerService service = plugin.getTrackerService();
+        if (service == null || block == null) {
+            return;
+        }
+        double radius = plugin.getConfigManager().getItrakTerminalRadius();
+        Location origin = block.getLocation().add(0.5, 0.5, 0.5);
+        List<TrackerService.Nearby> found = service.scanAround(origin, radius);
+        if (found.isEmpty()) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-empty",
+                    "radius", String.valueOf((int) radius)));
+            GuiTheme.deny(player);
+            return;
+        }
+        player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-header",
+                "count", String.valueOf(found.size())));
+        int seconds = plugin.getConfigManager().getItrakTerminalHighlightSeconds();
+        for (TrackerService.Nearby nearby : found) {
+            Tracker tracker = nearby.tracker();
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-entry",
+                    "name", tracker.getDisplayName(),
+                    "code", tracker.getCode(),
+                    "x", TrackerService.formatCoord(tracker.getX()),
+                    "y", TrackerService.formatCoord(tracker.getY()),
+                    "z", TrackerService.formatCoord(tracker.getZ()),
+                    "distance", LocationUtil.formatDistance(nearby.distance()),
+                    "charge", String.valueOf(tracker.getCharge()),
+                    "status", service.statusText(tracker)));
+            service.highlight(player, tracker, seconds);
+        }
+        player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-highlight",
+                "count", String.valueOf(found.size()), "seconds", String.valueOf(seconds)));
+        GuiTheme.click(player);
+    }
+
+    /** Вставить заряд из инвентаря в трекер (клик зарядом по блоку и команда). */
+    public static void chargeTracker(HahGpsPlugin plugin, Player player, Tracker tracker) {
+        TrackerService service = plugin.getTrackerService();
+        if (service == null || tracker == null) {
+            return;
+        }
+        if (tracker.getCharge() >= Tracker.CHARGE_MAX) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-charge-full",
+                    "name", tracker.getDisplayName(), "charge", String.valueOf(tracker.getCharge())));
+            GuiTheme.deny(player);
+            return;
+        }
+        int perItem = plugin.getConfigManager().getItrakChargePerItem();
+        if (!ItemFactory.consumeChargeItem(player)) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-charge-need-item"));
+            GuiTheme.deny(player);
+            return;
+        }
+        int added = service.charge(tracker, perItem);
+        player.sendMessage(plugin.getMessages().getPrefixed("itrak-charged",
+                "name", tracker.getDisplayName(),
+                "charge", String.valueOf(tracker.getCharge()),
+                "added", String.valueOf(added)));
         GuiTheme.click(player);
     }
 
@@ -565,6 +633,137 @@ public class ItrakCommand implements SubCommand {
         }
     }
 
+    private static class ChargeCommand implements SubCommand {
+        @Override
+        public String name() {
+            return "charge";
+        }
+
+        @Override
+        public String usage() {
+            return "/gps itrak charge <код|имя>";
+        }
+
+        @Override
+        public String permission() {
+            return "gps.itrak";
+        }
+
+        @Override
+        public void execute(Player player, String[] args) {
+            HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+            if (args.length == 0) {
+                player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
+                return;
+            }
+            Tracker tracker = requireTracker(plugin, player, args[0]);
+            if (tracker != null) {
+                chargeTracker(plugin, player, tracker);
+            }
+        }
+
+        @Override
+        public List<String> tabComplete(Player player, String[] args) {
+            return args.length == 1 ? trackerSuggestions(player, args[0]) : List.of();
+        }
+    }
+
+    private static class GiveChargeCommand implements SubCommand {
+        @Override
+        public String name() {
+            return "give-charge";
+        }
+
+        @Override
+        public String usage() {
+            return "/gps itrak give-charge [кол-во] [игрок]";
+        }
+
+        @Override
+        public String permission() {
+            return "gps.itrak.give";
+        }
+
+        @Override
+        public void execute(Player player, String[] args) {
+            HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+            int amount = 1;
+            Player target = player;
+            int index = 0;
+            if (args.length > index) {
+                try {
+                    amount = Math.max(1, Math.min(64, Integer.parseInt(args[index])));
+                    index++;
+                } catch (NumberFormatException ignored) {
+                    // Первый аргумент — имя игрока, а не количество.
+                }
+            }
+            if (args.length > index) {
+                Player named = Bukkit.getPlayerExact(args[index]);
+                if (named == null) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("itrak-player-not-found",
+                            "name", args[index]));
+                    return;
+                }
+                target = named;
+            }
+            int perItem = plugin.getConfigManager().getItrakChargePerItem();
+            ItemStack stack = ItemFactory.chargeItem(perItem);
+            stack.setAmount(amount);
+            ItemFactory.give(target, stack);
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-charge-given",
+                    "player", target.getName(), "amount", String.valueOf(amount)));
+        }
+
+        @Override
+        public List<String> tabComplete(Player player, String[] args) {
+            if (args.length == 1) {
+                return SubCommand.filterByPrefix(playerNames(), args[0]);
+            }
+            return List.of();
+        }
+    }
+
+    private static class GiveTerminalCommand implements SubCommand {
+        @Override
+        public String name() {
+            return "give-terminal";
+        }
+
+        @Override
+        public String usage() {
+            return "/gps itrak give-terminal [игрок]";
+        }
+
+        @Override
+        public String permission() {
+            return "gps.itrak.give";
+        }
+
+        @Override
+        public void execute(Player player, String[] args) {
+            HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+            Player target = player;
+            if (args.length >= 1) {
+                Player named = Bukkit.getPlayerExact(args[0]);
+                if (named == null) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("itrak-player-not-found",
+                            "name", args[0]));
+                    return;
+                }
+                target = named;
+            }
+            ItemFactory.give(target, ItemFactory.terminalItem());
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-given",
+                    "player", target.getName()));
+        }
+
+        @Override
+        public List<String> tabComplete(Player player, String[] args) {
+            return args.length == 1 ? SubCommand.filterByPrefix(playerNames(), args[0]) : List.of();
+        }
+    }
+
     private static class GiveCommand implements SubCommand {
         @Override
         public String name() {
@@ -632,11 +831,7 @@ public class ItrakCommand implements SubCommand {
                 return SubCommand.filterByPrefix(List.of("waterproof", "regular"), args[1]);
             }
             if (args.length >= 3) {
-                List<String> names = new ArrayList<>();
-                for (Player online : Bukkit.getOnlinePlayers()) {
-                    names.add(online.getName());
-                }
-                return SubCommand.filterByPrefix(names, args[args.length - 1]);
+                return SubCommand.filterByPrefix(playerNames(), args[args.length - 1]);
             }
             return List.of();
         }
@@ -680,14 +875,7 @@ public class ItrakCommand implements SubCommand {
 
         @Override
         public List<String> tabComplete(Player player, String[] args) {
-            if (args.length == 1) {
-                List<String> names = new ArrayList<>();
-                for (Player online : Bukkit.getOnlinePlayers()) {
-                    names.add(online.getName());
-                }
-                return SubCommand.filterByPrefix(names, args[0]);
-            }
-            return List.of();
+            return args.length == 1 ? SubCommand.filterByPrefix(playerNames(), args[0]) : List.of();
         }
     }
 
@@ -739,6 +927,14 @@ public class ItrakCommand implements SubCommand {
         }
         String label = String.join(" ", java.util.Arrays.copyOfRange(parts, index, parts.length));
         giveTracker(plugin, player, player, color, waterproof, label.trim());
+    }
+
+    private static List<String> playerNames() {
+        List<String> names = new ArrayList<>();
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            names.add(online.getName());
+        }
+        return names;
     }
 
     private static boolean isWaterproofToken(String token) {

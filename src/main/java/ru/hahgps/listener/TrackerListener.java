@@ -1,13 +1,20 @@
 package ru.hahgps.listener;
 
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Vehicle;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -16,14 +23,19 @@ import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.subcommands.ItrakCommand;
 import ru.hahgps.item.ItemFactory;
 import ru.hahgps.model.Tracker;
+import ru.hahgps.service.ItrakTerminalService;
 import ru.hahgps.service.TrackerService;
 
 /**
- * Установка iTrak: ПКМ по блоку (любая поверхность, включая воду) или по
- * существу. ПКМ локатором — скан трекеров поблизости.
- *
- * Событие отменяется: трекер — предмет-устройство, а не блок, и открывать
- * чужие меню/двери этим кликом нельзя.
+ * Действия с iTrak в мире:
+ * <ul>
+ *   <li>ПКМ трекером по блоку — прицепить, ПКМ в воздух — бросить (Shift — аккуратно);</li>
+ *   <li>ПКМ пустой рукой по блоку с трекером — снять; Shift+ПКМ по существу — снять с него;</li>
+ *   <li>ПКМ зарядом по блоку с трекером — вставить заряд;</li>
+ *   <li>ПКМ по терминалу — координаты трекеров рядом и подсветка;</li>
+ *   <li>поломка блока/терминала — предмет возвращается в мир.</li>
+ * </ul>
+ * События отменяются: трекер — предмет-устройство, а не блок и не инструмент.
  */
 public class TrackerListener implements Listener {
 
@@ -33,39 +45,89 @@ public class TrackerListener implements Listener {
         this.plugin = plugin;
     }
 
+    // ------------------------------------------------------------------
+    // Клик по блоку
+    // ------------------------------------------------------------------
+
     @EventHandler(priority = EventPriority.NORMAL)
     public void onInteractBlock(PlayerInteractEvent event) {
         Player player = event.getPlayer();
-        if (event.getHand() != EquipmentSlot.HAND) {
+        if (event.getHand() != EquipmentSlot.HAND || !plugin.getConfigManager().isItrakEnabled()) {
             return;
         }
+        Block clicked = event.getClickedBlock();
         ItemStack item = player.getInventory().getItemInMainHand();
+
+        if (ItemFactory.isTerminalItem(item)) {
+            event.setCancelled(true);
+            if (clicked == null) {
+                player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-use-hint"));
+                return;
+            }
+            placeTerminal(player, clicked, event.getBlockFace());
+            return;
+        }
+
+        boolean rightClick = event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK
+                || event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_AIR;
+        if (clicked != null && rightClick && player.hasPermission("gps.itrak")) {
+            ItrakTerminalService terminals = plugin.getTerminalService();
+            if (terminals != null && terminals.isTerminal(clicked)) {
+                event.setCancelled(true);
+                ItrakCommand.reportTerminal(plugin, player, clicked);
+                return;
+            }
+            TrackerService service = plugin.getTrackerService();
+            if (service != null) {
+                Tracker onBlock = service.trackerOnBlock(clicked);
+                if (onBlock != null && ItemFactory.isChargeItem(item)) {
+                    event.setCancelled(true);
+                    ItrakCommand.chargeTracker(plugin, player, onBlock);
+                    return;
+                }
+                if (onBlock != null && item.getType().isAir()) {
+                    event.setCancelled(true);
+                    takeTracker(player, onBlock);
+                    return;
+                }
+            }
+        }
+
         if (ItemFactory.isLocator(item)) {
+            if (!player.hasPermission("gps.itrak")) {
+                return;
+            }
             event.setCancelled(true);
             runScan(player);
             return;
         }
+
         ItemFactory.TrackerSpec spec = ItemFactory.readTracker(item);
         if (spec == null) {
             return;
         }
-        switch (event.getAction()) {
-            case RIGHT_CLICK_BLOCK, RIGHT_CLICK_AIR -> {
-            }
-            default -> {
-                return;
-            }
+        if (event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_AIR) {
+            event.setCancelled(true);
+            throwTracker(player, spec);
+            return;
+        }
+        if (event.getAction() != org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) {
+            return;
         }
         event.setCancelled(true);
-        if (event.getClickedBlock() == null) {
+        if (clicked == null) {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-place-air"));
             return;
         }
         if (!checkAllowed(player)) {
             return;
         }
-        place(player, item, spec, event.getClickedBlock(), event.getBlockFace(), null);
+        place(player, spec, clicked, event.getBlockFace(), null);
     }
+
+    // ------------------------------------------------------------------
+    // Клик по существу: прицепить или снять
+    // ------------------------------------------------------------------
 
     @EventHandler(priority = EventPriority.NORMAL)
     public void onInteractEntity(PlayerInteractEntityEvent event) {
@@ -74,12 +136,24 @@ public class TrackerListener implements Listener {
         }
         Player player = event.getPlayer();
         ItemStack item = player.getInventory().getItemInMainHand();
+        Entity target = event.getRightClicked();
+        TrackerService service = plugin.getTrackerService();
+
+        if (item.getType().isAir() && player.isSneaking() && service != null
+                && player.hasPermission("gps.itrak")) {
+            Tracker attached = service.trackerOnEntity(target.getUniqueId());
+            if (attached != null && service.canManage(player, attached)) {
+                event.setCancelled(true);
+                takeTracker(player, attached);
+            }
+            return;
+        }
+
         ItemFactory.TrackerSpec spec = ItemFactory.readTracker(item);
         if (spec == null) {
             return;
         }
         event.setCancelled(true);
-        Entity target = event.getRightClicked();
         if (target instanceof Player && !plugin.getConfigManager().isItrakAttachPlayers()) {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-attach-players-off"));
             return;
@@ -91,16 +165,158 @@ public class TrackerListener implements Listener {
         if (!checkAllowed(player)) {
             return;
         }
-        place(player, item, spec, target.getLocation().getBlock(), null, target);
+        place(player, spec, target.getLocation().getBlock(), BlockFace.UP, target);
     }
+
+    // ------------------------------------------------------------------
+    // Бросок
+    // ------------------------------------------------------------------
+
+    private void throwTracker(Player player, ItemFactory.TrackerSpec spec) {
+        TrackerService service = plugin.getTrackerService();
+        if (service == null || !checkAllowed(player)) {
+            return;
+        }
+        if (service.byCode(spec.code()) != null) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-exists"));
+            return;
+        }
+        boolean gentle = player.isSneaking();
+        if (!service.throwTracker(player, spec, gentle)) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-thrown-failed"));
+            return;
+        }
+        ItemFactory.consumeTrackerItem(player, spec.code());
+        player.sendMessage(plugin.getMessages().getPrefixed("itrak-thrown",
+                "name", spec.name() == null || spec.name().isBlank() ? spec.code() : spec.name(),
+                "code", spec.code()));
+    }
+
+    @EventHandler
+    public void onProjectileHit(ProjectileHitEvent event) {
+        Projectile projectile = event.getEntity();
+        ItemFactory.TrackerSpec spec = ItemFactory.readSpec(projectile);
+        if (spec == null) {
+            return;
+        }
+        java.util.UUID throwerId = ItemFactory.readThrower(projectile);
+        Entity hitEntity = event.getHitEntity();
+        Block hitBlock = event.getHitBlock();
+        BlockFace face = event.getHitBlockFace();
+        Location at = projectile.getLocation().clone();
+        projectile.remove();
+        Player thrower = throwerId == null ? null : Bukkit.getPlayer(throwerId);
+        TrackerService service = plugin.getTrackerService();
+        if (thrower == null || !thrower.isOnline() || service == null) {
+            // Владелец вышел — трекер просто падает предметом на месте.
+            if (at.getWorld() != null) {
+                at.getWorld().dropItemNaturally(at, ItemFactory.trackerItem(spec));
+            }
+            return;
+        }
+        service.placeThrown(thrower, spec, hitBlock, face, hitEntity, at)
+                .whenComplete((outcome, error) -> plugin.getDataService().runSync(() -> {
+                    if (!thrower.isOnline()) {
+                        return;
+                    }
+                    if (error != null) {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING,
+                                "HahGps: брошенный iTrak не установился", error);
+                        ItemFactory.give(thrower, ItemFactory.trackerItem(spec));
+                        thrower.sendMessage(plugin.getMessages().getPrefixed("itrak-place-failed"));
+                        return;
+                    }
+                    reportPlacement(thrower, spec, outcome, hitEntity, true);
+                }));
+    }
+
+    // ------------------------------------------------------------------
+    // Терминал
+    // ------------------------------------------------------------------
+
+    private void placeTerminal(Player player, Block clicked, BlockFace face) {
+        ItrakTerminalService terminals = plugin.getTerminalService();
+        if (terminals == null) {
+            player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
+            return;
+        }
+        if (!checkAllowed(player)) {
+            return;
+        }
+        Block target = clicked.getRelative(face == null ? BlockFace.UP : face);
+        terminals.place(player, target).whenComplete((outcome, error) ->
+                plugin.getDataService().runSync(() -> {
+                    if (!player.isOnline()) {
+                        return;
+                    }
+                    if (error != null) {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING,
+                                "HahGps: терминал iTrak не установлен", error);
+                        player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-failed"));
+                        return;
+                    }
+                    ItrakTerminalService.PlaceResult result = outcome == null
+                            ? ItrakTerminalService.PlaceResult.FAILED : outcome.result();
+                    if (result != ItrakTerminalService.PlaceResult.OK) {
+                        player.sendMessage(plugin.getMessages().getPrefixed(switch (result) {
+                            case OCCUPIED -> "itrak-terminal-occupied";
+                            case DISABLED -> "itrak-disabled";
+                            default -> "itrak-terminal-failed";
+                        }));
+                        return;
+                    }
+                    ItemFactory.consumeTerminalItem(player);
+                    player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-placed",
+                            "world", target.getWorld() == null ? "?" : target.getWorld().getName(),
+                            "x", String.valueOf(target.getX()),
+                            "y", String.valueOf(target.getY()),
+                            "z", String.valueOf(target.getZ())));
+                }));
+    }
+
+    // ------------------------------------------------------------------
+    // Поломка блока
+    // ------------------------------------------------------------------
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockBreak(BlockBreakEvent event) {
+        Block block = event.getBlock();
+        Player player = event.getPlayer();
+        ItrakTerminalService terminals = plugin.getTerminalService();
+        if (terminals != null && terminals.isTerminal(block)) {
+            event.setDropItems(false);
+            terminals.remove(block);
+            if (block.getWorld() != null) {
+                block.getWorld().dropItemNaturally(block.getLocation().add(0.5, 0.5, 0.5),
+                        ItemFactory.terminalItem());
+            }
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-broken"));
+            return;
+        }
+        TrackerService service = plugin.getTrackerService();
+        Tracker tracker = service == null ? null : service.trackerOnBlock(block);
+        if (tracker == null) {
+            return;
+        }
+        String name = tracker.getDisplayName();
+        service.removeDropping(tracker, block.getLocation().add(0.5, 0.5, 0.5));
+        player.sendMessage(plugin.getMessages().getPrefixed("itrak-tracker-fell", "name", name));
+        Player owner = tracker.getOwnerUuid() == null ? null : Bukkit.getPlayer(tracker.getOwnerUuid());
+        if (owner != null && owner.isOnline() && !owner.getUniqueId().equals(player.getUniqueId())) {
+            owner.sendMessage(plugin.getMessages().getPrefixed("itrak-tracker-fell-owner", "name", name));
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Общее
+    // ------------------------------------------------------------------
 
     private boolean checkAllowed(Player player) {
         if (!plugin.getConfigManager().isItrakEnabled()) {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-disabled"));
             return false;
         }
-        TrackerService service = plugin.getTrackerService();
-        if (service == null) {
+        if (plugin.getTrackerService() == null) {
             player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
             return false;
         }
@@ -111,8 +327,8 @@ public class TrackerListener implements Listener {
         return true;
     }
 
-    private void place(Player player, ItemStack item, ItemFactory.TrackerSpec spec,
-                       org.bukkit.block.Block block, org.bukkit.block.BlockFace face, Entity target) {
+    private void place(Player player, ItemFactory.TrackerSpec spec,
+                       Block block, BlockFace face, Entity target) {
         TrackerService service = plugin.getTrackerService();
         if (service == null) {
             return;
@@ -128,52 +344,80 @@ public class TrackerListener implements Listener {
                         player.sendMessage(plugin.getMessages().getPrefixed("itrak-place-failed"));
                         return;
                     }
-                    TrackerService.PlaceResult result = outcome == null
-                            ? TrackerService.PlaceResult.FAILED : outcome.result();
-                    if (result != TrackerService.PlaceResult.OK) {
-                        player.sendMessage(plugin.getMessages().getPrefixed(switch (result) {
-                            case ALREADY_PLACED -> "itrak-exists";
-                            case LIMIT -> "itrak-limit";
-                            case DISABLED -> "itrak-disabled";
-                            default -> "itrak-place-failed";
-                        }, "max", String.valueOf(plugin.getConfigManager().getItrakMaxPerPlayer())));
-                        return;
-                    }
-                    // Предмет забираем по коду, а не по слоту в руке: игрок
-                    // мог переключить слот за время записи в БД, и тогда
-                    // исчез бы не тот предмет (а трекер «размножился» бы).
-                    consumeOne(player, spec.code());
-                    Tracker tracker = outcome.tracker();
-                    player.sendMessage(plugin.getMessages().getPrefixed("itrak-placed",
-                            "name", tracker.getDisplayName(),
-                            "code", tracker.getCode(),
-                            "world", tracker.getWorld(),
-                            "x", TrackerService.formatCoord(tracker.getX()),
-                            "y", TrackerService.formatCoord(tracker.getY()),
-                            "z", TrackerService.formatCoord(tracker.getZ())));
-                    if (tracker.isSunk()) {
-                        player.sendMessage(plugin.getMessages().getPrefixed("itrak-placed-sunk",
-                                "name", tracker.getDisplayName(), "code", tracker.getCode()));
-                    } else if (tracker.isAttached()) {
-                        player.sendMessage(plugin.getMessages().getPrefixed("itrak-attached",
-                                "name", tracker.getDisplayName(), "entity",
-                                target == null ? "?" : target.getName()));
-                    }
+                    reportPlacement(player, spec, outcome, target, false);
                 }));
     }
 
-    /** Убирает один предмет-трекер с этим кодом из инвентаря игрока. */
-    private static void consumeOne(Player player, String code) {
-        for (ItemStack stack : player.getInventory().getContents()) {
-            if (stack == null || stack.getAmount() <= 0) {
-                continue;
+    /**
+     * @param refundOnFailure вернуть предмет при неудаче (у броска предмет уже
+     *                        израсходован на старте)
+     */
+    private void reportPlacement(Player player, ItemFactory.TrackerSpec spec,
+                                 TrackerService.PlaceOutcome outcome, Entity target,
+                                 boolean refundOnFailure) {
+        TrackerService.PlaceResult result = outcome == null
+                ? TrackerService.PlaceResult.FAILED : outcome.result();
+        if (result != TrackerService.PlaceResult.OK) {
+            player.sendMessage(plugin.getMessages().getPrefixed(switch (result) {
+                case ALREADY_PLACED -> "itrak-exists";
+                case LIMIT -> "itrak-limit";
+                case DISABLED -> "itrak-disabled";
+                default -> "itrak-place-failed";
+            }, "max", String.valueOf(plugin.getConfigManager().getItrakMaxPerPlayer())));
+            if (refundOnFailure) {
+                ItemFactory.give(player, ItemFactory.trackerItem(spec));
             }
-            ItemFactory.TrackerSpec spec = ItemFactory.readTracker(stack);
-            if (spec != null && spec.code().equals(code)) {
-                stack.setAmount(stack.getAmount() - 1);
-                return;
-            }
+            return;
         }
+        Tracker tracker = outcome.tracker();
+        if (!refundOnFailure) {
+            ItemFactory.consumeTrackerItem(player, spec.code());
+        }
+        player.sendMessage(plugin.getMessages().getPrefixed("itrak-placed",
+                "name", tracker.getDisplayName(),
+                "code", tracker.getCode(),
+                "world", tracker.getWorld(),
+                "x", TrackerService.formatCoord(tracker.getX()),
+                "y", TrackerService.formatCoord(tracker.getY()),
+                "z", TrackerService.formatCoord(tracker.getZ())));
+        if (tracker.isSunk()) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-placed-sunk",
+                    "name", tracker.getDisplayName(), "code", tracker.getCode()));
+        } else if (tracker.isAttached()) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-attached",
+                    "name", tracker.getDisplayName(),
+                    "entity", target == null ? "?" : target.getName()));
+        }
+    }
+
+    private void takeTracker(Player player, Tracker tracker) {
+        TrackerService service = plugin.getTrackerService();
+        if (service == null) {
+            return;
+        }
+        if (!service.canManage(player, tracker) || !service.canTake(player, tracker)) {
+            Location location = tracker.getLocation();
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-take-far",
+                    "distance", ru.hahgps.util.LocationUtil.formatDistance(
+                            location == null ? Double.MAX_VALUE
+                                    : ru.hahgps.util.LocationUtil.distance(
+                                    player.getLocation(), location)),
+                    "radius", String.valueOf((int) plugin.getConfigManager().getItrakTakeRadius())));
+            return;
+        }
+        String name = tracker.getDisplayName();
+        service.take(player, tracker).whenComplete((ok, error) ->
+                plugin.getDataService().runSync(() -> {
+                    if (!player.isOnline()) {
+                        return;
+                    }
+                    if (error != null) {
+                        plugin.getLogger().log(java.util.logging.Level.WARNING,
+                                "HahGps: не удалось снять iTrak", error);
+                        return;
+                    }
+                    player.sendMessage(plugin.getMessages().getPrefixed("itrak-taken", "name", name));
+                }));
     }
 
     private void runScan(Player player) {
