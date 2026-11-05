@@ -353,6 +353,11 @@ public class DataService {
         return async(() -> provider.deleteTracker(id));
     }
 
+    /** Блок порядковых номеров для уникальных кодов iTrak. */
+    public CompletableFuture<Long> reserveTrackerCodes(int count) {
+        return async(() -> provider.reserveTrackerCodeBlock(count));
+    }
+
     public CompletableFuture<List<TrackerTerminal>> getTerminals() {
         return async(provider::getTerminals);
     }

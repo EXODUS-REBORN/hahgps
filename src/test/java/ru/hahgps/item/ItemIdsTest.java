@@ -53,5 +53,6 @@ class ItemIdsTest {
             assertTrue(all.contains(ItemIds.tracker(color, true)));
         }
         assertTrue(all.contains(ItemIds.ITRAK_LOCATOR));
+        assertTrue(all.contains(ItemIds.ITRAK_LOCATOR_LONG));
     }
 }

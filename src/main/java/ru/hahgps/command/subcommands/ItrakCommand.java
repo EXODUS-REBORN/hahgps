@@ -78,20 +78,29 @@ public class ItrakCommand implements SubCommand {
 
     /** Скан трекеров поблизости: локатор в руке и /gps itrak scan. */
     public static void reportScan(HahGpsPlugin plugin, Player player) {
+        reportScan(plugin, player, plugin.getConfigManager().getItrakScanRadius());
+    }
+
+    /**
+     * Скан с радиусом конкретного локатора: у предмета может быть своя
+     * версия (10, 15 блоков), радиус берётся из PDC локатора в руке.
+     */
+    public static void reportScan(HahGpsPlugin plugin, Player player, double radius) {
         TrackerService service = plugin.getTrackerService();
         if (service == null) {
             return;
         }
-        double radius = plugin.getConfigManager().getItrakScanRadius();
-        List<TrackerService.Nearby> found = service.scan(player, radius);
+        double scanRadius = Math.max(1, Math.min(1000, radius));
+        List<TrackerService.Nearby> found = service.scan(player, scanRadius);
         if (found.isEmpty()) {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-scan-empty",
-                    "radius", String.valueOf((int) radius)));
+                    "radius", String.valueOf((int) scanRadius)));
             GuiTheme.deny(player);
             return;
         }
         player.sendMessage(plugin.getMessages().getPrefixed("itrak-scan-header",
-                "count", String.valueOf(found.size())));
+                "count", String.valueOf(found.size()),
+                "radius", String.valueOf((int) scanRadius)));
         int seconds = plugin.getConfigManager().getItrakScanHighlightSeconds();
         for (TrackerService.Nearby nearby : found) {
             Tracker tracker = nearby.tracker();
@@ -737,7 +746,7 @@ public class ItrakCommand implements SubCommand {
 
         @Override
         public String usage() {
-            return "/gps itrak give-locator [игрок]";
+            return "/gps itrak give-locator [радиус|long] [игрок]";
         }
 
         @Override
@@ -748,26 +757,49 @@ public class ItrakCommand implements SubCommand {
         @Override
         public void execute(Player player, String[] args) {
             HahGpsPlugin plugin = HahGpsPlugin.getInstance();
-            Player target = player;
+            int longRadius = plugin.getConfigManager().getItrakLocatorLongRadius();
+            int radius = (int) plugin.getConfigManager().getItrakScanRadius();
+            int index = 0;
             if (args.length >= 1) {
-                Player named = Bukkit.getPlayerExact(args[0]);
+                Integer parsed = ItemFactory.parseRadiusToken(args[0], longRadius);
+                if (parsed != null) {
+                    radius = parsed;
+                    index = 1;
+                }
+            }
+            Player target = player;
+            if (args.length > index) {
+                Player named = Bukkit.getPlayerExact(args[index]);
                 if (named == null) {
                     player.sendMessage(plugin.getMessages().getPrefixed("itrak-player-not-found",
-                            "name", args[0]));
+                            "name", args[index]));
                     return;
                 }
                 target = named;
             }
             final Player receiver = target;
-            receiver.getInventory().addItem(ItemFactory.locatorItem()).values()
-                    .forEach(drop -> receiver.getWorld().dropItemNaturally(receiver.getLocation(), drop));
+            final int finalRadius = ItemFactory.normalizeLocatorRadius(radius);
+            ItemFactory.give(receiver, ItemFactory.locatorItem(finalRadius));
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-locator-given",
-                    "player", receiver.getName()));
+                    "player", receiver.getName(), "radius", String.valueOf(finalRadius)));
         }
 
         @Override
         public List<String> tabComplete(Player player, String[] args) {
-            return args.length == 1 ? SubCommand.filterByPrefix(playerNames(), args[0]) : List.of();
+            if (args.length == 1) {
+                List<String> radiusTokens = new ArrayList<>(List.of("long"));
+                radiusTokens.add(String.valueOf(
+                        HahGpsPlugin.getInstance().getConfigManager().getItrakLocatorLongRadius()));
+                radiusTokens.add(String.valueOf(
+                        HahGpsPlugin.getInstance().getConfigManager().getItrakScanRadius()));
+                List<String> names = new ArrayList<>(SubCommand.filterByPrefix(radiusTokens, args[0]));
+                names.addAll(SubCommand.filterByPrefix(playerNames(), args[0]));
+                return names;
+            }
+            if (args.length == 2) {
+                return SubCommand.filterByPrefix(playerNames(), args[1]);
+            }
+            return List.of();
         }
     }
 

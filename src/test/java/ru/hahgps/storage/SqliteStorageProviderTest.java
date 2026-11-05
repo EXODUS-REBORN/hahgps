@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -220,6 +221,25 @@ class SqliteStorageProviderTest {
 
         assertTrue(provider.deleteTracker(saved.getId()));
         assertTrue(provider.getTrackers().isEmpty());
+    }
+
+    @Test
+    void trackerCodeBlocksNeverOverlap() {
+        long first = provider.reserveTrackerCodeBlock(1000);
+        long second = provider.reserveTrackerCodeBlock(1000);
+        assertEquals(1L, first);
+        assertEquals(1001L, second, "новый блок обязан начинаться сразу за старым");
+    }
+
+    @Test
+    void trackerCodeCounterSurvivesReopen() throws Exception {
+        long first = provider.reserveTrackerCodeBlock(10);
+        assertEquals(1L, first);
+        provider.close();
+        provider = new TestProvider(tempDir.resolve("hahgps.db").toFile(), Map.of("world", WORLD));
+        provider.init();
+        assertEquals(11L, provider.reserveTrackerCodeBlock(10),
+                "после перезапуска счётчик должен продолжиться, иначе коды повторятся");
     }
 
     @Test
@@ -471,6 +491,43 @@ class SqliteStorageProviderTest {
             assertEquals(0L, pois.get(0).getCreatedAt(), "created_at дозаполняется нулём");
         } finally {
             drifted.close();
+        }
+    }
+
+    @Test
+    void duplicateTrackerCodesAreCleanedUpOnMigration() throws Exception {
+        File file = tempDir.resolve("dupcodes.db").toFile();
+        try (var conn = java.sql.DriverManager.getConnection("jdbc:sqlite:" + file.getAbsolutePath());
+             var st = conn.createStatement()) {
+            st.execute("CREATE TABLE pois (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    + "name VARCHAR(64) UNIQUE NOT NULL)");
+            st.execute("CREATE TABLE meta (key VARCHAR(32) PRIMARY KEY, "
+                    + "value VARCHAR(64) NOT NULL)");
+            st.execute("INSERT INTO meta (key, value) VALUES ('schema_version', '4')");
+            st.execute("CREATE TABLE trackers (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, code VARCHAR(16) NOT NULL, " +
+                    "name VARCHAR(64) NOT NULL DEFAULT '', owner_uuid VARCHAR(36) NOT NULL, " +
+                    "owner_name VARCHAR(64) NOT NULL DEFAULT '', color VARCHAR(16) NOT NULL DEFAULT 'BLUE', " +
+                    "waterproof TINYINT NOT NULL DEFAULT 0, world VARCHAR(64) NOT NULL, " +
+                    "x DOUBLE NOT NULL DEFAULT 0, y DOUBLE NOT NULL DEFAULT 64, " +
+                    "z DOUBLE NOT NULL DEFAULT 0, entity_uuid VARCHAR(36), " +
+                    "sunk TINYINT NOT NULL DEFAULT 0, placed_at BIGINT NOT NULL DEFAULT 0, " +
+                    "moved_at BIGINT NOT NULL DEFAULT 0, updated_at BIGINT NOT NULL DEFAULT 0)");
+            st.execute("INSERT INTO trackers (code, owner_uuid, owner_name, world) "
+                    + "VALUES ('TRK-DUP1', '00000000-0000-0000-0000-000000000001', 'a', 'world')");
+            st.execute("INSERT INTO trackers (code, owner_uuid, owner_name, world) "
+                    + "VALUES ('TRK-DUP1', '00000000-0000-0000-0000-000000000002', 'b', 'world')");
+        }
+
+        TestProvider legacy = new TestProvider(file, Map.of("world", WORLD));
+        legacy.init();
+        try {
+            List<Tracker> trackers = legacy.getTrackers();
+            assertEquals(1, trackers.size(), "дубль кода — призрак, его нужно убрать");
+            assertEquals("TRK-DUP1", trackers.get(0).getCode());
+            assertEquals(AbstractSqlStorageProvider.SCHEMA_VERSION, legacy.schemaVersion());
+        } finally {
+            legacy.close();
         }
     }
 }

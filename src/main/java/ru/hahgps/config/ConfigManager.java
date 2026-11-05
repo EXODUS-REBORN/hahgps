@@ -94,6 +94,8 @@ public class ConfigManager {
         checkRange("itrak.stationary-minutes", 1, 1, 600);
         checkRange("itrak.particle-radius", 48, 8, 128);
         checkRange("itrak.scan-radius", 10, 1, 1000);
+        checkRange("itrak.locator-long-radius", 15, 1, 1000);
+        checkRange("itrak.detach-after-minutes", 30, 0, 10080);
         checkRange("itrak.take-radius", 5, 1, 32);
         checkRange("itrak.max-per-player", 8, 1, 64);
         checkRange("itrak.watch-interval-seconds", 5, 1, 600);
@@ -305,6 +307,29 @@ public class ConfigManager {
 
     public boolean isItrakParticles() {
         return config.getBoolean("itrak.particles", true);
+    }
+
+    /**
+     * Частицы-маркер видит только владелец трекера. Так чужой игрок не
+     * замечает, что за ним следят, а найти трекер по-прежнему можно локатором
+     * (он подсвечивает находку конкретному нашедшему).
+     */
+    public boolean isItrakParticlesOwnerOnly() {
+        return config.getBoolean("itrak.particles-owner-only", true);
+    }
+
+    /** Радиус дальнего локатора (версия на 15 блоков), блоков. */
+    public int getItrakLocatorLongRadius() {
+        return Math.max(1, Math.min(1000, config.getInt("itrak.locator-long-radius", 15)));
+    }
+
+    /**
+     * Через сколько минут без найденной сущности привязанный трекер
+     * перестаёт считаться прицепленным. 0 — никогда (остаётся висеть).
+     */
+    public long getItrakDetachAfterMillis() {
+        int minutes = Math.max(0, Math.min(10080, config.getInt("itrak.detach-after-minutes", 30)));
+        return minutes * 60_000L;
     }
 
     public double getItrakParticleRadius() {

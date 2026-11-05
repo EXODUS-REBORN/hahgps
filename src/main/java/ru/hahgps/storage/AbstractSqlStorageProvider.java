@@ -106,6 +106,13 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
 
         createTables();
         ensureColumns();
+        if (!fresh && previousVersion < 5) {
+            // Схема v5: код трекера обязан быть уникальным. В базах до 1.1.10
+            // могли остаться строки с одинаковым кодом (старый генератор кодов
+            // повторялся) — оставляем первый, остальные удаляем, иначе
+            // уникальный индекс не создастся.
+            dedupeTrackerCodes();
+        }
         createIndexes();
         writeSchemaVersion();
 
@@ -116,7 +123,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     }
 
     /** Текущая версия схемы: растёт при миграциях. */
-    public static final int SCHEMA_VERSION = 4;
+    public static final int SCHEMA_VERSION = 5;
 
     private void createTables() throws SQLException {
         try (Statement st = connection.createStatement()) {
@@ -420,12 +427,20 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         createIndex("idx_graph_edges_world", "graph_edges", "world");
         createIndex("idx_trackers_owner", "trackers", "owner_uuid");
         createIndex("idx_terminals_world", "itrak_terminals", "world");
+        // Один код — один установленный трекер. Старые базы могли обойтись без
+        // уникальности, да и гонка двух установок не должна давать два ряда.
+        createIndex("uq_trackers_code", "trackers", "code", true);
     }
 
     private void createIndex(String name, String table, String columns) {
+        createIndex(name, table, columns, false);
+    }
+
+    private void createIndex(String name, String table, String columns, boolean unique) {
+        String kind = unique ? "UNIQUE INDEX" : "INDEX";
         String sql = (mysql
-                ? "CREATE INDEX " + name + " ON " + table + " (" + columns + ")"
-                : "CREATE INDEX IF NOT EXISTS " + name + " ON " + table + " (" + columns + ")");
+                ? "CREATE " + kind + " " + name + " ON " + table + " (" + columns + ")"
+                : "CREATE " + kind + " IF NOT EXISTS " + name + " ON " + table + " (" + columns + ")");
         try (Statement st = connection.createStatement()) {
             st.execute(sql);
         } catch (SQLException e) {
@@ -438,6 +453,126 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
             }
 
             log().log(Level.WARNING, "HahGps: не удалось создать индекс " + name + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Удаление дублей кодов трекеров перед созданием уникального индекса.
+     * Оставляем самую раннюю строку: именно она — реально установленный трекер.
+     */
+    private void dedupeTrackerCodes() throws SQLException {
+        Map<String, Integer> kept = new HashMap<>();
+        List<Integer> duplicates = new ArrayList<>();
+        try (Statement st = connection.createStatement();
+             ResultSet rs = st.executeQuery("SELECT id, code FROM trackers ORDER BY id")) {
+            while (rs.next()) {
+                int id = rs.getInt("id");
+                String code = rs.getString("code");
+                if (code == null || code.isBlank()) {
+                    duplicates.add(id);
+                    continue;
+                }
+                if (kept.putIfAbsent(code, id) != null) {
+                    duplicates.add(id);
+                }
+            }
+        }
+        for (Integer id : duplicates) {
+            try (PreparedStatement ps = connection.prepareStatement("DELETE FROM trackers WHERE id = ?")) {
+                ps.setInt(1, id);
+                ps.executeUpdate();
+            }
+            log().log(Level.WARNING, "HahGps: удалён трекер iTrak id=" + id
+                    + " — его код совпал с уже существующим (старый генератор кодов)");
+        }
+    }
+
+    /** Значение из таблицы meta как число; 0, если ключа нет или он битый. */
+    private long readMetaLong(String key, long fallback) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement("SELECT value FROM meta WHERE key = ?")) {
+            ps.setString(1, key);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    try {
+                        return Long.parseLong(rs.getString(1));
+                    } catch (NumberFormatException malformed) {
+                        return fallback;
+                    }
+                }
+            }
+        }
+        return fallback;
+    }
+
+    private void writeMeta(String key, String value) throws SQLException {
+        String sql = mysql
+                ? "INSERT INTO meta (key, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = ?"
+                : "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, key);
+            ps.setString(2, value);
+            if (mysql) {
+                ps.setString(3, value);
+            }
+            ps.executeUpdate();
+        }
+    }
+
+    /** Наибольший порядковый код в таблице (если счётчик в meta потерялся). */
+    private long maxSequentialTrackerCode() throws SQLException {
+        long max = 0L;
+        try (Statement st = connection.createStatement();
+             ResultSet rs = st.executeQuery("SELECT code FROM trackers")) {
+            while (rs.next()) {
+                String code = rs.getString(1);
+                if (code == null || !code.startsWith("TRK-")) {
+                    continue;
+                }
+                String digits = code.substring(4);
+                int dash = digits.indexOf('-');
+                if (dash > 0) {
+                    digits = digits.substring(0, dash); // TRK-0000042-7F3A
+                }
+                if (digits.isEmpty()) {
+                    continue;
+                }
+                boolean numeric = true;
+                for (int i = 0; i < digits.length(); i++) {
+                    if (!Character.isDigit(digits.charAt(i))) {
+                        numeric = false;
+                        break;
+                    }
+                }
+                if (!numeric) {
+                    continue; // старый код-шестнадцатеричный
+                }
+                try {
+                    max = Math.max(max, Long.parseLong(digits));
+                } catch (NumberFormatException tooLong) {
+                    // код длиннее long — не наш счётчик
+                }
+            }
+        }
+        return max;
+    }
+
+    @Override
+    public synchronized long reserveTrackerCodeBlock(int count) {
+        int block = Math.max(1, Math.min(10_000_000, count));
+        try {
+            ensureConnected();
+            long current = readMetaLong("itrak_tracker_seq", 0L);
+            if (current <= 0L) {
+                // Счётчик пуст (новая база или потерянный meta): продолжаем
+                // после самого большого выданного кода, чтобы не повториться.
+                current = maxSequentialTrackerCode();
+            }
+            long next = current + block;
+            writeMeta("itrak_tracker_seq", String.valueOf(next));
+            return current + 1L;
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to reserve tracker code block", e);
         }
     }
 

@@ -33,6 +33,11 @@ public class PlayerQuitListener implements Listener {
             }
             if (plugin.getTrackerService() != null) {
                 plugin.getTrackerService().forget(event.getPlayer());
+                // Трекер, прицепленный к уходящему игроку, слетает предметом
+                // там, где он вышел. UUID игрока постоянный: без этого трекер
+                // «прилипал» к нему заново на следующем входе и локатор вечно
+                // показывал его на игроке, даже когда тот уже ушёл.
+                plugin.getTrackerService().onEntityGone(event.getPlayer());
             }
         } catch (Throwable ignored) {
 

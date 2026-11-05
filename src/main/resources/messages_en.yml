@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Palette schema version: a mismatch replaces the file with the bundled one (old -> .bak)
-palette-version: 6
+palette-version: 7
 
 no-permission: "<#3f86ff>✖ You don't have permission to run this command.</#3f86ff>"
 player-only: "<#3f86ff>✖ This command is for players only.</#3f86ff>"
@@ -164,6 +164,7 @@ itrak-attached: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker</gray> <white><bold>{name}
 itrak-attach-players-off: "<#3f86ff>✖ Attaching trackers to players is disabled in the config.</#3f86ff>"
 itrak-attach-unsupported: "<#3f86ff>✖ Only a mob or a vehicle can carry a tracker.</#3f86ff>"
 itrak-exists: "<#3f86ff>✖ This tracker is already placed.</#3f86ff>"
+itrak-code-refreshed: "<#66aaff>→</#66aaff> <gray>Tracker code refreshed to</gray> <#8fc6ff>{code}</#8fc6ff> <gray>— the old code is already used by another tracker.</gray>"
 itrak-limit: "<#3f86ff>✖ Tracker limit reached:</#3f86ff> <white><bold>{max}</bold></white>"
 itrak-not-found: "<#3f86ff>✖ Tracker <white><bold>{name}</bold></white> was not found.</#3f86ff>"
 itrak-taken: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>picked up.</gray>"
@@ -172,13 +173,13 @@ itrak-removed: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker</gray> <white><bold>{name}<
 itrak-delete-hint: "<#66aaff>→</#66aaff> <gray>Shift-click the delete button to remove the tracker.</gray>"
 itrak-given: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>given:</gray> <#8fc6ff>{color}, code {code}</#8fc6ff> <gray>to</gray> <white>{player}</white>"
 itrak-received: "<#8fe9f5>✔</#8fe9f5> <gray>You received an iTrak:</gray> <#8fc6ff>{code}</#8fc6ff>"
-itrak-locator-given: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak locator given to</gray> <white>{player}</white>"
+itrak-locator-given: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak locator ({radius} blocks) given to</gray> <white>{player}</white>"
 itrak-player-not-found: "<#3f86ff>✖ Player <white><bold>{name}</bold></white> is offline.</#3f86ff>"
 itrak-color-unknown: "<#3f86ff>✖ Unknown color <white><bold>{color}</bold></white>.</#3f86ff>"
 itrak-no-trackers: "<#3f86ff>✖ No trackers yet — attach an iTrak to a surface.</#3f86ff>"
 itrak-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ TRACKERS ({count}) ═══</gradient></bold>"
 itrak-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff>"
-itrak-scan-header: "<bold><gradient:#2464c8:#8fe9f5>═══ LOCATOR: NEARBY TRACKERS ({count}) ═══</gradient></bold>"
+itrak-scan-header: "<bold><gradient:#2464c8:#8fe9f5>═══ LOCATOR ({radius}): NEARBY TRACKERS ({count}) ═══</gradient></bold>"
 itrak-scan-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff>"
 itrak-route-button: "  <click:run_command:'/gps itrak route {code}'><#66aaff>[build route]</#66aaff></click>"
 itrak-route-cancel-button: "  <click:run_command:'/gps route stop'><#8fe9f5>[cancel route]</#8fe9f5></click>"
@@ -192,6 +193,7 @@ itrak-watch-update: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <
 itrak-stationary: "<#66aaff>→</#66aaff> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>has been still for</gray> <#8fc6ff><bold>{time}</bold></#8fc6ff>"
 itrak-stationary-route: "<#66aaff>→</#66aaff> <gray>Build a route:</gray> <white>/gps itrak route {code}</white>"
 itrak-signal-lost: "<#66aaff>→</#66aaff> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>lost its attachment and signal.</gray>"
+itrak-detached: "<#66aaff>→</#66aaff> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>is no longer attached to an entity — it stays at its last coordinates:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-info: |
   <bold><gradient:#2464c8:#8fe9f5>════════ iTrak ════════</gradient></bold>
   <gray>Name:</gray> <white><bold>{name}</bold></white>
@@ -227,6 +229,7 @@ itrak-item-type: "Type"
 itrak-item-hint: "Right-click a block to attach, right-click the air to throw"
 itrak-locator-name: "Locator"
 itrak-locator-lore: "Finds nearby iTrak trackers"
+itrak-locator-radius: "Search radius: {radius} blocks"
 itrak-locator-hint: "Right-click to scan"
 itrak-locator-upgraded: "<#66aaff>→</#66aaff> <gray>The old compass locator was replaced: a compass is WorldEdit's navigation wand, clicking it teleported the player.</gray>"
 input-itrak-give: "<#66aaff>→</#66aaff> <gray>Type: color, waterproof flag and name — e.g.</gray> <white>red waterproof Mine</white>"
@@ -237,6 +240,7 @@ itrak-thrown: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker</gray> <white><bold>{name}</
 itrak-thrown-failed: "<#3f86ff>✖ Could not throw the tracker.</#3f86ff>"
 itrak-tracker-fell: "<#8fe9f5>✔</#8fe9f5> <gray>Block broken — tracker</gray> <white><bold>{name}</bold></white> <gray>dropped.</gray>"
 itrak-tracker-fell-owner: "<#66aaff>→</#66aaff> <gray>Your tracker</gray> <white><bold>{name}</bold></white> <gray>dropped: its supporting block was broken.</gray>"
+itrak-tracker-fell-entity-owner: "<#66aaff>→</#66aaff> <gray>Your tracker</gray> <white><bold>{name}</bold></white> <gray>fell off</gray> <#8fc6ff>{entity}</#8fc6ff> <gray>and dropped:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-terminal-placed: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak terminal placed:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-terminal-broken: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak terminal removed and dropped as an item.</gray>"
 itrak-terminal-occupied: "<#3f86ff>✖ Something is already there — choose a free block.</#3f86ff>"

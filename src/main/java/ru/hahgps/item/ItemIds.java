@@ -73,6 +73,8 @@ public final class ItemIds {
     public static final int TRACKER_BASE = 2001;
 
     public static final int ITRAK_LOCATOR = 2020;
+    /** Дальний локатор (15+ блоков): отдельная модель под свой ресурс. */
+    public static final int ITRAK_LOCATOR_LONG = 2021;
     public static final int ITRAK_MENU_ENTRY = 2030;
     public static final int ITRAK_DETAIL = 2031;
     public static final int ITRAK_ROUTE = 2032;
@@ -133,6 +135,7 @@ public final class ItemIds {
             ids.add(tracker(color, true));
         }
         ids.add(ITRAK_LOCATOR);
+        ids.add(ITRAK_LOCATOR_LONG);
         ids.add(ITRAK_MENU_ENTRY);
         ids.add(ITRAK_DETAIL);
         ids.add(ITRAK_ROUTE);

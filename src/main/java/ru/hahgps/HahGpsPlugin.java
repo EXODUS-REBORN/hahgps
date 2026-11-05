@@ -20,6 +20,7 @@ import ru.hahgps.storage.SqliteStorageProvider;
 import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TrackerTerminal;
 import ru.hahgps.storage.StorageProvider;
+import ru.hahgps.item.TrackerCodes;
 import ru.hahgps.update.HotSwap;
 import ru.hahgps.update.UpdaterService;
 import ru.hahgps.util.ConsoleBanner;
@@ -160,6 +161,43 @@ public class HahGpsPlugin extends JavaPlugin {
     }
 
 
+    /**
+     * Счётчик уникальных кодов iTrak. Один блок номеров резервируется в БД в
+     * самом начале: код не повторится даже после краша — следующий старт
+     * продолжит уже за пределами выданного блока. Когда блок кончается,
+     * берём следующий (это уже синхронный запрос — редко и по одному).
+     */
+    private void initTrackerCodes() {
+        TrackerCodes.setBlockRequester(() -> {
+            DataService service = dataService;
+            if (service == null) {
+                return -1L;
+            }
+            try {
+                Long first = service.reserveTrackerCodes(TrackerCodes.BLOCK).join();
+                return first == null ? -1L : first;
+            } catch (Throwable error) {
+                getLogger().log(Level.WARNING, "HahGps: не удалось зарезервировать коды iTrak", error);
+                return -1L;
+            }
+        });
+        if (dataService == null) {
+            return;
+        }
+        dataService.reserveTrackerCodes(TrackerCodes.BLOCK).whenComplete((first, error) ->
+                Bukkit.getScheduler().runTask(this, () -> {
+                    if (!isEnabled() || stopping || first == null) {
+                        if (error != null) {
+                            getLogger().log(Level.WARNING,
+                                    "HahGps: счётчик кодов iTrak недоступен — новые трекеры получат временные коды",
+                                    error);
+                        }
+                        return;
+                    }
+                    TrackerCodes.initialize(first, TrackerCodes.BLOCK);
+                }));
+    }
+
     private void failStartup() {
         if (dataService == null && storageProvider != null) {
 
@@ -228,6 +266,7 @@ public class HahGpsPlugin extends JavaPlugin {
             trackerService = new TrackerService(this, dataService);
             terminalService = new ItrakTerminalService(this, dataService);
             commandManager = new CommandManager(this);
+            initTrackerCodes();
 
             var trackersFuture = dataService.getTrackers().exceptionally(error -> {
                 getLogger().log(Level.WARNING, "HahGps: трекеры iTrak не загрузились", error);

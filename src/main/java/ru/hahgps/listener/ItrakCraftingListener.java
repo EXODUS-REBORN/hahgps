@@ -34,6 +34,7 @@ public class ItrakCraftingListener implements Listener {
     private final NamespacedKey trackerKey;
     private final NamespacedKey waterproofKey;
     private final NamespacedKey locatorKey;
+    private final NamespacedKey locatorLongKey;
     private final NamespacedKey terminalKey;
 
     public ItrakCraftingListener(HahGpsPlugin plugin) {
@@ -41,6 +42,7 @@ public class ItrakCraftingListener implements Listener {
         this.trackerKey = new NamespacedKey(plugin, "itrak_tracker");
         this.waterproofKey = new NamespacedKey(plugin, "itrak_tracker_waterproof");
         this.locatorKey = new NamespacedKey(plugin, "itrak_locator");
+        this.locatorLongKey = new NamespacedKey(plugin, "itrak_locator_long");
         this.terminalKey = new NamespacedKey(plugin, "itrak_terminal");
     }
 
@@ -53,6 +55,10 @@ public class ItrakCraftingListener implements Listener {
         shapeless(waterproofKey, Material.COMPASS, Material.NAUTILUS_SHELL,
                 Material.REDSTONE_BLOCK, Material.IRON_INGOT);
         shapeless(locatorKey, Material.COMPASS, Material.AMETHYST_SHARD, Material.REDSTONE);
+        // Дальний локатор (15 блоков): та же схема плюс жемчуг Края — он и
+        // задаёт «дальность»; набор из четырёх предметов не путается с обычным.
+        shapeless(locatorLongKey, Material.COMPASS, Material.AMETHYST_SHARD,
+                Material.REDSTONE, Material.ENDER_PEARL);
         shapeless(terminalKey, Material.LODESTONE, Material.AMETHYST_SHARD, Material.COMPASS);
     }
 
@@ -74,10 +80,36 @@ public class ItrakCraftingListener implements Listener {
         if (!(event.getRecipe() instanceof Keyed keyed)) {
             return;
         }
+        // Результат пересчитывается на каждое изменение сетки. Если в слоте
+        // уже лежит наш предмет этого рецепта — не выдаём новый код: иначе
+        // каждый клик по сетке съедал бы номера из счётчика.
+        if (alreadyPrepared(event.getInventory().getResult(), keyed.getKey())) {
+            return;
+        }
         ItemStack result = resultFor(keyed.getKey());
         if (result != null) {
             event.getInventory().setResult(result);
         }
+    }
+
+    private boolean alreadyPrepared(ItemStack current, NamespacedKey key) {
+        if (current == null || current.getType() == Material.AIR) {
+            return false;
+        }
+        if (key.equals(trackerKey) || key.equals(waterproofKey)) {
+            ItemFactory.TrackerSpec spec = ItemFactory.readTracker(current);
+            return spec != null && spec.waterproof() == key.equals(waterproofKey);
+        }
+        if (key.equals(locatorKey) || key.equals(locatorLongKey)) {
+            int expected = key.equals(locatorKey)
+                    ? (int) plugin.getConfigManager().getItrakScanRadius()
+                    : plugin.getConfigManager().getItrakLocatorLongRadius();
+            return ItemFactory.isLocator(current) && ItemFactory.readLocatorRadius(current) == expected;
+        }
+        if (key.equals(terminalKey)) {
+            return ItemFactory.isTerminalItem(current);
+        }
+        return false;
     }
 
     @EventHandler
@@ -96,7 +128,8 @@ public class ItrakCraftingListener implements Listener {
 
     private boolean isOurRecipe(NamespacedKey key) {
         return key.equals(trackerKey) || key.equals(waterproofKey)
-                || key.equals(locatorKey) || key.equals(terminalKey);
+                || key.equals(locatorKey) || key.equals(locatorLongKey)
+                || key.equals(terminalKey);
     }
 
     private ItemStack resultFor(NamespacedKey key) {
@@ -107,7 +140,10 @@ public class ItrakCraftingListener implements Listener {
             return ItemFactory.trackerItem(randomSpec(true));
         }
         if (key.equals(locatorKey)) {
-            return ItemFactory.locatorItem();
+            return ItemFactory.locatorItem((int) plugin.getConfigManager().getItrakScanRadius());
+        }
+        if (key.equals(locatorLongKey)) {
+            return ItemFactory.locatorItem(plugin.getConfigManager().getItrakLocatorLongRadius());
         }
         if (key.equals(terminalKey)) {
             return ItemFactory.terminalItem();

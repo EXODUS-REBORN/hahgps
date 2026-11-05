@@ -11,14 +11,12 @@ import org.bukkit.persistence.PersistentDataType;
 import ru.hahgps.HahGpsPlugin;
 import org.bukkit.entity.Player;
 import ru.hahgps.gui.GuiTheme;
-import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TrackerColor;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Предметы iTrak: сам трекер и локатор.
@@ -38,8 +36,13 @@ public final class ItemFactory {
     public static final NamespacedKey TRACKER_WATERPROOF = NamespacedKey.fromString("hahgps:tracker_waterproof");
     public static final NamespacedKey TRACKER_LABEL = NamespacedKey.fromString("hahgps:tracker_label");
     public static final NamespacedKey LOCATOR = NamespacedKey.fromString("hahgps:itrak_locator");
+    /** Радиус поиска конкретного локатора: у каждого предмета свой. */
+    public static final NamespacedKey LOCATOR_RADIUS = NamespacedKey.fromString("hahgps:itrak_locator_radius");
     public static final NamespacedKey TERMINAL = NamespacedKey.fromString("hahgps:itrak_terminal");
     public static final NamespacedKey THROWER = NamespacedKey.fromString("hahgps:itrak_thrower");
+
+    /** Граница «дальнего» локатора: от 15 блоков у него отдельный ID модели. */
+    public static final int LONG_LOCATOR_RADIUS = 15;
 
     /**
      * Материал локатора. Намеренно не {@link Material#COMPASS}: компас — это
@@ -59,7 +62,7 @@ public final class ItemFactory {
 
     public static ItemStack trackerItem(TrackerSpec spec) {
         TrackerColor color = spec.color() == null ? TrackerColor.BLUE : spec.color();
-        ItemStack item = new ItemStack(color.getMaterial());
+        ItemStack item = new ItemStack(color.getMaterial(), 1);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             String colorName = message(color.messageKey(), color.getKey());
@@ -105,24 +108,108 @@ public final class ItemFactory {
         return item;
     }
 
+    /** Локатор со стандартным радиусом из конфига. */
     public static ItemStack locatorItem() {
-        ItemStack item = new ItemStack(LOCATOR_MATERIAL);
+        return locatorItem(defaultLocatorRadius());
+    }
+
+    /**
+     * Локатор с конкретным радиусом поиска.
+     *
+     * Радиус живёт в PDC, а не только в подписи: у сервера может быть несколько
+     * версий локатора (10 и 15 блоков), и сканирование должно брать радиус из
+     * предмета в руке, а не из общего конфига.
+     */
+    public static ItemStack locatorItem(int radius) {
+        int value = normalizeLocatorRadius(radius);
+        ItemStack item = new ItemStack(LOCATOR_MATERIAL, 1);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
+            String name = message("itrak-locator-name", "Локатор").replace("{radius}", String.valueOf(value));
             meta.displayName(GuiTheme.mm("<bold>" + GuiTheme.gradient("iTrak")
-                    + "</bold> <#8fc6ff>" + GuiTheme.escapeForMini(message("itrak-locator-name", "Локатор"))
-                    + "</#8fc6ff>"));
+                    + "</bold> <#8fc6ff>" + GuiTheme.escapeForMini(name)
+                    + " <dark_gray>·</dark_gray> " + value + "</#8fc6ff>"));
             List<Component> lore = new ArrayList<>();
             lore.add(GuiTheme.mm("<gray>" + GuiTheme.escapeForMini(
                     message("itrak-locator-lore", "Ищет трекеры поблизости")) + "</gray>"));
+            lore.add(GuiTheme.mm("<gray>" + GuiTheme.escapeForMini(
+                    message("itrak-locator-radius", "Радиус поиска: {radius} блоков")
+                            .replace("{radius}", String.valueOf(value))) + "</gray>"));
             lore.add(GuiTheme.mm("<#66aaff>→</#66aaff> <gray>" + GuiTheme.escapeForMini(
                     message("itrak-locator-hint", "ПКМ — просканировать")) + "</gray>"));
             meta.lore(lore);
-            meta.setCustomModelData(ItemIds.ITRAK_LOCATOR);
-            meta.getPersistentDataContainer().set(LOCATOR, PersistentDataType.BYTE, (byte) 1);
+            meta.setCustomModelData(value >= LONG_LOCATOR_RADIUS
+                    ? ItemIds.ITRAK_LOCATOR_LONG : ItemIds.ITRAK_LOCATOR);
+            PersistentDataContainer data = meta.getPersistentDataContainer();
+            data.set(LOCATOR, PersistentDataType.BYTE, (byte) 1);
+            data.set(LOCATOR_RADIUS, PersistentDataType.INTEGER, value);
             item.setItemMeta(meta);
         }
         return GuiTheme.glow(item);
+    }
+
+    /** Радиус из предмета-локатора; 0 — у старого локатора без радиуса. */
+    public static int readLocatorRadius(ItemStack item) {
+        if (item == null || item.getType() == Material.AIR) {
+            return 0;
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return 0;
+        }
+        Integer radius = meta.getPersistentDataContainer().get(LOCATOR_RADIUS, PersistentDataType.INTEGER);
+        if (radius == null || radius <= 0) {
+            return 0;
+        }
+        return Math.min(1000, radius);
+    }
+
+    /** Радиус локатора по умолчанию: из конфига, иначе 10. */
+    public static int defaultLocatorRadius() {
+        try {
+            HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+            if (plugin != null && plugin.getConfigManager() != null) {
+                return (int) plugin.getConfigManager().getItrakScanRadius();
+            }
+        } catch (Throwable ignored) {
+        }
+        return 10;
+    }
+
+    public static int normalizeLocatorRadius(int radius) {
+        if (radius <= 0) {
+            return defaultLocatorRadius();
+        }
+        return Math.max(1, Math.min(1000, radius));
+    }
+
+    /**
+     * Разбор аргумента команды выдачи локатора: число — радиус,
+     * {@code long}/{@code дальний} — дальний локатор из конфига.
+     * @return радиус или null, если токен — не радиус (например, имя игрока)
+     */
+    public static Integer parseRadiusToken(String token, int longRadius) {
+        if (token == null) {
+            return null;
+        }
+        String value = token.trim().toLowerCase(Locale.ROOT);
+        if (value.isEmpty()) {
+            return null;
+        }
+        if (value.equals("long") || value.equals("дальний") || value.equals("дальнии")) {
+            return normalizeLocatorRadius(longRadius);
+        }
+        try {
+            int parsed = Integer.parseInt(value);
+            return parsed >= 1 ? Math.min(1000, parsed) : null;
+        } catch (NumberFormatException notANumber) {
+            return null;
+        }
+    }
+
+    /** Тот же трекер, но с новым (гарантированно свободным) кодом. */
+    public static TrackerSpec withFreshCode(TrackerSpec spec) {
+        return new TrackerSpec(newCode(), spec.name(), spec.color(), spec.waterproof());
     }
 
     /** Данные трекера из предмета или null, если предмет — не трекер. */
@@ -284,11 +371,14 @@ public final class ItemFactory {
         return false;
     }
 
-    /** Код нового трекера: TRK-1A2B. */
+    /**
+     * Код нового трекера: порядковый номер из БД ({@code TRK-0000042}).
+     * Раньше здесь был случайный четырёхзначный код — с десятков крафтов он
+     * совпадал, и второй предмет с тем же кодом не ставился, а локатор
+     * продолжал показывать первый. См. {@link TrackerCodes}.
+     */
     public static String newCode() {
-        String hex = Integer.toHexString(ThreadLocalRandom.current().nextInt(0x10000))
-                .toUpperCase(Locale.ROOT);
-        return "TRK-" + "0".repeat(4 - hex.length()) + hex;
+        return TrackerCodes.next();
     }
 
     private static String message(String key, String fallback) {

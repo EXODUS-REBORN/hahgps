@@ -14,6 +14,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -108,7 +109,8 @@ public class TrackerListener implements Listener {
                 return;
             }
             upgradeLegacyLocator(player);
-            runScan(player);
+            runScan(player, ItemFactory.readLocatorRadius(
+                    player.getInventory().getItemInMainHand()));
             return;
         }
 
@@ -214,24 +216,52 @@ public class TrackerListener implements Listener {
     // Бросок
     // ------------------------------------------------------------------
 
+    /**
+     * Предмет, изготовленный старым генератором кодов, мог совпасть по коду с
+     * уже установленным трекером: такой второй предмет нельзя было поставить,
+     * а локатор продолжал показывать первый — «трекер на игроке, но трекер у
+     * меня». Здесь предмет в руке получает новый уникальный код и работает
+     * дальше как обычный.
+     *
+     * @return spec с гарантированно свободным кодом, исходный spec, если код
+     *         свободен, или null, если код занят и починить нечего
+     */
+    private ItemFactory.TrackerSpec healDuplicateCode(Player player, TrackerService service,
+                                                      ItemFactory.TrackerSpec spec) {
+        if (service.byCode(spec.code()) == null) {
+            return spec;
+        }
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        ItemFactory.TrackerSpec inHand = ItemFactory.readTracker(hand);
+        if (inHand == null || !inHand.code().equals(spec.code()) || hand.getAmount() != 1) {
+            return null;
+        }
+        ItemFactory.TrackerSpec fresh = ItemFactory.withFreshCode(spec);
+        player.getInventory().setItemInMainHand(ItemFactory.trackerItem(fresh));
+        player.sendMessage(plugin.getMessages().getPrefixed("itrak-code-refreshed",
+                "code", fresh.code()));
+        return fresh;
+    }
+
     private void throwTracker(Player player, ItemFactory.TrackerSpec spec) {
         TrackerService service = plugin.getTrackerService();
         if (service == null || !checkAllowed(player)) {
             return;
         }
-        if (service.byCode(spec.code()) != null) {
+        ItemFactory.TrackerSpec actual = healDuplicateCode(player, service, spec);
+        if (actual == null) {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-exists"));
             return;
         }
         boolean gentle = player.isSneaking();
-        if (!service.throwTracker(player, spec, gentle)) {
+        if (!service.throwTracker(player, actual, gentle)) {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-thrown-failed"));
             return;
         }
-        ItemFactory.consumeTrackerItem(player, spec.code());
+        ItemFactory.consumeTrackerItem(player, actual.code());
         player.sendMessage(plugin.getMessages().getPrefixed("itrak-thrown",
-                "name", spec.name() == null || spec.name().isBlank() ? spec.code() : spec.name(),
-                "code", spec.code()));
+                "name", actual.name() == null || actual.name().isBlank() ? actual.code() : actual.name(),
+                "code", actual.code()));
     }
 
     @EventHandler
@@ -375,7 +405,12 @@ public class TrackerListener implements Listener {
         if (service == null) {
             return;
         }
-        service.place(player, spec, block, face, target).whenComplete((outcome, error) ->
+        ItemFactory.TrackerSpec actual = healDuplicateCode(player, service, spec);
+        if (actual == null) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-exists"));
+            return;
+        }
+        service.place(player, actual, block, face, target).whenComplete((outcome, error) ->
                 plugin.getDataService().runSync(() -> {
                     if (!player.isOnline()) {
                         return;
@@ -386,7 +421,7 @@ public class TrackerListener implements Listener {
                         player.sendMessage(plugin.getMessages().getPrefixed("itrak-place-failed"));
                         return;
                     }
-                    reportPlacement(player, spec, outcome, target, false);
+                    reportPlacement(player, actual, outcome, target, false);
                 }));
     }
 
@@ -407,7 +442,11 @@ public class TrackerListener implements Listener {
                 default -> "itrak-place-failed";
             }, "max", String.valueOf(plugin.getConfigManager().getItrakMaxPerPlayer())));
             if (refundOnFailure) {
-                ItemFactory.give(player, ItemFactory.trackerItem(spec));
+                // Возврат с тем же кодом сделал бы второй неставимый предмет:
+                // если код уже занят, у возвращённого будет новый.
+                ItemFactory.TrackerSpec refund = result == TrackerService.PlaceResult.ALREADY_PLACED
+                        ? ItemFactory.withFreshCode(spec) : spec;
+                ItemFactory.give(player, ItemFactory.trackerItem(refund));
             }
             return;
         }
@@ -462,7 +501,7 @@ public class TrackerListener implements Listener {
                 }));
     }
 
-    private void runScan(Player player) {
+    private void runScan(Player player, int itemRadius) {
         TrackerService service = plugin.getTrackerService();
         if (service == null || !plugin.getConfigManager().isItrakEnabled()) {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-disabled"));
@@ -472,14 +511,31 @@ public class TrackerListener implements Listener {
             return;
         }
         service.markScan(player);
-        ItrakCommand.reportScan(plugin, player);
+        // 0 — старый локатор без радиуса в PDC: берём радиус из конфига.
+        int radius = itemRadius > 0 ? itemRadius
+                : (int) plugin.getConfigManager().getItrakScanRadius();
+        ItrakCommand.reportScan(plugin, player, radius);
     }
 
     @EventHandler
     public void onEntityDeath(EntityDeathEvent event) {
         TrackerService service = plugin.getTrackerService();
         if (service != null) {
-            service.onEntityLost(event.getEntity().getUniqueId());
+            service.onEntityGone(event.getEntity());
+        }
+    }
+
+    /**
+     * Смерть игрока — отдельное событие: {@link EntityDeathEvent} для игроков
+     * не приходит (у {@code PlayerDeathEvent} свой список обработчиков).
+     * Без него трекер оставался «на игроке» после респавна: запись ссылалась
+     * на мёртвую сущность, а локатор продолжал показывать её в точке смерти.
+     */
+    @EventHandler
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        TrackerService service = plugin.getTrackerService();
+        if (service != null) {
+            service.onEntityGone(event.getEntity());
         }
     }
 }

@@ -19,6 +19,7 @@ import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.config.ConfigManager;
 import ru.hahgps.config.MessagesManager;
 import ru.hahgps.item.ItemFactory;
+import ru.hahgps.item.TrackerCodes;
 import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TrackerColor;
 import ru.hahgps.storage.DataService;
@@ -72,6 +73,10 @@ public class TrackerService {
     private final Map<UUID, Long> scanCooldown = new ConcurrentHashMap<>();
     private final Set<Integer> stationaryNotified = ConcurrentHashMap.newKeySet();
     private final Set<Integer> dirty = ConcurrentHashMap.newKeySet();
+    /** Коды, которые прямо сейчас вставляются в БД: двойной клик не создаст два трекера. */
+    private final Set<String> placingCodes = ConcurrentHashMap.newKeySet();
+    /** С какого момента привязанная сущность не находится (для снятия «висящих» трекеров). */
+    private final Map<Integer, Long> lostSince = new ConcurrentHashMap<>();
     /** Подсветка трекеров конкретному игроку: терминал показал координаты. */
     private final Map<UUID, List<Highlight>> highlights = new ConcurrentHashMap<>();
 
@@ -93,11 +98,25 @@ public class TrackerService {
     /** Загрузка из БД (главный поток). */
     public void load(List<Tracker> loaded) {
         trackers.clear();
+        lostSince.clear();
+        placingCodes.clear();
+        Set<String> seenCodes = new HashSet<>();
         if (loaded != null) {
             for (Tracker tracker : loaded) {
                 if (tracker == null || tracker.getCode() == null) {
                     continue;
                 }
+                // Код — идентификатор одного установленного трекера. Если в
+                // базе оказались дубли (старый генератор кодов), оставляем
+                // первый: второй — призрак, из-за которого локатор показывал
+                // трекер там, где его уже нет.
+                if (!seenCodes.add(tracker.getCode())) {
+                    plugin.getLogger().warning("HahGps: в базе два трекера с кодом "
+                            + tracker.getCode() + " — оставляю первый, лишний удалён");
+                    data.deleteTracker(tracker.getId());
+                    continue;
+                }
+                TrackerCodes.reserve(tracker.getCode());
                 // Привязанный к сущности трекер до первого тика сигнала не имеет:
                 // сущность может быть в незагруженном чанке.
                 if (tracker.isAttached()) {
@@ -138,6 +157,8 @@ public class TrackerService {
         scanCooldown.clear();
         stationaryNotified.clear();
         dirty.clear();
+        lostSince.clear();
+        placingCodes.clear();
     }
 
     private void stopTask() {
@@ -257,8 +278,14 @@ public class TrackerService {
                 tracker.setSignal(false);
                 dirty.add(tracker.getId());
             }
+            long lostMillis = plugin.getConfigManager().getItrakDetachAfterMillis();
+            long since = lostSince.computeIfAbsent(tracker.getId(), id -> now);
+            if (lostMillis > 0 && now - since >= lostMillis) {
+                detachLost(tracker);
+            }
             return;
         }
+        lostSince.remove(tracker.getId());
         World world = entity.getWorld();
         if (world == null) {
             return;
@@ -277,9 +304,15 @@ public class TrackerService {
         }
     }
 
+    /**
+     * Маркер трекера в мире. По умолчанию его видит только тот, кто трекер
+     * поставил: чужой игрок не должен замечать слежку, но локатор её находит
+     * и подсвечивает уже конкретному нашедшему (см. {@link #highlight}).
+     */
     private void spawnParticles() {
         double radius = plugin.getConfigManager().getItrakParticleRadius();
         double radiusSquared = radius * radius;
+        boolean ownerOnly = plugin.getConfigManager().isItrakParticlesOwnerOnly();
         List<Player> players = new ArrayList<>(Bukkit.getOnlinePlayers());
         if (players.isEmpty()) {
             return;
@@ -293,9 +326,13 @@ public class TrackerService {
             if (world == null || !world.isChunkLoaded(location.getBlockX() >> 4, location.getBlockZ() >> 4)) {
                 continue;
             }
+            UUID owner = tracker.getOwnerUuid();
             float size = tracker.hasSignal() ? 0.9f : 0.45f;
             Particle.DustOptions dust = new Particle.DustOptions(tracker.getColor().bukkitColor(), size);
             for (Player player : players) {
+                if (ownerOnly && (owner == null || !owner.equals(player.getUniqueId()))) {
+                    continue;
+                }
                 if (!LocationUtil.sameWorld(player.getWorld(), world)) {
                     continue;
                 }
@@ -310,6 +347,28 @@ public class TrackerService {
                         location.clone().add(0, 0.65, 0), 3,
                         0.18, 0.18, 0.18, 0, dust);
             }
+        }
+    }
+
+    /**
+     * Привязка к сущности потеряна надолго (моб ушёл в незагруженный чанк или
+     * исчез без события смерти). Трекер перестаёт быть «на сущности» и
+     * остаётся на последних координатах — находка для локатора, а не вечный
+     * призрак в списке.
+     */
+    private void detachLost(Tracker tracker) {
+        lostSince.remove(tracker.getId());
+        tracker.setEntityUuid(null);
+        tracker.setSignal(false);
+        dirty.add(tracker.getId());
+        Player owner = tracker.getOwnerUuid() == null ? null : Bukkit.getPlayer(tracker.getOwnerUuid());
+        if (owner != null && owner.isOnline()) {
+            owner.sendMessage(plugin.getMessages().getPrefixed("itrak-detached",
+                    "name", tracker.getDisplayName(),
+                    "world", tracker.getWorld() == null ? "?" : tracker.getWorld(),
+                    "x", formatCoord(tracker.getX()),
+                    "y", formatCoord(tracker.getY()),
+                    "z", formatCoord(tracker.getZ())));
         }
     }
 
@@ -407,11 +466,12 @@ public class TrackerService {
         if (!plugin.getConfigManager().isItrakEnabled()) {
             return CompletableFuture.completedFuture(new PlaceOutcome(null, PlaceResult.DISABLED));
         }
-        if (byCode(spec.code()) != null) {
+        if (byCode(spec.code()) != null || !placingCodes.add(spec.code())) {
             return CompletableFuture.completedFuture(new PlaceOutcome(null, PlaceResult.ALREADY_PLACED));
         }
         boolean admin = player.hasPermission("gps.itrak.admin");
         if (!admin && countOwned(player.getUniqueId()) >= plugin.getConfigManager().getItrakMaxPerPlayer()) {
+            placingCodes.remove(spec.code());
             return CompletableFuture.completedFuture(new PlaceOutcome(null, PlaceResult.LIMIT));
         }
 
@@ -439,6 +499,7 @@ public class TrackerService {
             support = new Tracker.SupportBlock(clicked.getX(), clicked.getY(), clicked.getZ());
         }
         if (location.getWorld() == null) {
+            placingCodes.remove(spec.code());
             return CompletableFuture.completedFuture(new PlaceOutcome(null, PlaceResult.FAILED));
         }
 
@@ -452,13 +513,16 @@ public class TrackerService {
                 location.getX(), location.getY(), location.getZ(),
                 target == null ? null : target.getUniqueId(), sunk, now, now, now, support);
 
-        return data.createTracker(candidate).thenApply(created -> {
-            if (created == null) {
-                return new PlaceOutcome(null, PlaceResult.FAILED);
-            }
-            trackers.put(created.getId(), created);
-            return new PlaceOutcome(created, PlaceResult.OK);
-        });
+        return data.createTracker(candidate)
+                .whenComplete((created, error) -> placingCodes.remove(spec.code()))
+                .thenApply(created -> {
+                    if (created == null) {
+                        return new PlaceOutcome(null, PlaceResult.FAILED);
+                    }
+                    TrackerCodes.reserve(created.getCode());
+                    trackers.put(created.getId(), created);
+                    return new PlaceOutcome(created, PlaceResult.OK);
+                });
     }
 
     /** Можно ли подобрать трекер: рядом или есть админ-право. */
@@ -484,6 +548,7 @@ public class TrackerService {
         }
         unwatchAll(tracker.getId());
         stationaryNotified.remove(tracker.getId());
+        lostSince.remove(tracker.getId());
         clearHighlights(tracker.getId());
         trackers.remove(tracker.getId());
         ItemStack item = ItemFactory.trackerItem(new ItemFactory.TrackerSpec(tracker.getCode(),
@@ -502,6 +567,7 @@ public class TrackerService {
         }
         unwatchAll(tracker.getId());
         stationaryNotified.remove(tracker.getId());
+        lostSince.remove(tracker.getId());
         clearHighlights(tracker.getId());
         trackers.remove(tracker.getId());
         ItemStack item = ItemFactory.trackerItem(new ItemFactory.TrackerSpec(tracker.getCode(),
@@ -572,6 +638,7 @@ public class TrackerService {
         }
         unwatchAll(tracker.getId());
         stationaryNotified.remove(tracker.getId());
+        lostSince.remove(tracker.getId());
         clearHighlights(tracker.getId());
         trackers.remove(tracker.getId());
         return data.deleteTracker(tracker.getId());
@@ -671,7 +738,13 @@ public class TrackerService {
             if (tracker.getWorld() == null || !tracker.getWorld().equals(worldName)) {
                 continue;
             }
-            Location location = tracker.getLocation();
+            // У привязанного к существу трекера живая точка точнее последней
+            // сохранённой: локатор не должен показывать, что он «на игроке»,
+            // когда тот уже ушёл.
+            Location location = tracker.liveLocation();
+            if (location == null) {
+                location = tracker.getLocation();
+            }
             if (location == null) {
                 continue;
             }
@@ -741,22 +814,47 @@ public class TrackerService {
         scanCooldown.remove(player.getUniqueId());
     }
 
-    /** Привязка к сущности пропала (смерть): сигнал теряется, координаты остаются. */
-    public void onEntityLost(UUID entityId) {
+    /** Трекеры, прицепленные к этой сущности: их может быть несколько. */
+    public List<Tracker> trackersOnEntity(UUID entityId) {
+        List<Tracker> out = new ArrayList<>();
         if (entityId == null) {
-            return;
+            return out;
         }
         for (Tracker tracker : trackers.values()) {
             if (entityId.equals(tracker.getEntityUuid())) {
-                tracker.setEntityUuid(null);
-                tracker.setSignal(false);
-                dirty.add(tracker.getId());
-                Player owner = tracker.getOwnerUuid() == null ? null
-                        : Bukkit.getPlayer(tracker.getOwnerUuid());
-                if (owner != null && owner.isOnline()) {
-                    owner.sendMessage(plugin.getMessages().getPrefixed("itrak-signal-lost",
-                            "name", tracker.getDisplayName()));
-                }
+                out.add(tracker);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Сущность исчезла (смерть моба или игрока, выход игрока): трекеры
+     * слетают и выпадают предметами там, где были.
+     *
+     * Раньше здесь только гасился сигнал: запись оставалась привязанной к
+     * несуществующей сущности, и локатор продолжал показывать трекер «на
+     * игроке», которого уже нет, — а снять его можно было только командой.
+     */
+    public void onEntityGone(Entity entity) {
+        if (entity == null) {
+            return;
+        }
+        Location at = entity.getLocation();
+        String entityName = entity.getName();
+        for (Tracker tracker : trackersOnEntity(entity.getUniqueId())) {
+            String name = tracker.getDisplayName();
+            Player owner = tracker.getOwnerUuid() == null ? null
+                    : Bukkit.getPlayer(tracker.getOwnerUuid());
+            removeDropping(tracker, at);
+            if (owner != null && owner.isOnline()) {
+                owner.sendMessage(plugin.getMessages().getPrefixed("itrak-tracker-fell-entity-owner",
+                        "name", name,
+                        "entity", entityName,
+                        "world", at.getWorld() == null ? "?" : at.getWorld().getName(),
+                        "x", formatCoord(at.getX()),
+                        "y", formatCoord(at.getY()),
+                        "z", formatCoord(at.getZ())));
             }
         }
     }

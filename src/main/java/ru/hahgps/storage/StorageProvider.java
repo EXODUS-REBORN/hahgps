@@ -74,6 +74,16 @@ public interface StorageProvider extends AutoCloseable {
 
     boolean deleteTracker(int id);
 
+    /**
+     * Зарезервировать блок порядковых номеров для кодов трекеров.
+     *
+     * Счётчик живёт в БД, поэтому коды не повторяются после перезапуска:
+     * серверу достаётся диапазон, который уже никто не выдаст.
+     *
+     * @return первый номер зарезервированного блока
+     */
+    long reserveTrackerCodeBlock(int count);
+
     /** Терминалы iTrak — блоки с координатами трекеров рядом. */
     List<TrackerTerminal> getTerminals();
 

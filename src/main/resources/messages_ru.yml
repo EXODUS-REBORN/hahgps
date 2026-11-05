@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Версия схемы палитры: при несовпадении файл заменяется эталоном (старый — в .bak)
-palette-version: 6
+palette-version: 7
 
 no-permission: "<#3f86ff>✖ У вас нет прав для выполнения этой команды.</#3f86ff>"
 player-only: "<#3f86ff>✖ Эта команда доступна только игрокам.</#3f86ff>"
@@ -164,6 +164,7 @@ itrak-attached: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{
 itrak-attach-players-off: "<#3f86ff>✖ Привязка трекеров к игрокам выключена в конфиге.</#3f86ff>"
 itrak-attach-unsupported: "<#3f86ff>✖ Прицепить можно только к существу или транспорту.</#3f86ff>"
 itrak-exists: "<#3f86ff>✖ Этот трекер уже установлен.</#3f86ff>"
+itrak-code-refreshed: "<#66aaff>→</#66aaff> <gray>Код трекера обновлён на</gray> <#8fc6ff>{code}</#8fc6ff> <gray>— старый код уже занят другим трекером.</gray>"
 itrak-limit: "<#3f86ff>✖ Лимит трекеров:</#3f86ff> <white><bold>{max}</bold></white>"
 itrak-not-found: "<#3f86ff>✖ Трекер <white><bold>{name}</bold></white> не найден.</#3f86ff>"
 itrak-taken: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>подобран.</gray>"
@@ -172,13 +173,13 @@ itrak-removed: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{n
 itrak-delete-hint: "<#66aaff>→</#66aaff> <gray>Шифт-клик по кнопке удаления удаляет трекер.</gray>"
 itrak-given: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>выдан:</gray> <#8fc6ff>{color}, код {code}</#8fc6ff> <gray>для</gray> <white>{player}</white>"
 itrak-received: "<#8fe9f5>✔</#8fe9f5> <gray>Ты получил iTrak:</gray> <#8fc6ff>{code}</#8fc6ff>"
-itrak-locator-given: "<#8fe9f5>✔</#8fe9f5> <gray>Локатор iTrak выдан:</gray> <white>{player}</white>"
+itrak-locator-given: "<#8fe9f5>✔</#8fe9f5> <gray>Локатор iTrak ({radius} блоков) выдан:</gray> <white>{player}</white>"
 itrak-player-not-found: "<#3f86ff>✖ Игрок <white><bold>{name}</bold></white> не в сети.</#3f86ff>"
 itrak-color-unknown: "<#3f86ff>✖ Неизвестный цвет <white><bold>{color}</bold></white>.</#3f86ff>"
 itrak-no-trackers: "<#3f86ff>✖ Трекеров пока нет — прицепи iTrak к поверхности.</#3f86ff>"
 itrak-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ ТРЕКЕРЫ ({count}) ═══</gradient></bold>"
 itrak-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff>"
-itrak-scan-header: "<bold><gradient:#2464c8:#8fe9f5>═══ ЛОКАТОР: ТРЕКЕРЫ ({count}) ═══</gradient></bold>"
+itrak-scan-header: "<bold><gradient:#2464c8:#8fe9f5>═══ ЛОКАТОР ({radius}): ТРЕКЕРЫ ({count}) ═══</gradient></bold>"
 itrak-scan-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff>"
 itrak-route-button: "  <click:run_command:'/gps itrak route {code}'><#66aaff>[построить маршрут]</#66aaff></click>"
 itrak-route-cancel-button: "  <click:run_command:'/gps route stop'><#8fe9f5>[отменить маршрут]</#8fe9f5></click>"
@@ -192,6 +193,7 @@ itrak-watch-update: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <
 itrak-stationary: "<#66aaff>→</#66aaff> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>неподвижен</gray> <#8fc6ff><bold>{time}</bold></#8fc6ff>"
 itrak-stationary-route: "<#66aaff>→</#66aaff> <gray>Построить маршрут:</gray> <white>/gps itrak route {code}</white>"
 itrak-signal-lost: "<#66aaff>→</#66aaff> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>потерял привязку и сигнал.</gray>"
+itrak-detached: "<#66aaff>→</#66aaff> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>больше не привязан к существу — остался на последних координатах:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-info: |
   <bold><gradient:#2464c8:#8fe9f5>════════ iTrak ════════</gradient></bold>
   <gray>Название:</gray> <white><bold>{name}</bold></white>
@@ -227,6 +229,7 @@ itrak-item-type: "Тип"
 itrak-item-hint: "ПКМ по блоку — прицепить, ПКМ в воздух — бросить"
 itrak-locator-name: "Локатор"
 itrak-locator-lore: "Ищет трекеры iTrak поблизости"
+itrak-locator-radius: "Радиус поиска: {radius} блоков"
 itrak-locator-hint: "ПКМ — просканировать"
 itrak-locator-upgraded: "<#66aaff>→</#66aaff> <gray>Старый локатор-компас заменён на новый: компас — навигационная палочка WorldEdit, клик им телепортировал игрока.</gray>"
 input-itrak-give: "<#66aaff>→</#66aaff> <gray>Напиши: цвет, признак waterproof и имя — например</gray> <white>red waterproof Мой</white>"
@@ -237,6 +240,7 @@ itrak-thrown: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{na
 itrak-thrown-failed: "<#3f86ff>✖ Не удалось бросить трекер.</#3f86ff>"
 itrak-tracker-fell: "<#8fe9f5>✔</#8fe9f5> <gray>Блок сломан — трекер</gray> <white><bold>{name}</bold></white> <gray>выпал.</gray>"
 itrak-tracker-fell-owner: "<#66aaff>→</#66aaff> <gray>Твой трекер</gray> <white><bold>{name}</bold></white> <gray>выпал: сломали блок, на котором он держался.</gray>"
+itrak-tracker-fell-entity-owner: "<#66aaff>→</#66aaff> <gray>Твой трекер</gray> <white><bold>{name}</bold></white> <gray>слетел с</gray> <#8fc6ff>{entity}</#8fc6ff> <gray>и выпал:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-terminal-placed: "<#8fe9f5>✔</#8fe9f5> <gray>Терминал iTrak установлен:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-terminal-broken: "<#8fe9f5>✔</#8fe9f5> <gray>Терминал iTrak снят и выпал предметом.</gray>"
 itrak-terminal-occupied: "<#3f86ff>✖ Здесь уже что-то стоит — выбери свободный блок.</#3f86ff>"
