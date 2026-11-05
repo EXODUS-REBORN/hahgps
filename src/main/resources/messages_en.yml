@@ -180,6 +180,9 @@ itrak-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ TRACKERS ({count})
 itrak-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff>"
 itrak-scan-header: "<bold><gradient:#2464c8:#8fe9f5>═══ LOCATOR: NEARBY TRACKERS ({count}) ═══</gradient></bold>"
 itrak-scan-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff>"
+itrak-route-button: "  <click:run_command:'/gps itrak route {code}'><#66aaff>[build route]</#66aaff></click>"
+itrak-route-cancel-button: "  <click:run_command:'/gps route stop'><#8fe9f5>[cancel route]</#8fe9f5></click>"
+itrak-scan-highlight: "<#66aaff>→</#66aaff> <gray>Highlighted trackers:</gray> <white>{count}</white> <gray>for</gray> <white>{seconds}</white> <gray>s</gray>"
 itrak-scan-empty: "<#3f86ff>✖ No trackers within <white><bold>{radius}</bold></white> blocks.</#3f86ff>"
 itrak-route-started: "<#8fe9f5>✔</#8fe9f5> <gray>Route to tracker</gray> <white><bold>{name}</bold></white> <dark_gray>started · left</dark_gray> <#8fc6ff><bold>{distance}</bold></#8fc6ff>"
 itrak-route-live: "<#66aaff>→</#66aaff> <gray>The tracker is moving — the route updates live.</gray>"
@@ -229,13 +232,7 @@ itrak-locator-upgraded: "<#66aaff>→</#66aaff> <gray>The old compass locator wa
 input-itrak-give: "<#66aaff>→</#66aaff> <gray>Type: color, waterproof flag and name — e.g.</gray> <white>red waterproof Mine</white>"
 help-itrak: "iTrak trackers, locator and live tracking"
 
-# --- iTrak: charges, throwing, terminal ---
-itrak-charge-empty: "<#66aaff>→</#66aaff> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>is out of charge — insert a charge:</gray> <white>/gps itrak charge {code}</white>"
-itrak-charged: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>charged:</gray> <#8fc6ff><bold>{charge}%</bold></#8fc6ff> <dark_gray>(+{added}%)</dark_gray>"
-itrak-charge-full: "<#3f86ff>✖ Tracker <white><bold>{name}</bold></white> is already at <white><bold>{charge}%</bold></white>.</#3f86ff>"
-itrak-charge-need-item: "<#3f86ff>✖ You need an iTrak charge item — craft one or ask for it.</#3f86ff>"
-itrak-charge-given: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak charges given to</gray> <white>{player}</white> <dark_gray>×</dark_gray> <#8fc6ff><bold>{amount}</bold></#8fc6ff>"
-itrak-status-empty: "out of charge"
+# --- iTrak: throwing, terminal ---
 itrak-thrown: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>thrown — it will attach where it lands.</gray>"
 itrak-thrown-failed: "<#3f86ff>✖ Could not throw the tracker.</#3f86ff>"
 itrak-tracker-fell: "<#8fe9f5>✔</#8fe9f5> <gray>Block broken — tracker</gray> <white><bold>{name}</bold></white> <gray>dropped.</gray>"
@@ -247,17 +244,13 @@ itrak-terminal-failed: "<#3f86ff>✖ Could not place the terminal.</#3f86ff>"
 itrak-terminal-use-hint: "<#66aaff>→</#66aaff> <gray>Right-click a block to place the terminal.</gray>"
 itrak-terminal-given: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak terminal given to</gray> <white>{player}</white>"
 itrak-terminal-header: "<bold><gradient:#2464c8:#8fe9f5>═══ iTrak TERMINAL: NEARBY TRACKERS ({count}) ═══</gradient></bold>"
-itrak-terminal-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff> <dark_gray>|</dark_gray> <gray>charge</gray> <#8fc6ff>{charge}%</#8fc6ff>"
+itrak-terminal-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff>"
 itrak-terminal-empty: "<#3f86ff>✖ No trackers within <white><bold>{radius}</bold></white> blocks.</#3f86ff>"
 itrak-terminal-highlight: "<#66aaff>→</#66aaff> <gray>Highlighted trackers:</gray> <#8fc6ff><bold>{count}</bold></#8fc6ff> <gray>for</gray> <white>{seconds}</white> <gray>s.</gray>"
 itrak-craft-one-by-one: "<#66aaff>→</#66aaff> <gray>Trackers are crafted one at a time: take the result with a normal click.</gray>"
-itrak-charge-item-name: "Charge"
-itrak-charge-item-lore: "Restores tracker charge"
-itrak-charge-item-hint: "Right-click the tracker to insert"
 itrak-terminal-item-name: "Terminal"
 itrak-terminal-item-lore: "Shows nearby tracker coordinates"
 itrak-terminal-item-hint: "Right-click a block to place"
-itrak-item-charge: "Charge"
 itrak-item-remove-hint: "Right-click the block with an empty hand to detach"
 
 # --- GUI: every button in one tone, no rainbow per section ---
@@ -370,9 +363,6 @@ gui:
   lore-itrak-take-far: "<gray><italic>Come closer first</italic></gray>"
   lore-itrak-delete: "<gray><italic>Shift-click to delete</italic></gray>"
 
-  itrak-charge: "<#8fc6ff>Charge</#8fc6ff>"
-  lore-itrak-charge: "<gray>Charge: <#8fc6ff>{charge}%</#8fc6ff></gray>"
-  lore-itrak-charge-hint: "<gray><italic>Insert a charge from the inventory</italic></gray>"
 
 edge-connected: "<#8fe9f5>✔</#8fe9f5> <gray>Edge</gray> <white><bold>{id1} → {id2}</bold></white> <dark_gray>created.</dark_gray>"
 edge-not-found: "<#3f86ff>✖ Edge not found.</#3f86ff>"

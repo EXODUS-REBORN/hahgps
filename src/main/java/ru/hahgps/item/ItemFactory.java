@@ -37,9 +37,7 @@ public final class ItemFactory {
     public static final NamespacedKey TRACKER_COLOR = NamespacedKey.fromString("hahgps:tracker_color");
     public static final NamespacedKey TRACKER_WATERPROOF = NamespacedKey.fromString("hahgps:tracker_waterproof");
     public static final NamespacedKey TRACKER_LABEL = NamespacedKey.fromString("hahgps:tracker_label");
-    public static final NamespacedKey TRACKER_CHARGE = NamespacedKey.fromString("hahgps:tracker_charge");
     public static final NamespacedKey LOCATOR = NamespacedKey.fromString("hahgps:itrak_locator");
-    public static final NamespacedKey CHARGE = NamespacedKey.fromString("hahgps:itrak_charge");
     public static final NamespacedKey TERMINAL = NamespacedKey.fromString("hahgps:itrak_terminal");
     public static final NamespacedKey THROWER = NamespacedKey.fromString("hahgps:itrak_thrower");
 
@@ -56,16 +54,7 @@ public final class ItemFactory {
     public static final Material LEGACY_LOCATOR_MATERIAL = Material.COMPASS;
 
     /** То, что записано в предмет-трекер до его установки (и переносится с ним). */
-    public record TrackerSpec(String code, String name, TrackerColor color, boolean waterproof, int charge) {
-
-        public TrackerSpec {
-            charge = Math.max(0, Math.min(Tracker.CHARGE_MAX, charge));
-        }
-
-        /** Свежий трекер: полный заряд. */
-        public TrackerSpec(String code, String name, TrackerColor color, boolean waterproof) {
-            this(code, name, color, waterproof, Tracker.CHARGE_MAX);
-        }
+    public record TrackerSpec(String code, String name, TrackerColor color, boolean waterproof) {
     }
 
     public static ItemStack trackerItem(TrackerSpec spec) {
@@ -92,8 +81,6 @@ public final class ItemFactory {
                     + ": <white><bold>" + spec.code() + "</bold></white></gray>"));
             lore.add(GuiTheme.mm("<gray>" + GuiTheme.escapeForMini(message("itrak-item-type", "Тип"))
                     + ": <white>" + GuiTheme.escapeForMini(type) + "</white></gray>"));
-            lore.add(GuiTheme.mm("<gray>" + GuiTheme.escapeForMini(message("itrak-item-charge", "Заряд"))
-                    + ": <#8fc6ff><bold>" + spec.charge() + "%</bold></#8fc6ff></gray>"));
             lore.add(GuiTheme.mm("<#66aaff>→</#66aaff> <gray>"
                     + GuiTheme.escapeForMini(message("itrak-item-hint",
                     "ПКМ по блоку — прицепить, ПКМ в воздух — бросить")) + "</gray>"));
@@ -107,7 +94,6 @@ public final class ItemFactory {
             data.set(TRACKER_CODE, PersistentDataType.STRING, spec.code());
             data.set(TRACKER_COLOR, PersistentDataType.STRING, color.getKey());
             data.set(TRACKER_WATERPROOF, PersistentDataType.BYTE, (byte) (spec.waterproof() ? 1 : 0));
-            data.set(TRACKER_CHARGE, PersistentDataType.INTEGER, spec.charge());
             if (spec.name() != null && !spec.name().isBlank()) {
                 data.set(TRACKER_LABEL, PersistentDataType.STRING, spec.name().trim());
             }
@@ -164,10 +150,8 @@ public final class ItemFactory {
         }
         Byte waterproof = data.get(TRACKER_WATERPROOF, PersistentDataType.BYTE);
         String label = data.get(TRACKER_LABEL, PersistentDataType.STRING);
-        Integer charge = data.get(TRACKER_CHARGE, PersistentDataType.INTEGER);
         return new TrackerSpec(code, label == null ? "" : label, color,
-                waterproof != null && waterproof != 0,
-                charge == null ? Tracker.CHARGE_MAX : charge);
+                waterproof != null && waterproof != 0);
     }
 
     public static boolean isLocator(ItemStack item) {
@@ -192,46 +176,7 @@ public final class ItemFactory {
         if (item == null || item.getType() == Material.AIR) {
             return false;
         }
-        return isLocator(item) || isTerminalItem(item) || isChargeItem(item) || readTracker(item) != null;
-    }
-
-    /** Заряд: восстанавливает tracker'у часть заряда. */
-    public static ItemStack chargeItem(int amount) {
-        ItemStack item = new ItemStack(Material.REDSTONE);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(GuiTheme.mm("<bold>" + GuiTheme.gradient("iTrak")
-                    + "</bold> <#8fc6ff>" + GuiTheme.escapeForMini(
-                    message("itrak-charge-item-name", "Заряд")) + "</#8fc6ff>"));
-            List<Component> lore = new ArrayList<>();
-            lore.add(GuiTheme.mm("<gray>" + GuiTheme.escapeForMini(
-                    message("itrak-charge-item-lore", "Восстанавливает заряд трекера"))
-                    + ": <#8fc6ff><bold>+" + amount + "%</bold></#8fc6ff></gray>"));
-            lore.add(GuiTheme.mm("<#66aaff>→</#66aaff> <gray>" + GuiTheme.escapeForMini(
-                    message("itrak-charge-item-hint", "ПКМ по трекеру — вставить")) + "</gray>"));
-            meta.lore(lore);
-            meta.setCustomModelData(ItemIds.ITRAK_CHARGE);
-            meta.getPersistentDataContainer().set(CHARGE, PersistentDataType.INTEGER, Math.max(1, amount));
-            item.setItemMeta(meta);
-        }
-        return GuiTheme.glow(item);
-    }
-
-    /** Сколько процентов даёт предмет-заряд (минимум 1). */
-    public static int chargeAmount(ItemStack item) {
-        if (item == null || item.getType() != Material.REDSTONE) {
-            return 0;
-        }
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) {
-            return 0;
-        }
-        Integer amount = meta.getPersistentDataContainer().get(CHARGE, PersistentDataType.INTEGER);
-        return amount == null ? 0 : Math.max(1, amount);
-    }
-
-    public static boolean isChargeItem(ItemStack item) {
-        return chargeAmount(item) > 0;
+        return isLocator(item) || isTerminalItem(item) || readTracker(item) != null;
     }
 
     /** Терминал iTrak — предмет-блок: ставится как лодестоун и получает координаты рядом. */
@@ -278,7 +223,6 @@ public final class ItemFactory {
         data.set(TRACKER_COLOR, PersistentDataType.STRING,
                 (spec.color() == null ? TrackerColor.BLUE : spec.color()).getKey());
         data.set(TRACKER_WATERPROOF, PersistentDataType.BYTE, (byte) (spec.waterproof() ? 1 : 0));
-        data.set(TRACKER_CHARGE, PersistentDataType.INTEGER, spec.charge());
         if (spec.name() != null && !spec.name().isBlank()) {
             data.set(TRACKER_LABEL, PersistentDataType.STRING, spec.name().trim());
         }
@@ -313,10 +257,6 @@ public final class ItemFactory {
     }
 
     /** Убирает один предмет-заряд из инвентаря. @return true, если заряд был */
-    public static boolean consumeChargeItem(Player player) {
-        return consumeMatching(player, ItemFactory::isChargeItem);
-    }
-
     /** Убирает один предмет терминала из инвентаря. */
     public static boolean consumeTerminalItem(Player player) {
         return consumeMatching(player, ItemFactory::isTerminalItem);

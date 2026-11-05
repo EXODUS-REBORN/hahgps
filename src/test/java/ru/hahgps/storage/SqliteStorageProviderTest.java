@@ -238,21 +238,20 @@ class SqliteStorageProviderTest {
     }
 
     @Test
-    void trackerChargeAndSupportBlockSurviveRoundTrip() {
-        Tracker tracker = new Tracker(0, "TRK-CHRG", "", TrackerColor.PURPLE, true,
+    void trackerSupportBlockSurvivesRoundTrip() {
+        Tracker tracker = new Tracker(0, "TRK-BLK1", "", TrackerColor.PURPLE, true,
                 UUID.randomUUID(), "tester", "world", 1, 64, 2, null, false,
-                1L, 2L, 3L, 42, 777L, new Tracker.SupportBlock(10, 63, -4));
+                1L, 2L, 3L, new Tracker.SupportBlock(10, 63, -4));
         provider.createTracker(tracker);
 
         Tracker saved = provider.getTrackers().get(0);
-        assertEquals(42, saved.getCharge());
-        assertEquals(777L, saved.getLastChargeAt());
         assertEquals(new Tracker.SupportBlock(10, 63, -4), saved.getSupportBlock());
         assertTrue(saved.isOnBlock());
 
-        saved.setCharge(0);
+        saved.setSupportBlock(null);
         assertTrue(provider.updateTracker(saved));
-        assertEquals(0, provider.getTrackers().get(0).getCharge());
+        assertNull(provider.getTrackers().get(0).getSupportBlock(),
+                "снятая опора тоже сохраняется — иначе трекер снова прилипнет к блоку");
     }
 
     @Test

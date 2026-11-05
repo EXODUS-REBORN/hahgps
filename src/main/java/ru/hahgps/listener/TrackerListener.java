@@ -31,7 +31,6 @@ import ru.hahgps.service.TrackerService;
  * <ul>
  *   <li>ПКМ трекером по блоку — прицепить, ПКМ в воздух — бросить (Shift — аккуратно);</li>
  *   <li>ПКМ пустой рукой по блоку с трекером — снять; Shift+ПКМ по существу — снять с него;</li>
- *   <li>ПКМ зарядом по блоку с трекером — вставить заряд;</li>
  *   <li>ПКМ по терминалу — координаты трекеров рядом и подсветка;</li>
  *   <li>поломка блока/терминала — предмет возвращается в мир.</li>
  * </ul>
@@ -92,11 +91,6 @@ public class TrackerListener implements Listener {
             TrackerService service = plugin.getTrackerService();
             if (service != null) {
                 Tracker onBlock = service.trackerOnBlock(clicked);
-                if (onBlock != null && ItemFactory.isChargeItem(item)) {
-                    denyUse(event);
-                    ItrakCommand.chargeTracker(plugin, player, onBlock);
-                    return;
-                }
                 if (onBlock != null && item.getType().isAir()) {
                     denyUse(event);
                     takeTracker(player, onBlock);

@@ -272,8 +272,6 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 new ColumnAdd("placed_at", "BIGINT NOT NULL DEFAULT 0"),
                 new ColumnAdd("moved_at", "BIGINT NOT NULL DEFAULT 0"),
                 new ColumnAdd("updated_at", "BIGINT NOT NULL DEFAULT 0"),
-                new ColumnAdd("charge", "INTEGER NOT NULL DEFAULT 100"),
-                new ColumnAdd("last_charge_at", "BIGINT NOT NULL DEFAULT 0"),
                 new ColumnAdd("block_x", "INTEGER"),
                 new ColumnAdd("block_y", "INTEGER"),
                 new ColumnAdd("block_z", "INTEGER")));
@@ -858,8 +856,8 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     public synchronized Tracker createTracker(Tracker tracker) {
         String sql = "INSERT INTO trackers (code, name, owner_uuid, owner_name, color, waterproof, " +
                 "world, x, y, z, entity_uuid, sunk, placed_at, moved_at, updated_at, " +
-                "charge, last_charge_at, block_x, block_y, block_z) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "block_x, block_y, block_z) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try {
             ensureConnected();
             try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -878,12 +876,10 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 ps.setLong(13, tracker.getPlacedAt());
                 ps.setLong(14, tracker.getMovedAt());
                 ps.setLong(15, tracker.getUpdatedAt());
-                ps.setInt(16, tracker.getCharge());
-                ps.setLong(17, tracker.getLastChargeAt());
                 Tracker.SupportBlock support = tracker.getSupportBlock();
-                ps.setObject(18, support == null ? null : support.x());
-                ps.setObject(19, support == null ? null : support.y());
-                ps.setObject(20, support == null ? null : support.z());
+                ps.setObject(16, support == null ? null : support.x());
+                ps.setObject(17, support == null ? null : support.y());
+                ps.setObject(18, support == null ? null : support.z());
                 ps.executeUpdate();
                 try (ResultSet rs = ps.getGeneratedKeys()) {
                     if (rs.next()) {
@@ -892,7 +888,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                                 tracker.getOwnerName(), tracker.getWorld(), tracker.getX(), tracker.getY(),
                                 tracker.getZ(), tracker.getEntityUuid(), tracker.isSunk(),
                                 tracker.getPlacedAt(), tracker.getMovedAt(), tracker.getUpdatedAt(),
-                                tracker.getCharge(), tracker.getLastChargeAt(), tracker.getSupportBlock());
+                                tracker.getSupportBlock());
                     }
                 }
             }
@@ -906,7 +902,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     @Override
     public synchronized boolean updateTracker(Tracker tracker) {
         String sql = "UPDATE trackers SET name = ?, world = ?, x = ?, y = ?, z = ?, entity_uuid = ?, " +
-                "sunk = ?, moved_at = ?, updated_at = ?, charge = ?, last_charge_at = ?, " +
+                "sunk = ?, moved_at = ?, updated_at = ?, " +
                 "block_x = ?, block_y = ?, block_z = ? WHERE id = ?";
         try {
             ensureConnected();
@@ -920,13 +916,11 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 ps.setInt(7, tracker.isSunk() ? 1 : 0);
                 ps.setLong(8, tracker.getMovedAt());
                 ps.setLong(9, tracker.getUpdatedAt());
-                ps.setInt(10, tracker.getCharge());
-                ps.setLong(11, tracker.getLastChargeAt());
                 Tracker.SupportBlock support = tracker.getSupportBlock();
-                ps.setObject(12, support == null ? null : support.x());
-                ps.setObject(13, support == null ? null : support.y());
-                ps.setObject(14, support == null ? null : support.z());
-                ps.setInt(15, tracker.getId());
+                ps.setObject(10, support == null ? null : support.x());
+                ps.setObject(11, support == null ? null : support.y());
+                ps.setObject(12, support == null ? null : support.z());
+                ps.setInt(13, tracker.getId());
                 return ps.executeUpdate() > 0;
             }
         } catch (SQLException e) {
@@ -974,8 +968,6 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 rs.getLong("placed_at"),
                 rs.getLong("moved_at"),
                 rs.getLong("updated_at"),
-                rs.getInt("charge"),
-                rs.getLong("last_charge_at"),
                 support);
     }
 

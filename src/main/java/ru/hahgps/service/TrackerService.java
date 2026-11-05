@@ -174,63 +174,12 @@ public class TrackerService {
             }
         }
 
-        drainCharges(now);
         if (plugin.getConfigManager().isItrakParticles()) {
             spawnParticles();
         }
         spawnHighlights(now);
         pushWatchMessages(now);
         saveDirty(now);
-    }
-
-    /**
-     * Заряд тратится только у трекера, который реально передаёт сигнал:
-     * затонувший или разряженный лежит и не «ест» заряд. Время последнего
-     * расхода сдвигается каждый тик, чтобы после простоя не списался
-     * накопленный заряд.
-     */
-    private void drainCharges(long now) {
-        if (!plugin.getConfigManager().isItrakChargeEnabled()) {
-            for (Tracker tracker : trackers.values()) {
-                tracker.setLastChargeAt(now);
-            }
-            return;
-        }
-        long perPercent = plugin.getConfigManager().getItrakChargeDrainMillisPerPercent();
-        if (perPercent <= 0) {
-            return;
-        }
-        for (Tracker tracker : trackers.values()) {
-            if (tracker.status() != Tracker.Status.LIVE) {
-                tracker.setLastChargeAt(now);
-                continue;
-            }
-            long elapsed = now - tracker.getLastChargeAt();
-            if (elapsed < perPercent) {
-                continue;
-            }
-            int steps = (int) Math.min(Tracker.CHARGE_MAX, elapsed / perPercent);
-            int before = tracker.getCharge();
-            tracker.addCharge(-steps);
-            tracker.setLastChargeAt(now);
-            if (tracker.getCharge() != before) {
-                dirty.add(tracker.getId());
-            }
-            if (before > 0 && tracker.getCharge() == 0) {
-                notifyEmpty(tracker);
-            }
-        }
-    }
-
-    private void notifyEmpty(Tracker tracker) {
-        Set<UUID> recipients = recipientsOf(tracker);
-        for (UUID id : recipients) {
-            Player player = Bukkit.getPlayer(id);
-            if (player != null && player.isOnline()) {
-                player.sendMessage(plugin.getMessages().getPrefixed("itrak-charge-empty",
-                        "name", tracker.getDisplayName(), "code", tracker.getCode()));
-            }
-        }
     }
 
     /** Кому сообщать о событиях трекера: владелец и все следящие. */
@@ -501,8 +450,7 @@ public class TrackerService {
         Tracker candidate = new Tracker(0, spec.code(), label, spec.color(), spec.waterproof(),
                 player.getUniqueId(), player.getName(), location.getWorld().getName(),
                 location.getX(), location.getY(), location.getZ(),
-                target == null ? null : target.getUniqueId(), sunk, now, now, now,
-                spec.charge(), now, support);
+                target == null ? null : target.getUniqueId(), sunk, now, now, now, support);
 
         return data.createTracker(candidate).thenApply(created -> {
             if (created == null) {
@@ -539,7 +487,7 @@ public class TrackerService {
         clearHighlights(tracker.getId());
         trackers.remove(tracker.getId());
         ItemStack item = ItemFactory.trackerItem(new ItemFactory.TrackerSpec(tracker.getCode(),
-                tracker.getName(), tracker.getColor(), tracker.isWaterproof(), tracker.getCharge()));
+                tracker.getName(), tracker.getColor(), tracker.isWaterproof()));
         Map<Integer, ItemStack> leftover = player.getInventory().addItem(item);
         for (ItemStack drop : leftover.values()) {
             player.getWorld().dropItemNaturally(player.getLocation(), drop);
@@ -557,7 +505,7 @@ public class TrackerService {
         clearHighlights(tracker.getId());
         trackers.remove(tracker.getId());
         ItemStack item = ItemFactory.trackerItem(new ItemFactory.TrackerSpec(tracker.getCode(),
-                tracker.getName(), tracker.getColor(), tracker.isWaterproof(), tracker.getCharge()));
+                tracker.getName(), tracker.getColor(), tracker.isWaterproof()));
         Location where = dropAt != null ? dropAt : tracker.getLocation();
         if (where != null && where.getWorld() != null) {
             where.getWorld().dropItemNaturally(where, item);
@@ -565,19 +513,43 @@ public class TrackerService {
         return data.deleteTracker(tracker.getId());
     }
 
-    /** Трекер, прицепленный к этому блоку (для снятия и поломки). */
+    /**
+     * Трекер, прицепленный к этому блоку (для снятия и поломки).
+     *
+     * Сначала точное совпадение по опорному блоку. Трекеры, поставленные до
+     * 1.1.7, опорного блока не знают (колонки появились позже): для них
+     * ищем ближайший трекер в пределах блока-воздуха вокруг нажатого блока —
+     * иначе старый трекер нельзя ни снять рукой, ни выронить поломкой.
+     */
     public Tracker trackerOnBlock(Block block) {
         if (block == null || block.getWorld() == null) {
             return null;
         }
         String worldName = block.getWorld().getName();
+        Tracker legacy = null;
+        double legacyDistance = Double.MAX_VALUE;
         for (Tracker tracker : trackers.values()) {
-            if (tracker.getWorld() != null && tracker.getWorld().equals(worldName)
-                    && tracker.isOnBlock(block.getX(), block.getY(), block.getZ())) {
+            if (tracker.getWorld() == null || !tracker.getWorld().equals(worldName)) {
+                continue;
+            }
+            if (tracker.isOnBlock(block.getX(), block.getY(), block.getZ())) {
                 return tracker;
             }
+            if (tracker.getSupportBlock() != null || tracker.isAttached()) {
+                continue;
+            }
+            double dx = tracker.getX() - (block.getX() + 0.5);
+            double dy = tracker.getY() - (block.getY() + 0.5);
+            double dz = tracker.getZ() - (block.getZ() + 0.5);
+            double distance = dx * dx + dy * dy + dz * dz;
+            // Ровно соседний блок (трекер висит в воздухе у поверхности):
+            // диагональ в 1.7 блока отсекается, соседние трекеры не путаются.
+            if (distance <= 1.6 && distance < legacyDistance) {
+                legacyDistance = distance;
+                legacy = tracker;
+            }
         }
-        return null;
+        return legacy;
     }
 
     /** Трекер, прицепленный к существу. */
@@ -717,25 +689,6 @@ public class TrackerService {
         return player == null ? List.of() : scanAround(player.getLocation(), radius);
     }
 
-    /**
-     * Вставить заряд. Ограничение 100% считает модель, здесь только
-     * сбрасывается время последнего расхода, чтобы новый заряд не «таял»
-     * за время, пока трекер лежал.
-     * @return сколько процентов реально добавилось
-     */
-    public int charge(Tracker tracker, int amount) {
-        if (tracker == null) {
-            return 0;
-        }
-        int added = tracker.addCharge(amount);
-        tracker.setLastChargeAt(System.currentTimeMillis());
-        if (added > 0) {
-            stationaryNotified.remove(tracker.getId());
-        }
-        dirty.add(tracker.getId());
-        return added;
-    }
-
     public boolean isScanReady(Player player) {
         long last = scanCooldown.getOrDefault(player.getUniqueId(), 0L);
         return System.currentTimeMillis() - last >= 1500L;
@@ -871,7 +824,6 @@ public class TrackerService {
         return switch (tracker.status()) {
             case LIVE -> messages.get("itrak-status-live");
             case SUNK -> messages.get("itrak-status-sunk");
-            case EMPTY -> messages.get("itrak-status-empty");
             case NO_SIGNAL -> messages.get("itrak-status-no-signal");
         };
     }

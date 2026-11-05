@@ -40,6 +40,7 @@ public class HahGpsPlugin extends JavaPlugin {
     private PoiService poiService;
     private CategoryService categoryService;
     private RouteService routeService;
+    private WalkPathService walkPathService;
     private NavigationService navigationService;
     private SearchService searchService;
     private MapService mapService;
@@ -215,7 +216,8 @@ public class HahGpsPlugin extends JavaPlugin {
                     getLogger().log(Level.SEVERE, "HahGps: road graph was not loaded", error);
                 }
             });
-            routeService = new RouteService(graphService);
+            walkPathService = new WalkPathService(this);
+            routeService = new RouteService(graphService, walkPathService);
             navigationService = new NavigationService(this, configManager, messagesManager);
             searchService = new SearchService(dataService,
                     configManager.getSearchMaxResults(), configManager.getSearchThreshold());

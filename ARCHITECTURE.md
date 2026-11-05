@@ -57,7 +57,7 @@ ru.hahgps
 │   ├── Poi.java               — точка интереса
 │   ├── RoadGraph.java         — дорожный граф
 │   ├── Route.java             — маршрут
-│   ├── Tracker.java           — установленный трекер iTrak (заряд, опорный блок)
+│   ├── Tracker.java           — установленный трекер iTrak (опорный блок, сигнал)
 │   ├── TrackerColor.java      — 8 цветов трекера
 │   ├── TrackerTerminal.java   — блок-терминал iTrak
 │   └── TransportType.java     — тип транспорта
@@ -67,14 +67,16 @@ ru.hahgps
 │   ├── HudService.java        — интеграция с ItemsAdder HUD
 │   ├── MapService.java        — карты и рендеринг
 │   ├── NavigationService.java — навигация и BossBar
-│   ├── Pathfinder.java        — поиск пути (A*)
+│   ├── Pathfinder.java        — поиск пути по графу дорог (A*)
+│   ├── WalkGrid.java          — A* по клеткам мира (обход стен, без Bukkit)
+│   ├── WalkPathService.java   — пеший маршрут по блокам в главном потоке порциями
 │   ├── PoiService.java        — операции с точками
 │   ├── RouteRecordingService.java — запись пути игрока для графа
 │   ├── RouteService.java      — построение маршрутов (свой пул потоков)
 │   ├── SearchService.java     — поиск с fuzzy-matching
 │   ├── TerrainRenderer.java   — рендеринг карты (отменяемые задачи)
 │   ├── ItrakTerminalService.java — реестр блоков-терминалов
-│   ├── TrackerService.java    — трекеры iTrak: координаты, заряд, бросок, подсветка
+│   ├── TrackerService.java    — трекеры iTrak: координаты, бросок, подсветка
 │   └── VisualizationService.java — визуализация графа
 ├── storage/                   — слой данных
 │   ├── DataService.java       — кэш и асинхронные операции
@@ -120,8 +122,8 @@ ru.hahgps
 - **HelpCommand** — справка
 - **EdgeCommand** — управление рёбрами графа
 - **VisualCommand** — визуализация дорожной сети
-- **ItrakCommand** — трекеры iTrak: give, give-locator, give-charge, give-terminal,
-  scan, list, info, route, take, charge, remove, watch
+- **ItrakCommand** — трекеры iTrak: give, give-locator, give-terminal,
+  scan, list, info, route, take, remove, watch
 
 ### 3. Слой данных (Storage)
 
@@ -150,6 +152,12 @@ ru.hahgps
 - Поиск кратчайшего пути с учётом скорости транспорта
 - Ограничение на количество расширений (100 000)
 - Поддержка мультимодальных маршрутов
+
+**WalkGrid / WalkPathService** — пеший путь по блокам, когда граф дорог не даёт
+маршрут: A* по клеткам (шаг, прыжок на блок вверх, падение до трёх блоков вниз),
+стены, лава и огонь обходятся. Сам алгоритм не зависит от Bukkit и покрыт
+тестами, доступ к блокам — через прослойку, расчёт идёт в главном потоке
+порциями по 1200 клеток за тик.
 
 **NavigationService** — управление навигацией:
 - Создаёт сессии навигации для игроков

@@ -139,11 +139,6 @@ public class TrackerDetailGui extends GuiScreen {
                 List.of(comp(watching ? "gui.lore-itrak-watch-off" : "gui.lore-itrak-watch-on")),
                 ItemIds.ITRAK_WATCH));
 
-        inventory.setItem(15, GuiUtil.item(Material.REDSTONE,
-                comp("gui.itrak-charge"),
-                List.of(comp("gui.lore-itrak-charge-hint")),
-                ItemIds.ITRAK_CHARGE));
-
         boolean canTake = service.canManage(player, tracker) && service.canTake(player, tracker);
         inventory.setItem(14, GuiUtil.item(canTake ? Material.CHEST : Material.BARRIER,
                 comp(canTake ? "gui.itrak-take" : "gui.itrak-take-far"),
@@ -177,7 +172,6 @@ public class TrackerDetailGui extends GuiScreen {
             lines.add(comp("gui.lore-itrak-code", "code", tracker.getCode()));
             lines.add(comp("gui.lore-itrak-status", "status", service.statusText(tracker)));
             lines.add(comp("gui.lore-itrak-state", "state", service.stateText(tracker, now)));
-            lines.add(comp("gui.lore-itrak-charge", "charge", String.valueOf(tracker.getCharge())));
             lines.add(comp("gui.lore-itrak-coords",
                     "x", TrackerService.formatCoord(tracker.getX()),
                     "y", TrackerService.formatCoord(tracker.getY()),
@@ -233,10 +227,6 @@ public class TrackerDetailGui extends GuiScreen {
                             "name", tracker.getDisplayName()));
                 }
                 GuiTheme.click(player);
-                refresh();
-            }
-            case 15 -> {
-                ItrakCommand.chargeTracker(plugin, player, tracker);
                 refresh();
             }
             case 14 -> {

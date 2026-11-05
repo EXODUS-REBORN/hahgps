@@ -99,31 +99,20 @@ class TrackerTest {
     }
 
     @Test
-    void emptyChargeMeansNoSignalAndNoRouteOffer() {
+    void lostSignalMeansNoRouteOffer() {
         long now = 200_000L;
         Tracker tracker = tracker(now - 600_000L, false);
-        tracker.setCharge(0);
-        assertEquals(Tracker.Status.EMPTY, tracker.status());
+        tracker.setSignal(false);
+        assertEquals(Tracker.Status.NO_SIGNAL, tracker.status());
         assertFalse(tracker.hasSignal());
-        assertFalse(tracker.isStationary(now, 60_000L), "разряженному маршрут не предлагаем");
-        assertFalse(tracker.isPowered());
-    }
-
-    @Test
-    void chargeIsClampedAndCountsOnlyRealAddition() {
-        Tracker tracker = tracker(1L, false);
-        tracker.setCharge(90);
-        assertEquals(10, tracker.addCharge(25), "добавилось только до 100");
-        assertEquals(100, tracker.getCharge());
-        assertEquals(-100, tracker.addCharge(-500), "в минус заряд не уходит");
-        assertEquals(0, tracker.getCharge());
+        assertFalse(tracker.isStationary(now, 60_000L), "без сигнала маршрут не предлагаем");
     }
 
     @Test
     void supportBlockIsMatchedExactly() {
         Tracker tracker = new Tracker(1, "TRK-BLK1", "", TrackerColor.BLUE, false,
                 UUID.randomUUID(), "tester", "world", 10.5, 64.5, 5.5, null, false,
-                1L, 2L, 3L, 100, 1L, new Tracker.SupportBlock(10, 64, 5));
+                1L, 2L, 3L, new Tracker.SupportBlock(10, 64, 5));
         assertTrue(tracker.isOnBlock());
         assertTrue(tracker.isOnBlock(10, 64, 5));
         assertFalse(tracker.isOnBlock(10, 64, 6));

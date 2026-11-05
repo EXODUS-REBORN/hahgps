@@ -180,6 +180,9 @@ itrak-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ ТРЕКЕРЫ ({c
 itrak-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff>"
 itrak-scan-header: "<bold><gradient:#2464c8:#8fe9f5>═══ ЛОКАТОР: ТРЕКЕРЫ ({count}) ═══</gradient></bold>"
 itrak-scan-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff>"
+itrak-route-button: "  <click:run_command:'/gps itrak route {code}'><#66aaff>[построить маршрут]</#66aaff></click>"
+itrak-route-cancel-button: "  <click:run_command:'/gps route stop'><#8fe9f5>[отменить маршрут]</#8fe9f5></click>"
+itrak-scan-highlight: "<#66aaff>→</#66aaff> <gray>Подсвечено трекеров:</gray> <white>{count}</white> <gray>на</gray> <white>{seconds}</white> <gray>с</gray>"
 itrak-scan-empty: "<#3f86ff>✖ В радиусе <white><bold>{radius}</bold></white> блоков трекеров нет.</#3f86ff>"
 itrak-route-started: "<#8fe9f5>✔</#8fe9f5> <gray>Маршрут к трекеру</gray> <white><bold>{name}</bold></white> <dark_gray>начат · осталось</dark_gray> <#8fc6ff><bold>{distance}</bold></#8fc6ff>"
 itrak-route-live: "<#66aaff>→</#66aaff> <gray>Трекер в движении — маршрут обновляется в реальном времени.</gray>"
@@ -229,13 +232,7 @@ itrak-locator-upgraded: "<#66aaff>→</#66aaff> <gray>Старый локато�
 input-itrak-give: "<#66aaff>→</#66aaff> <gray>Напиши: цвет, признак waterproof и имя — например</gray> <white>red waterproof Мой</white>"
 help-itrak: "Трекеры iTrak, локатор и слежение"
 
-# --- iTrak: заряды, бросок, терминал ---
-itrak-charge-empty: "<#66aaff>→</#66aaff> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>разряжен — вставь заряд:</gray> <white>/gps itrak charge {code}</white>"
-itrak-charged: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>заряжен:</gray> <#8fc6ff><bold>{charge}%</bold></#8fc6ff> <dark_gray>(+{added}%)</dark_gray>"
-itrak-charge-full: "<#3f86ff>✖ Трекер <white><bold>{name}</bold></white> уже заряжен на <white><bold>{charge}%</bold></white>.</#3f86ff>"
-itrak-charge-need-item: "<#3f86ff>✖ Нужен предмет «Заряд iTrak» — скрафти его или попроси.</#3f86ff>"
-itrak-charge-given: "<#8fe9f5>✔</#8fe9f5> <gray>Заряды iTrak выданы:</gray> <white>{player}</white> <dark_gray>×</dark_gray> <#8fc6ff><bold>{amount}</bold></#8fc6ff>"
-itrak-status-empty: "разряжен"
+# --- iTrak: бросок, терминал ---
 itrak-thrown: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>брошен — прицепится туда, куда попадёт.</gray>"
 itrak-thrown-failed: "<#3f86ff>✖ Не удалось бросить трекер.</#3f86ff>"
 itrak-tracker-fell: "<#8fe9f5>✔</#8fe9f5> <gray>Блок сломан — трекер</gray> <white><bold>{name}</bold></white> <gray>выпал.</gray>"
@@ -247,17 +244,13 @@ itrak-terminal-failed: "<#3f86ff>✖ Не удалось установить т
 itrak-terminal-use-hint: "<#66aaff>→</#66aaff> <gray>ПКМ по блоку — поставить терминал.</gray>"
 itrak-terminal-given: "<#8fe9f5>✔</#8fe9f5> <gray>Терминал iTrak выдан:</gray> <white>{player}</white>"
 itrak-terminal-header: "<bold><gradient:#2464c8:#8fe9f5>═══ iTrak ТЕРМИНАЛ: ТРЕКЕРЫ РЯДОМ ({count}) ═══</gradient></bold>"
-itrak-terminal-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff> <dark_gray>|</dark_gray> <gray>заряд</gray> <#8fc6ff>{charge}%</#8fc6ff>"
+itrak-terminal-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff>"
 itrak-terminal-empty: "<#3f86ff>✖ В радиусе <white><bold>{radius}</bold></white> блоков трекеров нет.</#3f86ff>"
 itrak-terminal-highlight: "<#66aaff>→</#66aaff> <gray>Подсвечено трекеров:</gray> <#8fc6ff><bold>{count}</bold></#8fc6ff> <gray>на</gray> <white>{seconds}</white> <gray>с.</gray>"
 itrak-craft-one-by-one: "<#66aaff>→</#66aaff> <gray>Трекеры крафтятся по одному: забери результат обычным кликом.</gray>"
-itrak-charge-item-name: "Заряд"
-itrak-charge-item-lore: "Восстанавливает заряд трекера"
-itrak-charge-item-hint: "ПКМ по трекеру — вставить"
 itrak-terminal-item-name: "Терминал"
 itrak-terminal-item-lore: "Показывает координаты трекеров рядом"
 itrak-terminal-item-hint: "ПКМ по блоку — установить"
-itrak-item-charge: "Заряд"
 itrak-item-remove-hint: "ПКМ пустой рукой — снять"
 
 # --- GUI: все кнопки одного тона, без разноцветья по разделам ---
@@ -370,9 +363,6 @@ gui:
   lore-itrak-take-far: "<gray><italic>Нужно подойти ближе</italic></gray>"
   lore-itrak-delete: "<gray><italic>Шифт-клик — удалить</italic></gray>"
 
-  itrak-charge: "<#8fc6ff>Зарядить</#8fc6ff>"
-  lore-itrak-charge: "<gray>Заряд: <#8fc6ff>{charge}%</#8fc6ff></gray>"
-  lore-itrak-charge-hint: "<gray><italic>Вставить заряд из инвентаря</italic></gray>"
 
 edge-connected: "<#8fe9f5>✔</#8fe9f5> <gray>Ребро</gray> <white><bold>{id1} → {id2}</bold></white> <dark_gray>создано.</dark_gray>"
 edge-not-found: "<#3f86ff>✖ Ребро не найдено.</#3f86ff>"

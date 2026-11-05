@@ -18,11 +18,11 @@ import ru.hahgps.model.TrackerColor;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Крафты iTrak: «создание проще» — трекер, заряд, локатор и терминал
+ * Крафты iTrak: «создание проще» — трекер, локатор и терминал
  * собираются в верстаке, а не выдаются только админом.
  *
  * Результат подменяется в {@link PrepareItemCraftEvent}: ванильные рецепты не
- * умеют отдавать предмет с нашим PDC (код трекера, заряд). Каждый обычный
+ * умеют отдавать предмет с нашим PDC (код трекера). Каждый обычный
  * крафт получает новый код; шифт-крафт отключён намеренно — иначе несколько
  * трекеров из одного клика имели бы одинаковый код и на сервере выжил бы
  * только первый.
@@ -33,7 +33,6 @@ public class ItrakCraftingListener implements Listener {
 
     private final NamespacedKey trackerKey;
     private final NamespacedKey waterproofKey;
-    private final NamespacedKey chargeKey;
     private final NamespacedKey locatorKey;
     private final NamespacedKey terminalKey;
 
@@ -41,7 +40,6 @@ public class ItrakCraftingListener implements Listener {
         this.plugin = plugin;
         this.trackerKey = new NamespacedKey(plugin, "itrak_tracker");
         this.waterproofKey = new NamespacedKey(plugin, "itrak_tracker_waterproof");
-        this.chargeKey = new NamespacedKey(plugin, "itrak_charge");
         this.locatorKey = new NamespacedKey(plugin, "itrak_locator");
         this.terminalKey = new NamespacedKey(plugin, "itrak_terminal");
     }
@@ -54,7 +52,6 @@ public class ItrakCraftingListener implements Listener {
         shapeless(trackerKey, Material.COMPASS, Material.REDSTONE_BLOCK, Material.IRON_INGOT);
         shapeless(waterproofKey, Material.COMPASS, Material.NAUTILUS_SHELL,
                 Material.REDSTONE_BLOCK, Material.IRON_INGOT);
-        shapeless(chargeKey, Material.REDSTONE, Material.COPPER_INGOT);
         shapeless(locatorKey, Material.COMPASS, Material.AMETHYST_SHARD, Material.REDSTONE);
         shapeless(terminalKey, Material.LODESTONE, Material.AMETHYST_SHARD, Material.COMPASS);
     }
@@ -98,7 +95,7 @@ public class ItrakCraftingListener implements Listener {
     }
 
     private boolean isOurRecipe(NamespacedKey key) {
-        return key.equals(trackerKey) || key.equals(waterproofKey) || key.equals(chargeKey)
+        return key.equals(trackerKey) || key.equals(waterproofKey)
                 || key.equals(locatorKey) || key.equals(terminalKey);
     }
 
@@ -108,9 +105,6 @@ public class ItrakCraftingListener implements Listener {
         }
         if (key.equals(waterproofKey)) {
             return ItemFactory.trackerItem(randomSpec(true));
-        }
-        if (key.equals(chargeKey)) {
-            return ItemFactory.chargeItem(plugin.getConfigManager().getItrakChargePerItem());
         }
         if (key.equals(locatorKey)) {
             return ItemFactory.locatorItem();

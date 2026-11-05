@@ -83,20 +83,27 @@ public class ConfigManager {
             config.set("storage.mysql.port", 3306);
         }
 
+        // Конфиги до 1.1.9: радиус локатора был 200 блоков, теперь по умолчанию
+        // 10. Явно изменённое значение не трогаем — переносим только старый дефолт.
+        if (!config.contains("itrak.scan-highlight-seconds")
+                && config.getInt("itrak.scan-radius", 200) == 200) {
+            config.set("itrak.scan-radius", 10);
+        }
+
         checkRange("itrak.update-interval", 20, 5, 200);
         checkRange("itrak.stationary-minutes", 1, 1, 600);
         checkRange("itrak.particle-radius", 48, 8, 128);
-        checkRange("itrak.scan-radius", 200, 16, 1000);
+        checkRange("itrak.scan-radius", 10, 1, 1000);
         checkRange("itrak.take-radius", 5, 1, 32);
         checkRange("itrak.max-per-player", 8, 1, 64);
         checkRange("itrak.watch-interval-seconds", 5, 1, 600);
         checkRange("itrak.save-interval-seconds", 30, 5, 3600);
         checkRange("itrak.live-route-rebuild-seconds", 10, 2, 300);
         checkRange("itrak.live-route-rebuild-blocks", 16, 2, 256);
-        checkRange("itrak.charge-drain-minutes", 120, 1, 10000);
-        checkRange("itrak.charge-per-item", 25, 1, 100);
         checkRange("itrak.terminal-radius", 5, 1, 32);
         checkRange("itrak.terminal-highlight-seconds", 10, 1, 120);
+        checkRange("itrak.scan-highlight-seconds", 10, 1, 120);
+        checkRange("navigation.walk-max-distance", 128, 8, 512);
     }
 
     /** Числовая настройка с диапазоном: опечатка не должна ронять игру. */
@@ -286,6 +293,16 @@ public class ConfigManager {
         return config.getBoolean("itrak.stationary-notify", true);
     }
 
+    /** Искать пеший путь по блокам, когда граф дорог не даёт маршрута. */
+    public boolean isWalkFallbackEnabled() {
+        return config.getBoolean("navigation.walk-fallback", true);
+    }
+
+    /** Насколько далеко искать пеший путь по блокам. */
+    public double getWalkMaxDistance() {
+        return Math.max(8, Math.min(512, config.getInt("navigation.walk-max-distance", 128)));
+    }
+
     public boolean isItrakParticles() {
         return config.getBoolean("itrak.particles", true);
     }
@@ -295,7 +312,12 @@ public class ConfigManager {
     }
 
     public double getItrakScanRadius() {
-        return Math.max(16, Math.min(1000, config.getInt("itrak.scan-radius", 200)));
+        return Math.max(1, Math.min(1000, config.getInt("itrak.scan-radius", 10)));
+    }
+
+    /** Сколько секунд локатор подсвечивает найденные трекеры. */
+    public int getItrakScanHighlightSeconds() {
+        return Math.max(1, Math.min(120, config.getInt("itrak.scan-highlight-seconds", 10)));
     }
 
     public double getItrakTakeRadius() {
@@ -325,23 +347,6 @@ public class ConfigManager {
     /** Можно ли прицепить трекер к игроку (слежка за игроком). */
     public boolean isItrakAttachPlayers() {
         return config.getBoolean("itrak.attach-players", true);
-    }
-
-    /** Тратятся ли заряды у трекеров. */
-    public boolean isItrakChargeEnabled() {
-        return config.getBoolean("itrak.charge-enabled", true);
-    }
-
-    /** Сколько миллисекунд живёт один процент заряда. */
-    public long getItrakChargeDrainMillisPerPercent() {
-        int minutes = Math.max(1, Math.min(10000,
-                config.getInt("itrak.charge-drain-minutes", 120)));
-        return minutes * 60_000L / 100L;
-    }
-
-    /** Сколько процентов восстанавливает один предмет-заряд. */
-    public int getItrakChargePerItem() {
-        return Math.max(1, Math.min(100, config.getInt("itrak.charge-per-item", 25)));
     }
 
     /** Радиус терминала: трекеры в нём показываются по нажатию на блок. */

@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 public class RouteService {
 
     private final GraphService graphService;
+    private final WalkPathService walkPathService;
     /**
      * Очередь с отказом, а не CallerRunsPolicy: при занятом пуле задача
      * выполнилась бы в ВЫЗЫВАЮЩЕМ потоке — то есть в главном тике сервера,
@@ -39,7 +40,12 @@ public class RouteService {
             new ThreadPoolExecutor.AbortPolicy());
 
     public RouteService(GraphService graphService) {
+        this(graphService, null);
+    }
+
+    public RouteService(GraphService graphService, WalkPathService walkPathService) {
         this.graphService = graphService;
+        this.walkPathService = walkPathService;
     }
 
     public CompletableFuture<List<Location>> buildMultiModalAsync(Player player, Location target,
@@ -69,7 +75,17 @@ public class RouteService {
                 return multiModal
                         ? Pathfinder.buildMultiModalRoute(graph, start, end, type)
                         : Pathfinder.buildRoute(graph, start, end, type);
-            }, executor);
+            }, executor).thenCompose(route -> {
+                // Две точки = «граф дорог не нашёл путь», то есть прежняя прямая
+                // сквозь горы. Для пешего маршрута добираем настоящий путь по
+                // блокам: A* обходит стены, лаву и обрывы.
+                if (route.size() > 2 || type != TransportType.FOOT
+                        || walkPathService == null || !walkPathService.isEnabled()) {
+                    return CompletableFuture.completedFuture(route);
+                }
+                return walkPathService.findPath(start, end)
+                        .thenApply(path -> path.size() > 1 ? path : route);
+            });
         } catch (java.util.concurrent.RejectedExecutionException e) {
             // Очередь переполнена: честный отказ, а не расчёт в главном потоке.
             return CompletableFuture.failedFuture(new java.util.concurrent.RejectedExecutionException(
