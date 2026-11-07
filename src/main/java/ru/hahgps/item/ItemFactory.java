@@ -40,6 +40,8 @@ public final class ItemFactory {
     public static final NamespacedKey LOCATOR_RADIUS = NamespacedKey.fromString("hahgps:itrak_locator_radius");
     public static final NamespacedKey TERMINAL = NamespacedKey.fromString("hahgps:itrak_terminal");
     public static final NamespacedKey THROWER = NamespacedKey.fromString("hahgps:itrak_thrower");
+    /** Shift-бросок: попав в воду, трекер тонет, а не остаётся на поверхности. */
+    public static final NamespacedKey SINK = NamespacedKey.fromString("hahgps:itrak_sink");
 
     /** Граница «дальнего» локатора: от 15 блоков у него отдельный ID модели. */
     public static final int LONG_LOCATOR_RADIUS = 15;
@@ -332,6 +334,23 @@ public final class ItemFactory {
         } catch (IllegalArgumentException malformed) {
             return null;
         }
+    }
+
+    /** Отметить снаряд как «утопить»: Shift-бросок трекера. */
+    public static void writeSink(PersistentDataHolder holder, boolean sink) {
+        if (holder == null || !sink) {
+            return;
+        }
+        holder.getPersistentDataContainer().set(SINK, PersistentDataType.BYTE, (byte) 1);
+    }
+
+    /** Был ли бросок «утопить» (Shift+ПКМ). */
+    public static boolean readSink(PersistentDataHolder holder) {
+        if (holder == null) {
+            return false;
+        }
+        Byte marker = holder.getPersistentDataContainer().get(SINK, PersistentDataType.BYTE);
+        return marker != null && marker != 0;
     }
 
     /** Выдать предмет игроку: что не влезло — падает под ноги, а не теряется. */

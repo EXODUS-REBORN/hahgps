@@ -17,7 +17,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TrackerTest {
 
     private static Tracker tracker(long movedAt, boolean sunk) {
-        return new Tracker(1, "TRK-0001", "Дом", TrackerColor.RED, true,
+        return tracker(movedAt, sunk, true);
+    }
+
+    private static Tracker tracker(long movedAt, boolean sunk, boolean waterproof) {
+        return new Tracker(1, "TRK-0001", "Дом", TrackerColor.RED, waterproof,
                 UUID.randomUUID(), "tester", "world", 10, 64, 20,
                 null, sunk, 1_000L, movedAt, movedAt);
     }
@@ -53,12 +57,43 @@ class TrackerTest {
     }
 
     @Test
+    void smallStepsOfWaterCurrentCountAsMovement() {
+        long now = 200_000L;
+        Tracker tracker = tracker(now - 60_000L, false);
+        tracker.moveTo(10.05, 64, 20, now);
+        assertTrue(tracker.isStationary(now, 60_000L), "0.05 блока — ещё не движение");
+        tracker.markMoved(now);
+        assertEquals(0L, tracker.stationaryMillis(now));
+        assertFalse(tracker.isStationary(now, 1L), "течение двигает трекер — он не неподвижен");
+    }
+
+    @Test
     void sunkTrackerIsNotLiveAndDoesNotOfferRoute() {
         long now = 200_000L;
-        Tracker tracker = tracker(now - 600_000L, true);
+        Tracker tracker = tracker(now - 600_000L, true, false);
         assertEquals(Tracker.Status.SUNK, tracker.status());
         assertFalse(tracker.hasSignal());
         assertFalse(tracker.isStationary(now, 60_000L), "затонувшему предлагать маршрут незачем");
+    }
+
+    @Test
+    void sunkWaterproofTrackerKeepsSignalAndOffersRoute() {
+        long now = 200_000L;
+        Tracker tracker = tracker(now - 600_000L, true);
+        assertEquals(Tracker.Status.LIVE, tracker.status(),
+                "водонепроницаемый под водой продолжает передавать сигнал");
+        assertTrue(tracker.hasSignal());
+        assertTrue(tracker.isStationary(now, 60_000L),
+                "маршрут к утонувшему водонепроницаемому трекеру так же полезен");
+    }
+
+    @Test
+    void wateredFlagDropsWhenTrackerSinks() {
+        Tracker tracker = tracker(10L, false);
+        tracker.setWater(true);
+        assertTrue(tracker.isWater());
+        tracker.setSunk(true);
+        assertFalse(tracker.isWater(), "утонувший трекер не дрейфует по течению");
     }
 
     @Test
@@ -73,10 +108,17 @@ class TrackerTest {
     }
 
     @Test
-    void sunkFlagWinsOverRestoredSignal() {
+    void sunkFlagWinsOverRestoredSignalForRegularTracker() {
+        Tracker tracker = tracker(10L, true, false);
+        tracker.setSignal(true);
+        assertFalse(tracker.hasSignal(), "обычному под водой сигнал не вернуть до подъёма");
+    }
+
+    @Test
+    void sunkWaterproofTrackerKeepsRestoredSignal() {
         Tracker tracker = tracker(10L, true);
         tracker.setSignal(true);
-        assertFalse(tracker.hasSignal(), "затонувшему сигнал не вернуть до подъёма");
+        assertTrue(tracker.hasSignal(), "водонепроницаемому сигнал под водой не мешает");
     }
 
     @Test

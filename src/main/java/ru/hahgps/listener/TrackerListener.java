@@ -272,6 +272,8 @@ public class TrackerListener implements Listener {
             return;
         }
         java.util.UUID throwerId = ItemFactory.readThrower(projectile);
+        // Shift-бросок: попав в воду, трекер должен лечь на дно.
+        boolean sink = ItemFactory.readSink(projectile);
         Entity hitEntity = event.getHitEntity();
         Block hitBlock = event.getHitBlock();
         BlockFace face = event.getHitBlockFace();
@@ -286,7 +288,7 @@ public class TrackerListener implements Listener {
             }
             return;
         }
-        service.placeThrown(thrower, spec, hitBlock, face, hitEntity, at)
+        service.placeThrown(thrower, spec, hitBlock, face, hitEntity, at, sink)
                 .whenComplete((outcome, error) -> plugin.getDataService().runSync(() -> {
                     if (!thrower.isOnline()) {
                         return;
@@ -410,19 +412,22 @@ public class TrackerListener implements Listener {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-exists"));
             return;
         }
-        service.place(player, actual, block, face, target).whenComplete((outcome, error) ->
-                plugin.getDataService().runSync(() -> {
-                    if (!player.isOnline()) {
-                        return;
-                    }
-                    if (error != null) {
-                        plugin.getLogger().log(java.util.logging.Level.WARNING,
-                                "HahGps: iTrak не установлен", error);
-                        player.sendMessage(plugin.getMessages().getPrefixed("itrak-place-failed"));
-                        return;
-                    }
-                    reportPlacement(player, actual, outcome, target, false);
-                }));
+        // Shift-клик по дну: водонепроницаемый трекер топим намеренно, чтобы
+        // он лежал под водой и продолжал передавать сигнал.
+        service.place(player, actual, block, face, target, player.isSneaking())
+                .whenComplete((outcome, error) ->
+                        plugin.getDataService().runSync(() -> {
+                            if (!player.isOnline()) {
+                                return;
+                            }
+                            if (error != null) {
+                                plugin.getLogger().log(java.util.logging.Level.WARNING,
+                                        "HahGps: iTrak не установлен", error);
+                                player.sendMessage(plugin.getMessages().getPrefixed("itrak-place-failed"));
+                                return;
+                            }
+                            reportPlacement(player, actual, outcome, target, false);
+                        }));
     }
 
     /**
@@ -462,7 +467,8 @@ public class TrackerListener implements Listener {
                 "y", TrackerService.formatCoord(tracker.getY()),
                 "z", TrackerService.formatCoord(tracker.getZ())));
         if (tracker.isSunk()) {
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-placed-sunk",
+            player.sendMessage(plugin.getMessages().getPrefixed(
+                    tracker.isWaterproof() ? "itrak-placed-submerged" : "itrak-placed-sunk",
                     "name", tracker.getDisplayName(), "code", tracker.getCode()));
         } else if (tracker.isAttached()) {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-attached",

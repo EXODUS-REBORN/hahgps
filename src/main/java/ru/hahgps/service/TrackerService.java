@@ -1,5 +1,7 @@
 package ru.hahgps.service;
 
+import io.papermc.paper.block.fluid.FluidData;
+import io.papermc.paper.block.fluid.type.FallingFluidData;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -7,14 +9,13 @@ import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.block.data.BlockData;
-import org.bukkit.block.data.Waterlogged;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Snowball;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.Vector;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.config.ConfigManager;
 import ru.hahgps.config.MessagesManager;
@@ -121,11 +122,30 @@ public class TrackerService {
                 // сущность может быть в незагруженном чанке.
                 if (tracker.isAttached()) {
                     tracker.setSignal(false);
+                } else {
+                    // Флаг «плывёт» в БД не хранится: восстанавливаем его по
+                    // блоку под маркером — иначе после рестарта трекер на воде
+                    // висел бы неподвижно.
+                    tracker.setWater(isWaterUnder(tracker));
                 }
                 trackers.put(tracker.getId(), tracker);
             }
         }
         plugin.getLogger().info("HahGps: загружено трекеров iTrak — " + trackers.size());
+    }
+
+    /** Стоит ли трекер на воде: проверка под маркером, чанк не грузим. */
+    private static boolean isWaterUnder(Tracker tracker) {
+        World world = tracker.getWorld() == null ? null : Bukkit.getWorld(tracker.getWorld());
+        if (world == null) {
+            return false;
+        }
+        int bx = floor(tracker.getX());
+        int bz = floor(tracker.getZ());
+        if (!world.isChunkLoaded(bx >> 4, bz >> 4)) {
+            return false;
+        }
+        return isWaterBody(world.getBlockAt(bx, floor(tracker.getY() - 0.02), bz));
     }
 
     public synchronized void start() {
@@ -185,6 +205,7 @@ public class TrackerService {
 
         for (Tracker tracker : trackers.values()) {
             updateFromEntity(tracker, now);
+            updateWater(tracker, now);
             if (stationaryMillis > 0 && tracker.isStationary(now, stationaryMillis)) {
                 if (stationaryNotified.add(tracker.getId())
                         && plugin.getConfigManager().isItrakStationaryNotify()) {
@@ -302,6 +323,72 @@ public class TrackerService {
         } else {
             dirty.add(tracker.getId());
         }
+    }
+
+    /**
+     * Трекер в воде: держится на поверхности, плывёт по течению и падает
+     * вместе с водопадом. Утонувший трекер лежит на дне и не двигается —
+     * его утопили намеренно.
+     *
+     * Чанк, в котором стоит трекер, не грузим: если он выгружен, трекер
+     * просто ждёт на последних координатах.
+     */
+    private void updateWater(Tracker tracker, long now) {
+        if (tracker.isAttached() || tracker.isSunk() || !tracker.isWater()
+                || !plugin.getConfigManager().isItrakWaterCurrent()) {
+            return;
+        }
+        World world = Bukkit.getWorld(tracker.getWorld());
+        if (world == null) {
+            return;
+        }
+        int bx = floor(tracker.getX());
+        int bz = floor(tracker.getZ());
+        if (!world.isChunkLoaded(bx >> 4, bz >> 4)) {
+            return;
+        }
+        double dt = plugin.getConfigManager().getItrakUpdateInterval() / 20.0;
+        WaterPhysics.Pose pose = WaterPhysics.floatStep(tracker.getX(), tracker.getY(), tracker.getZ(),
+                new WorldTerrain(world), dt,
+                plugin.getConfigManager().getItrakWaterDriftSpeed(),
+                plugin.getConfigManager().getItrakWaterFallSpeed());
+        double dx = pose.x() - tracker.getX();
+        double dy = pose.y() - tracker.getY();
+        double dz = pose.z() - tracker.getZ();
+        if (dx * dx + dy * dy + dz * dz < 1e-8) {
+            return;
+        }
+        tracker.moveTo(pose.x(), pose.y(), pose.z(), now);
+        // Течение двигает мелкими шагами: порог moveTo их не заметит, а
+        // «неподвижен N» пришло бы на первом же тике.
+        tracker.markMoved(now);
+        stationaryNotified.remove(tracker.getId());
+        dirty.add(tracker.getId());
+        if (pose.ground() != null) {
+            // Приплыли на сушу: дальше это обычный трекер на блоке.
+            tracker.setWater(false);
+            tracker.setSupportBlock(new Tracker.SupportBlock(
+                    pose.ground().x(), pose.ground().y(), pose.ground().z()));
+        } else if (pose.floating()) {
+            followBed(world, tracker, pose);
+        }
+    }
+
+    /** Опорный блок плавающего трекера — дно под водой: по нему его и снимают. */
+    private void followBed(World world, Tracker tracker, WaterPhysics.Pose pose) {
+        int wx = floor(pose.x());
+        int wz = floor(pose.z());
+        int wy = floor(pose.y() - 0.02);
+        Block water = world.getBlockAt(wx, wy, wz);
+        if (!isWaterBody(water)) {
+            return;
+        }
+        Tracker.SupportBlock current = tracker.getSupportBlock();
+        if (current != null && current.x() == wx && current.z() == wz) {
+            return;
+        }
+        tracker.setSupportBlock(new Tracker.SupportBlock(wx, bottomWaterY(water) - 1, wz));
+        dirty.add(tracker.getId());
     }
 
     /**
@@ -457,9 +544,15 @@ public class TrackerService {
     /**
      * Установка трекера. Блоки читаются в главном потоке, вставка в БД —
      * асинхронно; результат возвращается future'ом.
+     *
+     * @param sinkRequested утопить водонепроницаемый трекер намеренно
+     *                      (Shift-клик по дну или Shift-бросок): ляжет на дно
+     *                      и продолжит передавать сигнал. Обычный трекер тонет
+     *                      в воде всегда — за это он и дешевле.
      */
     public CompletableFuture<PlaceOutcome> place(Player player, ItemFactory.TrackerSpec spec,
-                                                 Block clicked, BlockFace face, Entity target) {
+                                                 Block clicked, BlockFace face, Entity target,
+                                                 boolean sinkRequested) {
         if (spec == null) {
             return CompletableFuture.completedFuture(new PlaceOutcome(null, PlaceResult.FAILED));
         }
@@ -478,25 +571,32 @@ public class TrackerService {
         Location location;
         Tracker.SupportBlock support = null;
         boolean sunk = false;
+        boolean floatingWater = false;
         if (target != null) {
             location = target.getLocation().clone()
                     .add(0, Math.max(0.4, target.getHeight() * 0.5), 0);
         } else {
             Block placed = clicked.getRelative(face == null ? BlockFace.UP : face);
-            boolean water = isWater(clicked) || isWater(placed);
-            if (water) {
-                if (spec.waterproof()) {
-                    location = new Location(clicked.getWorld(), clicked.getX() + 0.5,
-                            waterSurfaceY(clicked), clicked.getZ() + 0.5);
-                } else {
-                    location = new Location(clicked.getWorld(), clicked.getX() + 0.5,
-                            waterBottomY(clicked), clicked.getZ() + 0.5);
+            Block water = isWaterBody(clicked) ? clicked
+                    : (isWaterBody(placed) ? placed : null);
+            if (water != null) {
+                int wx = water.getX();
+                int wz = water.getZ();
+                int bottom = bottomWaterY(water);
+                // Дно под водой — опорный блок: по нему трекер снимают кликом.
+                support = new Tracker.SupportBlock(wx, bottom - 1, wz);
+                if (sinkRequested || !spec.waterproof()) {
+                    location = new Location(water.getWorld(), wx + 0.5, bottom + 0.3, wz + 0.5);
                     sunk = true;
+                } else {
+                    location = new Location(water.getWorld(), wx + 0.5,
+                            waterSurfaceY(water), wz + 0.5);
+                    floatingWater = true;
                 }
             } else {
                 location = placed.getLocation().add(0.5, 0.5, 0.5);
+                support = new Tracker.SupportBlock(clicked.getX(), clicked.getY(), clicked.getZ());
             }
-            support = new Tracker.SupportBlock(clicked.getX(), clicked.getY(), clicked.getZ());
         }
         if (location.getWorld() == null) {
             placingCodes.remove(spec.code());
@@ -508,6 +608,7 @@ public class TrackerService {
         if (label.length() > 64) {
             label = label.substring(0, 64);
         }
+        boolean floating = floatingWater;
         Tracker candidate = new Tracker(0, spec.code(), label, spec.color(), spec.waterproof(),
                 player.getUniqueId(), player.getName(), location.getWorld().getName(),
                 location.getX(), location.getY(), location.getZ(),
@@ -519,6 +620,7 @@ public class TrackerService {
                     if (created == null) {
                         return new PlaceOutcome(null, PlaceResult.FAILED);
                     }
+                    created.setWater(floating);
                     TrackerCodes.reserve(created.getCode());
                     trackers.put(created.getId(), created);
                     return new PlaceOutcome(created, PlaceResult.OK);
@@ -886,13 +988,17 @@ public class TrackerService {
         }
         snowball.setVelocity(eye.getDirection().multiply(speed));
         ItemFactory.writeSpec(snowball, spec, player.getUniqueId());
+        // Shift-бросок — намеренно утопить водонепроницаемый трекер: попадёт
+        // в воду, ляжет на дно и продолжит передавать сигнал.
+        ItemFactory.writeSink(snowball, gentle);
         return true;
     }
 
     /** Попадание брошенного трекера: к существу, к блоку или на землю. */
     public CompletableFuture<PlaceOutcome> placeThrown(Player thrower, ItemFactory.TrackerSpec spec,
                                                        Block hitBlock, BlockFace face,
-                                                       Entity hitEntity, Location fallback) {
+                                                       Entity hitEntity, Location fallback,
+                                                       boolean sink) {
         if (thrower == null || spec == null) {
             return CompletableFuture.completedFuture(new PlaceOutcome(null, PlaceResult.FAILED));
         }
@@ -901,16 +1007,31 @@ public class TrackerService {
                 && (hitEntity instanceof org.bukkit.entity.LivingEntity
                 || hitEntity instanceof org.bukkit.entity.Vehicle)
                 && (!(hitEntity instanceof Player) || attachPlayers)) {
-            return place(thrower, spec, hitEntity.getLocation().getBlock(), BlockFace.UP, hitEntity);
+            return place(thrower, spec, hitEntity.getLocation().getBlock(), BlockFace.UP, hitEntity,
+                    false);
         }
         if (hitBlock != null) {
-            return place(thrower, spec, hitBlock, face == null ? BlockFace.UP : face, null);
+            return place(thrower, spec, hitBlock, face == null ? BlockFace.UP : face, null, sink);
         }
         Location landing = fallback;
         if (landing != null && landing.getWorld() != null) {
-            return place(thrower, spec, landing.getBlock(), BlockFace.UP, null);
+            // Снежок разбивается о воду/растение на высоте поверхности:
+            // сам блок попадания может быть воздухом. Берём первый блок под
+            // точкой падения — воду или землю, иначе трекер завис бы в воздухе
+            // и «не заметил» воду.
+            return place(thrower, spec, groundUnder(landing), BlockFace.UP, null, sink);
         }
         return CompletableFuture.completedFuture(new PlaceOutcome(null, PlaceResult.FAILED));
+    }
+
+    /** Первый непустой блок под точкой падения (воздух пропускаем). */
+    private static Block groundUnder(Location location) {
+        Block block = location.getBlock();
+        int guard = 0;
+        while (guard++ < 4 && block.getType().isAir()) {
+            block = block.getRelative(BlockFace.DOWN);
+        }
+        return block;
     }
 
     // ------------------------------------------------------------------
@@ -919,6 +1040,11 @@ public class TrackerService {
 
     public String statusText(Tracker tracker) {
         MessagesManager messages = plugin.getMessages();
+        // Утонувший водонепроницаемый трекер сигнал не теряет: для него
+        // «затонул» звучало бы как поломка, поэтому статус — «под водой».
+        if (tracker.isSunk() && tracker.isWaterproof()) {
+            return messages.get("itrak-status-submerged");
+        }
         return switch (tracker.status()) {
             case LIVE -> messages.get("itrak-status-live");
             case SUNK -> messages.get("itrak-status-sunk");
@@ -929,7 +1055,7 @@ public class TrackerService {
     /** «в движении» / «неподвижен» — состояние для GUI и сообщений. */
     public String stateText(Tracker tracker, long now) {
         MessagesManager messages = plugin.getMessages();
-        if (tracker.status() != Tracker.Status.LIVE) {
+        if (!tracker.hasSignal()) {
             return messages.get("itrak-state-offline");
         }
         long threshold = plugin.getConfigManager().getItrakStationaryMillis();
@@ -965,47 +1091,171 @@ public class TrackerService {
     // Вода
     // ------------------------------------------------------------------
 
-    /** Вода или затопленный блок: на воду тоже можно прицепить трекер. */
-    static boolean isWater(Block block) {
+    /** Настоящая вода в блоке: источник или течение. Затопленные блоки — не вода. */
+    static boolean isWaterBody(Block block) {
         if (block == null) {
             return false;
         }
         Material type = block.getType();
-        if (type == Material.WATER || type == Material.BUBBLE_COLUMN) {
-            return true;
+        return type == Material.WATER || type == Material.BUBBLE_COLUMN;
+    }
+
+    /** Падающая вода (водопад): сквозь неё трекер не всплывает, а летит вниз. */
+    private static boolean isFallingWater(Block block) {
+        if (block == null || !isWaterBody(block)) {
+            return false;
+        }
+        World world = block.getWorld();
+        if (world == null) {
+            return false;
         }
         try {
-            BlockData blockData = block.getBlockData();
-            return blockData instanceof Waterlogged waterlogged && waterlogged.isWaterlogged();
+            return world.getFluidData(block.getX(), block.getY(), block.getZ())
+                    instanceof FallingFluidData falling && falling.isFalling();
         } catch (Throwable ignored) {
+            // Paper-API нет: водопад не отличается от обычной воды.
             return false;
         }
     }
 
+    /** Верхний блок столба воды, в котором стоит трекер. */
+    private static int topWaterY(Block origin) {
+        World world = origin.getWorld();
+        if (world == null) {
+            return origin.getY();
+        }
+        int y = origin.getY();
+        int guard = 0;
+        while (guard++ < 320) {
+            Block above = world.getBlockAt(origin.getX(), y + 1, origin.getZ());
+            // Падающая вода водопада — не поверхность: иначе трекер из
+            // бассейна под водопадом улетал бы на его верх.
+            if (!isWaterBody(above) || isFallingWater(above)) {
+                break;
+            }
+            y++;
+        }
+        return y;
+    }
+
+    /** Нижний блок столба воды: дно, на которое ложится утонувший трекер. */
+    private static int bottomWaterY(Block origin) {
+        World world = origin.getWorld();
+        if (world == null) {
+            return origin.getY();
+        }
+        int y = origin.getY();
+        int guard = 0;
+        while (guard++ < 320 && isWaterBody(world.getBlockAt(origin.getX(), y - 1, origin.getZ()))) {
+            y--;
+        }
+        return Math.max(world.getMinHeight(), y);
+    }
+
+    /** Поверхность воды: не верх блока, а высота жидкости в нём. */
     private static double waterSurfaceY(Block origin) {
         World world = origin.getWorld();
         if (world == null) {
-            return origin.getY();
+            return origin.getY() + 1.0;
         }
-        int y = origin.getY();
-        int guard = 0;
-        while (guard++ < 320 && isWater(world.getBlockAt(origin.getX(), y + 1, origin.getZ()))) {
-            y++;
-        }
-        return y + 1.0;
+        int top = topWaterY(origin);
+        return top + fluidHeight(world, origin.getX(), top, origin.getZ());
     }
 
-    private static double waterBottomY(Block origin) {
-        World world = origin.getWorld();
-        if (world == null) {
-            return origin.getY();
+    /**
+     * Высота жидкости внутри блока из Paper-API (0..1). На ядре без этого
+     * метода (Spigot) трекер всё равно плавает — просто на целом блоке.
+     */
+    private static double fluidHeight(World world, int x, int y, int z) {
+        try {
+            FluidData data = world.getFluidData(x, y, z);
+            float height = data.computeHeight(new Location(world, x + 0.5, y + 0.5, z + 0.5));
+            if (height > 0.05f && height <= 1.0001f) {
+                return height;
+            }
+        } catch (Throwable ignored) {
+            // Paper-API нет: считаем воду полным блоком.
         }
-        int y = origin.getY();
-        int guard = 0;
-        while (guard++ < 320 && isWater(world.getBlockAt(origin.getX(), y - 1, origin.getZ()))) {
-            y--;
+        return 1.0;
+    }
+
+    private static int floor(double value) {
+        return (int) Math.floor(value);
+    }
+
+    /**
+     * Мир для {@link WaterPhysics}. Чанки не грузит: в незагруженном соседе
+     * движение считается упёршимся в берег, а поверхность — целым блоком.
+     */
+    private static final class WorldTerrain implements WaterPhysics.Terrain {
+
+        private final World world;
+
+        WorldTerrain(World world) {
+            this.world = world;
         }
-        return Math.max(world.getMinHeight() + 1, y) + 0.3;
+
+        @Override
+        public boolean isWater(int x, int y, int z) {
+            return loaded(x, z) && isWaterBody(world.getBlockAt(x, y, z));
+        }
+
+        @Override
+        public boolean isFallingWater(int x, int y, int z) {
+            return loaded(x, z) && TrackerService.isFallingWater(world.getBlockAt(x, y, z));
+        }
+
+        @Override
+        public boolean isSolid(int x, int y, int z) {
+            if (!loaded(x, z)) {
+                return true;
+            }
+            Block block = world.getBlockAt(x, y, z);
+            return !isWaterBody(block) && block.getType().isSolid();
+        }
+
+        @Override
+        public double surfaceY(int x, int y, int z) {
+            return loaded(x, z) ? waterSurfaceY(world.getBlockAt(x, y, z)) : y + 1.0;
+        }
+
+        @Override
+        public double flowX(int x, int y, int z) {
+            Vector flow = flow(x, y, z);
+            return flow == null ? 0.0 : flow.getX();
+        }
+
+        @Override
+        public double flowZ(int x, int y, int z) {
+            Vector flow = flow(x, y, z);
+            return flow == null ? 0.0 : flow.getZ();
+        }
+
+        /** Течение из Paper-API; в незагруженном окружении — стоячая вода. */
+        private Vector flow(int x, int y, int z) {
+            if (!neighboursLoaded(x, z)) {
+                return null;
+            }
+            try {
+                return world.getFluidData(x, y, z)
+                        .computeFlowDirection(new Location(world, x + 0.5, y + 0.5, z + 0.5));
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
+
+        private boolean loaded(int x, int z) {
+            return world.isChunkLoaded(x >> 4, z >> 4);
+        }
+
+        /** Поток воды читает соседей: их чанки должны быть загружены заранее. */
+        private boolean neighboursLoaded(int x, int z) {
+            return loaded(x, z)
+                    && loaded(x + 1, z) && loaded(x - 1, z)
+                    && loaded(x, z + 1) && loaded(x, z - 1)
+                    && loaded(x + 1, z + 1) && loaded(x - 1, z + 1)
+                    && loaded(x + 1, z - 1) && loaded(x - 1, z - 1);
+        }
     }
 
     /** Все трекеры — снимок для GUI (главный поток). */

@@ -52,6 +52,13 @@ public class Tracker {
     /** Живой сигнал: у привязанного к сущности трекера снимается, если сущности нет. */
     private transient boolean signal = true;
 
+    /**
+     * Трекер в воде: держится на поверхности и дрейфует по течению. Состояние
+     * не хранится в БД — при загрузке восстанавливается по блоку под маркером.
+     * Утонувший трекер статичен, флаг ему не нужен.
+     */
+    private transient boolean water;
+
     public Tracker(int id, String code, String name, TrackerColor color, boolean waterproof,
                    UUID ownerUuid, String ownerName, String world, double x, double y, double z,
                    UUID entityUuid, boolean sunk, long placedAt, long movedAt, long updatedAt) {
@@ -80,7 +87,9 @@ public class Tracker {
         this.placedAt = placedAt;
         this.movedAt = movedAt;
         this.updatedAt = updatedAt;
-        this.signal = !sunk;
+        // Обычный трекер под водой глохнет, водонепроницаемый продолжает
+        // передавать сигнал со дна — за это его и утапливают намеренно.
+        this.signal = !sunk || waterproof;
     }
 
     public int getId() {
@@ -176,9 +185,18 @@ public class Tracker {
 
     public void setSunk(boolean sunk) {
         this.sunk = sunk;
-        if (sunk) {
+        if (sunk && !waterproof) {
             this.signal = false;
         }
+    }
+
+    /** Плавающий трекер: держится на поверхности и дрейфует по течению. */
+    public boolean isWater() {
+        return water && !sunk;
+    }
+
+    public void setWater(boolean water) {
+        this.water = water && !sunk;
     }
 
     public long getPlacedAt() {
@@ -194,15 +212,15 @@ public class Tracker {
     }
 
     public boolean hasSignal() {
-        return signal && !sunk;
+        return signal && (!sunk || waterproof);
     }
 
     public void setSignal(boolean signal) {
-        this.signal = signal && !sunk;
+        this.signal = signal && (!sunk || waterproof);
     }
 
     public Status status() {
-        if (sunk) {
+        if (sunk && !waterproof) {
             return Status.SUNK;
         }
         return signal ? Status.LIVE : Status.NO_SIGNAL;
@@ -233,9 +251,22 @@ public class Tracker {
         return Math.max(0L, now - movedAt);
     }
 
+    /**
+     * Отметить движение, которое меньше {@link #MOVE_THRESHOLD} в одном шаге:
+     * течение двигает трекер мелкими порциями, но он всё равно плывёт, а не
+     * стоит. Без этого при малом интервале обновления трекер «неподвижен»
+     * с первого тика и владельцу приходит ложное «неподвижен N».
+     */
+    public void markMoved(long now) {
+        this.movedAt = now;
+        this.updatedAt = now;
+    }
+
     /** Неподвижен ли трекер достаточно долго, чтобы предлагать маршрут. */
     public boolean isStationary(long now, long thresholdMillis) {
-        if (status() != Status.LIVE) {
+        // Утонувший водонепроницаемый трекер сигнал не теряет — маршрут к нему
+        // так же полезен, как к стоящему на земле.
+        if (!hasSignal()) {
             return false;
         }
         return thresholdMillis > 0 && stationaryMillis(now) >= thresholdMillis;

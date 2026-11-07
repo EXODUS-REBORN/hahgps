@@ -393,4 +393,21 @@ public class ConfigManager {
         double value = config.getDouble("itrak.throw-speed", 1.8);
         return Double.isFinite(value) ? Math.max(0.5, Math.min(4.0, value)) : 1.8;
     }
+
+    /** Плывёт ли трекер по течению: выключение оставляет его на месте. */
+    public boolean isItrakWaterCurrent() {
+        return config.getBoolean("itrak.water-current", true);
+    }
+
+    /** Скорость дрейфа по течению, блоков в секунду. */
+    public double getItrakWaterDriftSpeed() {
+        double value = config.getDouble("itrak.water-drift-speed", 0.8);
+        return Double.isFinite(value) ? Math.max(0.0, Math.min(5.0, value)) : 0.8;
+    }
+
+    /** Скорость падения в водопаде и с обрыва, блоков в секунду. */
+    public double getItrakWaterFallSpeed() {
+        double value = config.getDouble("itrak.water-fall-speed", 6.0);
+        return Double.isFinite(value) ? Math.max(0.5, Math.min(32.0, value)) : 6.0;
+    }
 }
