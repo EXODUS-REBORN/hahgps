@@ -63,10 +63,7 @@ public class MainMenuGui extends GuiScreen {
         switch (slot) {
             case 10 -> new PointsListGui(player, null).open();
             case 12 -> new CategoriesGui(player).open();
-            case 14 -> {
-                player.closeInventory();
-                HahGpsPlugin.getInstance().getMapService().openMap(player);
-            }
+            case 14 -> new MapGui(player).open();
             case 16 -> new SearchGui(player).open();
             case 22 -> new SettingsGui(player).open();
             case 24 -> {

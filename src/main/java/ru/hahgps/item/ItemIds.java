@@ -60,6 +60,8 @@ public final class ItemIds {
     public static final int SEARCH_QUICK = 1502;
     public static final int SEARCH_RESULT = 1503;
     public static final int SEARCH_EMPTY = 1504;
+    /** Кнопка «сколько мест показывать» в поиске (1..25). */
+    public static final int SEARCH_LIMIT = 1505;
 
     public static final int SETTINGS_LANGUAGE = 1601;
     public static final int SETTINGS_LOGGING = 1602;
@@ -123,6 +125,7 @@ public final class ItemIds {
         ids.add(SEARCH_QUICK);
         ids.add(SEARCH_RESULT);
         ids.add(SEARCH_EMPTY);
+        ids.add(SEARCH_LIMIT);
         ids.add(SETTINGS_LANGUAGE);
         ids.add(SETTINGS_LOGGING);
         ids.add(SETTINGS_MAP);

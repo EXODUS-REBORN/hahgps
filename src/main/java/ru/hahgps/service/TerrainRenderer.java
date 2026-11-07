@@ -41,6 +41,7 @@ public class TerrainRenderer {
 
     private static final int NO_DATA = 0x202020;
 
+
     private final HahGpsPlugin plugin;
     private final ExecutorService drawExecutor;
 
@@ -68,11 +69,30 @@ public class TerrainRenderer {
         };
     }
 
+    /** Цвет поверхности из кэша мира для незагруженного чанка; 0 — данных нет. */
+    @FunctionalInterface
+    public interface CachedColors {
+        int colorAt(World world, int x, int z);
+    }
+
     public CompletableFuture<BufferedImage> render(World world, int centerX, int centerZ,
                                                    MapView.Scale scale, List<Poi> pois,
                                                    List<Location> route, Location playerLoc,
                                                    List<Location> others,
                                                    BooleanSupplier cancelled) {
+        return render(world, centerX, centerZ, scale, pois, route, playerLoc, others, cancelled, null);
+    }
+
+    /**
+     * @param cachedColors цвет из кэша мира для чанков, которых сейчас нет в
+     *                     памяти (null — такие пиксели остаются тёмными)
+     */
+    public CompletableFuture<BufferedImage> render(World world, int centerX, int centerZ,
+                                                   MapView.Scale scale, List<Poi> pois,
+                                                   List<Location> route, Location playerLoc,
+                                                   List<Location> others,
+                                                   BooleanSupplier cancelled,
+                                                   CachedColors cachedColors) {
         if (world == null) {
             return CompletableFuture.completedFuture(blankImage());
         }
@@ -81,7 +101,8 @@ public class TerrainRenderer {
             try {
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     try {
-                        render(world, centerX, centerZ, scale, pois, route, playerLoc, others, cancelled)
+                        render(world, centerX, centerZ, scale, pois, route, playerLoc, others,
+                                cancelled, cachedColors)
                                 .whenComplete((image, error) -> {
                                     if (error != null) {
                                         out.completeExceptionally(error);
@@ -98,14 +119,16 @@ public class TerrainRenderer {
             }
             return out;
         }
-        return renderOnMain(world, centerX, centerZ, scale, pois, route, playerLoc, others, cancelled);
+        return renderOnMain(world, centerX, centerZ, scale, pois, route, playerLoc, others,
+                cancelled, cachedColors);
     }
 
     private CompletableFuture<BufferedImage> renderOnMain(World world, int centerX, int centerZ,
                                                           MapView.Scale scale, List<Poi> pois,
                                                           List<Location> route, Location playerLoc,
                                                           List<Location> others,
-                                                          BooleanSupplier cancelled) {
+                                                          BooleanSupplier cancelled,
+                                                          CachedColors cachedColors) {
         double bpp = blocksPerPixel(scale);
         int radius = (int) (MAP_SIZE / 2 * bpp);
 
@@ -159,7 +182,7 @@ public class TerrainRenderer {
                 sampled.complete(null);
                 return;
             }
-            startSampling(world, centerX, centerZ, bpp, sampled, cancelled);
+            startSampling(world, centerX, centerZ, bpp, sampled, cancelled, cachedColors);
         });
 
         return sampled.thenApplyAsync(
@@ -170,7 +193,8 @@ public class TerrainRenderer {
 
 
     private void startSampling(World world, int centerX, int centerZ, double bpp,
-                               CompletableFuture<int[]> out, BooleanSupplier cancelled) {
+                               CompletableFuture<int[]> out, BooleanSupplier cancelled,
+                               CachedColors cachedColors) {
         int[] colors = new int[TOTAL_SAMPLES];
         Arrays.fill(colors, NO_DATA);
         int[] cursor = {0};
@@ -192,7 +216,7 @@ public class TerrainRenderer {
                     int pz = index / MAP_SIZE;
                     int worldX = centerX + (int) ((px - MAP_SIZE / 2) * bpp);
                     int worldZ = centerZ + (int) ((pz - MAP_SIZE / 2) * bpp);
-                    colors[index] = sampleBlock(world, worldX, worldZ);
+                    colors[index] = sampleBlock(world, worldX, worldZ, cachedColors);
                 }
                 if (cursor[0] >= TOTAL_SAMPLES) {
                     BukkitTask task = holder[0];
@@ -207,9 +231,17 @@ public class TerrainRenderer {
         }
     }
 
-    private int sampleBlock(World world, int x, int z) {
+    private int sampleBlock(World world, int x, int z, CachedColors cachedColors) {
         try {
             if (!world.isChunkLoaded(x >> 4, z >> 4)) {
+                // Исследованный мир живёт в кэше: без него панорама карты
+                // упиралась бы в чёрные дыры на незагруженных чанках.
+                if (cachedColors != null) {
+                    int cached = cachedColors.colorAt(world, x, z);
+                    if (cached != 0) {
+                        return cached & 0xFFFFFF;
+                    }
+                }
                 return NO_DATA;
             }
             int y = world.getHighestBlockYAt(x, z);
@@ -227,13 +259,46 @@ public class TerrainRenderer {
             }
 
             double shade = Math.max(0.4, Math.min(1.0, 0.6 + (y / 256.0) * 0.4));
-            int base = getMaterialColor(material);
+            int base = materialColor(material);
             int r = (int) (((base >> 16) & 0xFF) * shade);
             int g = (int) (((base >> 8) & 0xFF) * shade);
             int b = (int) ((base & 0xFF) * shade);
             return (r << 16) | (g << 8) | b;
         } catch (Exception e) {
             return NO_DATA;
+        }
+    }
+
+    /**
+     * Цвет поверхности мира в точке (0 — данных нет). Общий код для карты и
+     * кэша мира: иначе они рисовали бы разные палитры.
+     */
+    public static int surfaceColor(World world, int x, int z) {
+        try {
+            if (world == null || !world.isChunkLoaded(x >> 4, z >> 4)) {
+                return 0;
+            }
+            int y = world.getHighestBlockYAt(x, z);
+            Material material = world.getBlockAt(x, y, z).getType();
+            if (material.isAir()) {
+                int below = y - 1;
+                if (below < world.getMinHeight()) {
+                    return 0;
+                }
+                material = world.getBlockAt(x, below, z).getType();
+                if (material.isAir()) {
+                    return 0;
+                }
+                y = below;
+            }
+            double shade = Math.max(0.4, Math.min(1.0, 0.6 + (y / 256.0) * 0.4));
+            int base = materialColor(material);
+            int r = (int) (((base >> 16) & 0xFF) * shade);
+            int g = (int) (((base >> 8) & 0xFF) * shade);
+            int b = (int) ((base & 0xFF) * shade);
+            return (r << 16) | (g << 8) | b;
+        } catch (Exception e) {
+            return 0;
         }
     }
 
@@ -309,7 +374,7 @@ public class TerrainRenderer {
         return image;
     }
 
-    private int getMaterialColor(Material material) {
+    public static int materialColor(Material material) {
         return switch (material) {
             case GRASS_BLOCK, SHORT_GRASS, TALL_GRASS -> 0x4C9935;
             case DIRT, COARSE_DIRT, PODZOL -> 0x8B5A2B;

@@ -71,7 +71,12 @@ public class TrackerService {
     private final Map<Integer, Tracker> trackers = new ConcurrentHashMap<>();
     private final Map<UUID, Set<Integer>> watchedByPlayer = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastWatchMessage = new ConcurrentHashMap<>();
-    private final Map<UUID, Long> scanCooldown = new ConcurrentHashMap<>();
+    /**
+     * Конец перезарядки локатора по игроку. Живёт и после выхода из игры:
+     * иначе перезаход сбрасывал бы пятиминутный КД, и «белая полоса» была бы
+     * только декорацией.
+     */
+    private final Map<UUID, Long> scanCooldownEnd = new ConcurrentHashMap<>();
     private final Set<Integer> stationaryNotified = ConcurrentHashMap.newKeySet();
     private final Set<Integer> dirty = ConcurrentHashMap.newKeySet();
     /** Коды, которые прямо сейчас вставляются в БД: двойной клик не создаст два трекера. */
@@ -174,7 +179,7 @@ public class TrackerService {
         }
         watchedByPlayer.clear();
         lastWatchMessage.clear();
-        scanCooldown.clear();
+        scanCooldownEnd.clear();
         stationaryNotified.clear();
         dirty.clear();
         lostSince.clear();
@@ -864,13 +869,70 @@ public class TrackerService {
         return player == null ? List.of() : scanAround(player.getLocation(), radius);
     }
 
-    public boolean isScanReady(Player player) {
-        long last = scanCooldown.getOrDefault(player.getUniqueId(), 0L);
-        return System.currentTimeMillis() - last >= 1500L;
+    /** Сколько миллисекунд ещё ждать до следующего скана; 0 — готов. */
+    public long scanCooldownRemaining(Player player) {
+        if (player == null) {
+            return 0L;
+        }
+        Long endsAt = scanCooldownEnd.get(player.getUniqueId());
+        if (endsAt == null) {
+            return 0L;
+        }
+        long remaining = LocatorCooldown.remaining(endsAt, System.currentTimeMillis());
+        if (remaining <= 0L) {
+            scanCooldownEnd.remove(player.getUniqueId());
+            return 0L;
+        }
+        return remaining;
     }
 
-    public void markScan(Player player) {
-        scanCooldown.put(player.getUniqueId(), System.currentTimeMillis());
+    /** Перезарядка для локатора с этим радиусом: дальний — дольше. */
+    public int scanCooldownSeconds(double radius) {
+        ConfigManager config = plugin.getConfigManager();
+        int normalRadius = (int) config.getItrakScanRadius();
+        return LocatorCooldown.seconds((int) Math.ceil(radius), normalRadius,
+                config.getItrakScanCooldownSeconds(), config.getItrakScanCooldownLongSeconds());
+    }
+
+    /** Начать перезарядку и показать ванильную белую полосу КД на локаторе. */
+    public void startScanCooldown(Player player, int seconds) {
+        if (player == null) {
+            return;
+        }
+        int safe = Math.max(0, Math.min(LocatorCooldown.MAX_SECONDS, seconds));
+        if (safe <= 0) {
+            scanCooldownEnd.remove(player.getUniqueId());
+            applyScanCooldownBar(player);
+            return;
+        }
+        scanCooldownEnd.put(player.getUniqueId(), System.currentTimeMillis() + safe * 1000L);
+        applyScanCooldownBar(player);
+        pruneScanCooldowns();
+    }
+
+    /**
+     * Белая полоса КД на предмете локатора: ванильный оверлей, как у предметов
+     * с перезарядкой. Оба локатора — один материал, поэтому полоса видна на
+     * обоих: КД общий на игрока, менять предмет, чтобы обойти его, нельзя.
+     */
+    public void applyScanCooldownBar(Player player) {
+        if (player == null) {
+            return;
+        }
+        try {
+            player.setCooldown(ItemFactory.LOCATOR_MATERIAL,
+                    LocatorCooldown.ticks(scanCooldownRemaining(player)));
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** Просроченные записи не копятся до перезапуска сервера. */
+    private void pruneScanCooldowns() {
+        if (scanCooldownEnd.size() < 256) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        scanCooldownEnd.entrySet().removeIf(entry -> entry.getValue() <= now);
     }
 
     public void watch(Player player, Tracker tracker) {
@@ -913,7 +975,7 @@ public class TrackerService {
         }
         watchedByPlayer.remove(player.getUniqueId());
         lastWatchMessage.remove(player.getUniqueId());
-        scanCooldown.remove(player.getUniqueId());
+        // scanCooldownEnd НЕ трогаем: перезаход не должен сбрасывать КД локатора.
     }
 
     /** Трекеры, прицепленные к этой сущности: их может быть несколько. */

@@ -40,6 +40,18 @@ public class DataService {
     /** Отсортированный по имени снимок poiCache: список точек открывают часто. */
     private volatile List<Poi> sortedPois = List.of();
 
+    /**
+     * Статистика поиска мест: {@code poiId -> (запрос -> сколько разных
+     * игроков искали)} и {@code poiId -> сколько разных игроков искали точку}.
+     * Снимки неизменяемые: поиск читает их из пула БД, пока запись добавляет
+     * строку. Флаг «грязно» заставляет перечитать агрегаты при следующем
+     * поиске — так счётчики остаются точными и после перезапуска сервера.
+     */
+    private volatile Map<Integer, Map<String, Integer>> poiSearchStats = Map.of();
+    private volatile Map<Integer, Integer> poiSearcherCounts = Map.of();
+    private final java.util.concurrent.atomic.AtomicBoolean searchStatsDirty =
+            new java.util.concurrent.atomic.AtomicBoolean(true);
+
     private final List<Route> routeCache = new ArrayList<>();
     /** Растёт при каждом изменении routeCache: защита от гонки читателя и писателя. */
     private int routeCacheVersion = 0;
@@ -76,6 +88,79 @@ public class DataService {
                 routeCache.clear();
                 routeCache.addAll(routes);
                 routeCacheVersion++;
+            }
+
+            loadSearchStats();
+        }, executor);
+    }
+
+    /** Агрегаты статистики поиска — один раз при старте и после каждой записи. */
+    private void loadSearchStats() {
+        poiSearchStats = immutable(provider.getPoiSearchStats());
+        poiSearcherCounts = Map.copyOf(provider.getPoiSearcherCounts());
+    }
+
+    private static Map<Integer, Map<String, Integer>> immutable(
+            Map<Integer, Map<String, Integer>> source) {
+        Map<Integer, Map<String, Integer>> copy = new java.util.HashMap<>();
+        if (source != null) {
+            for (Map.Entry<Integer, Map<String, Integer>> entry : source.entrySet()) {
+                if (entry.getKey() == null || entry.getValue() == null) {
+                    continue;
+                }
+                copy.put(entry.getKey(), Map.copyOf(entry.getValue()));
+            }
+        }
+        return Map.copyOf(copy);
+    }
+
+    public Map<Integer, Map<String, Integer>> searchStatsSnapshot() {
+        return poiSearchStats;
+    }
+
+    public Map<Integer, Integer> searcherCountsSnapshot() {
+        return poiSearcherCounts;
+    }
+
+    /**
+     * Перечитать статистику поиска, если она устарела (после новой записи).
+     * Вызывается из пула БД: чтение таблицы в главном потоке недопустимо.
+     */
+    public void refreshSearchStatsNow() {
+        if (!searchStatsDirty.compareAndSet(true, false)) {
+            return;
+        }
+        try {
+            loadSearchStats();
+        } catch (Exception e) {
+            searchStatsDirty.set(true);
+            logFailure(e);
+        }
+    }
+
+    /**
+     * Вычисление в пуле БД. Поиск считает похожесть по всем точкам — на
+     * главном потоке это дало бы лаг на большом списке мест.
+     */
+    public <T> CompletableFuture<T> computeAsync(Supplier<T> supplier) {
+        return async(supplier);
+    }
+
+    /**
+     * Запись сигнала «этим запросом искали это место». Ошибка БД не должна
+     * ломать поиск: статистика — украшение, а не данные игрока.
+     */
+    public CompletableFuture<Void> recordPoiSearch(int poiId, UUID playerId, String query) {
+        if (playerId == null || query == null || query.isBlank()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return CompletableFuture.runAsync(() -> {
+            try {
+                provider.recordPoiSearch(poiId, playerId, query);
+            } catch (Exception e) {
+                logFailure(e);
+            } finally {
+                searchStatsDirty.set(true);
             }
         }, executor);
     }
@@ -235,6 +320,8 @@ public class DataService {
             if (result) {
                 poiCache.remove(id);
                 sortedPois = sortPois(poiCache.values());
+                // Статистика поиска точки удалена вместе с ней — перечитаем.
+                searchStatsDirty.set(true);
             }
             return result;
         });

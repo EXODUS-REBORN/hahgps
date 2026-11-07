@@ -123,7 +123,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     }
 
     /** Текущая версия схемы: растёт при миграциях. */
-    public static final int SCHEMA_VERSION = 5;
+    public static final int SCHEMA_VERSION = 6;
 
     private void createTables() throws SQLException {
         try (Statement st = connection.createStatement()) {
@@ -210,6 +210,17 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                     "placed_at BIGINT NOT NULL DEFAULT 0, " +
                     "UNIQUE (world, x, y, z))");
 
+            // Схема v6: статистика поиска мест. Строка на пару «место + игрок +
+            // запрос»: популярность места считается по разным игрокам, а не по
+            // числу запросов, поэтому один человек не накрутит место в топ.
+            st.execute("CREATE TABLE IF NOT EXISTS poi_search_stats (" +
+                    "poi_id INTEGER NOT NULL, " +
+                    "player_uuid VARCHAR(36) NOT NULL, " +
+                    "query_text VARCHAR(64) NOT NULL, " +
+                    "hits INTEGER NOT NULL DEFAULT 1, " +
+                    "updated_at BIGINT NOT NULL DEFAULT 0, " +
+                    "PRIMARY KEY (poi_id, player_uuid, query_text))");
+
             st.execute("CREATE TABLE IF NOT EXISTS meta (" +
                     "key VARCHAR(32) PRIMARY KEY, " +
                     "value VARCHAR(64) NOT NULL)");
@@ -290,6 +301,12 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 new ColumnAdd("owner_uuid", "VARCHAR(36) NOT NULL DEFAULT ''"),
                 new ColumnAdd("owner_name", "VARCHAR(64) NOT NULL DEFAULT ''"),
                 new ColumnAdd("placed_at", "BIGINT NOT NULL DEFAULT 0")));
+        spec.put("poi_search_stats", List.of(
+                new ColumnAdd("poi_id", "INTEGER NOT NULL DEFAULT 0"),
+                new ColumnAdd("player_uuid", "VARCHAR(36) NOT NULL DEFAULT ''"),
+                new ColumnAdd("query_text", "VARCHAR(64) NOT NULL DEFAULT ''"),
+                new ColumnAdd("hits", "INTEGER NOT NULL DEFAULT 1"),
+                new ColumnAdd("updated_at", "BIGINT NOT NULL DEFAULT 0")));
         spec.put("meta", List.of(
                 new ColumnAdd("value", "VARCHAR(64) NOT NULL DEFAULT ''")));
         return spec;
@@ -427,6 +444,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         createIndex("idx_graph_edges_world", "graph_edges", "world");
         createIndex("idx_trackers_owner", "trackers", "owner_uuid");
         createIndex("idx_terminals_world", "itrak_terminals", "world");
+        createIndex("idx_poi_search_poi", "poi_search_stats", "poi_id");
         // Один код — один установленный трекер. Старые базы могли обойтись без
         // уникальности, да и гонка двух установок не должна давать два ряда.
         createIndex("uq_trackers_code", "trackers", "code", true);
@@ -718,6 +736,13 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                         "DELETE FROM ratings WHERE poi_id = ?")) {
                     ratings.setInt(1, id);
                     ratings.executeUpdate();
+                }
+                // Статистика поиска этой точки тоже больше не нужна: иначе она
+                // висела бы на удалённую точку и всплывала при новом id.
+                try (PreparedStatement searches = connection.prepareStatement(
+                        "DELETE FROM poi_search_stats WHERE poi_id = ?")) {
+                    searches.setInt(1, id);
+                    searches.executeUpdate();
                 }
                 boolean deleted;
                 try (PreparedStatement ps = connection.prepareStatement("DELETE FROM pois WHERE id = ?")) {
@@ -1287,6 +1312,83 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         } catch (SQLException e) {
             markStale();
             throw new RuntimeException("Failed to load ratings", e);
+        }
+        return out;
+    }
+
+    @Override
+    public synchronized void recordPoiSearch(int poiId, UUID playerId, String query) {
+        if (playerId == null || query == null || query.isBlank()) {
+            return;
+        }
+        String sql = mysql
+                ? "INSERT INTO poi_search_stats (poi_id, player_uuid, query_text, hits, updated_at) " +
+                "VALUES (?, ?, ?, 1, ?) " +
+                "ON DUPLICATE KEY UPDATE hits = hits + 1, updated_at = VALUES(updated_at)"
+                : "INSERT INTO poi_search_stats (poi_id, player_uuid, query_text, hits, updated_at) " +
+                "VALUES (?, ?, ?, 1, ?) " +
+                "ON CONFLICT(poi_id, player_uuid, query_text) " +
+                "DO UPDATE SET hits = hits + 1, updated_at = excluded.updated_at";
+        try {
+            ensureConnected();
+            try (PreparedStatement ps = connection.prepareStatement(sql)) {
+                ps.setInt(1, poiId);
+                ps.setString(2, playerId.toString());
+                ps.setString(3, query);
+                ps.setLong(4, System.currentTimeMillis());
+                ps.executeUpdate();
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to record poi search", e);
+        }
+    }
+
+    /**
+     * По одной строке на пару «игрок + запрос», поэтому COUNT(*) — это число
+     * разных игроков, искавших это место этим текстом.
+     */
+    @Override
+    public synchronized Map<Integer, Map<String, Integer>> getPoiSearchStats() {
+        Map<Integer, Map<String, Integer>> out = new HashMap<>();
+        try {
+            ensureConnected();
+            try (Statement st = connection.createStatement();
+                 ResultSet rs = st.executeQuery(
+                         "SELECT poi_id, query_text, COUNT(*) AS players FROM poi_search_stats " +
+                                 "GROUP BY poi_id, query_text")) {
+                while (rs.next()) {
+                    String query = rs.getString("query_text");
+                    if (query == null || query.isBlank()) {
+                        continue;
+                    }
+                    out.computeIfAbsent(rs.getInt("poi_id"), k -> new HashMap<>())
+                            .merge(query, rs.getInt("players"), Integer::sum);
+                }
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to load poi search stats", e);
+        }
+        return out;
+    }
+
+    @Override
+    public synchronized Map<Integer, Integer> getPoiSearcherCounts() {
+        Map<Integer, Integer> out = new HashMap<>();
+        try {
+            ensureConnected();
+            try (Statement st = connection.createStatement();
+                 ResultSet rs = st.executeQuery(
+                         "SELECT poi_id, COUNT(DISTINCT player_uuid) AS players FROM poi_search_stats " +
+                                 "GROUP BY poi_id")) {
+                while (rs.next()) {
+                    out.put(rs.getInt("poi_id"), rs.getInt("players"));
+                }
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to count poi searchers", e);
         }
         return out;
     }

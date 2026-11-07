@@ -46,6 +46,19 @@ public interface StorageProvider extends AutoCloseable {
     /** Все оценки одним запросом: {@code poiId -> (uuid -> оценка)}. */
     Map<Integer, Map<UUID, Integer>> getAllRatings();
 
+    /**
+     * Записать, что игрок искал это место этим запросом. Одна строка на
+     * пару «место + игрок + запрос», поэтому счётчик игроков не накручивается
+     * повторными поисками одного и того же человека.
+     */
+    void recordPoiSearch(int poiId, UUID playerId, String query);
+
+    /** {@code poiId -> (нормализованный запрос -> сколько разных игроков искали)}. */
+    Map<Integer, Map<String, Integer>> getPoiSearchStats();
+
+    /** {@code poiId -> сколько разных игроков вообще искали это место}. */
+    Map<Integer, Integer> getPoiSearcherCounts();
+
     Route createRoute(Route route);
 
     boolean deleteRoute(int id);

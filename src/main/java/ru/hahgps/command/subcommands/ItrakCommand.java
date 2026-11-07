@@ -13,6 +13,7 @@ import ru.hahgps.item.ItemFactory;
 import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TrackerColor;
 import ru.hahgps.model.TransportType;
+import ru.hahgps.service.LocatorCooldown;
 import ru.hahgps.service.Pathfinder;
 import ru.hahgps.service.TrackerService;
 import ru.hahgps.util.LocationUtil;
@@ -112,14 +113,71 @@ public class ItrakCommand implements SubCommand {
                     "y", TrackerService.formatCoord(tracker.getY()),
                     "z", TrackerService.formatCoord(tracker.getZ()),
                     "status", service.statusText(tracker)));
-            player.sendMessage(plugin.getMessages().getComponent("itrak-route-button",
-                    "code", tracker.getCode()));
+            sendTrackerAction(plugin, player, tracker);
             service.highlight(player, tracker, seconds);
         }
         player.sendMessage(plugin.getMessages().getComponent("itrak-route-cancel-button"));
         player.sendMessage(plugin.getMessages().getPrefixed("itrak-scan-highlight",
                 "count", String.valueOf(found.size()), "seconds", String.valueOf(seconds)));
         GuiTheme.click(player);
+    }
+
+    /**
+     * Проверка перед сканом: право, загрузка данных и перезарядка локатора.
+     * Возвращает false, если сканировать нельзя (игрок уже получил ответ).
+     *
+     * КД общий на игрока, а не на предмет: длительность зависит от локатора,
+     * которым сканировали (10 блоков — 5 минут, дальний — 7), но второй
+     * локатор не даёт обойти перезарядку. Исключений для админов нет: иначе
+     * проверить и почувствовать КД было бы нельзя.
+     */
+    public static boolean prepareScan(HahGpsPlugin plugin, Player player, double radius) {
+        TrackerService service = plugin.getTrackerService();
+        if (service == null) {
+            player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
+            return false;
+        }
+        if (!plugin.getConfigManager().isItrakEnabled()) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-disabled"));
+            return false;
+        }
+        if (!player.hasPermission("gps.itrak")) {
+            player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
+            return false;
+        }
+        long remaining = service.scanCooldownRemaining(player);
+        if (remaining > 0L) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-locator-cooldown",
+                    "time", LocatorCooldown.format(remaining)));
+            // Ванильная полоса могла пропасть после перезахода — вернём её.
+            service.applyScanCooldownBar(player);
+            GuiTheme.deny(player);
+            return false;
+        }
+        service.startScanCooldown(player, service.scanCooldownSeconds(radius));
+        return true;
+    }
+
+    /**
+     * Кнопка под найденным трекером: к чужому — «построить маршрут», а если
+     * маячок на самом сканирующем — «снять трекер» (маршрут к себе не нужен).
+     */
+    private static void sendTrackerAction(HahGpsPlugin plugin, Player player, Tracker tracker) {
+        if (isOnPlayer(player, tracker)) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-scan-self",
+                    "name", tracker.getDisplayName()));
+            player.sendMessage(plugin.getMessages().getComponent("itrak-take-button",
+                    "code", tracker.getCode()));
+            return;
+        }
+        player.sendMessage(plugin.getMessages().getComponent("itrak-route-button",
+                "code", tracker.getCode()));
+    }
+
+    /** Трекер прицеплен к этому игроку. */
+    public static boolean isOnPlayer(Player player, Tracker tracker) {
+        return player != null && tracker != null && tracker.getEntityUuid() != null
+                && tracker.getEntityUuid().equals(player.getUniqueId());
     }
 
     /**
@@ -153,8 +211,7 @@ public class ItrakCommand implements SubCommand {
                     "z", TrackerService.formatCoord(tracker.getZ()),
                     "distance", LocationUtil.formatDistance(nearby.distance()),
                     "status", service.statusText(tracker)));
-            player.sendMessage(plugin.getMessages().getComponent("itrak-route-button",
-                    "code", tracker.getCode()));
+            sendTrackerAction(plugin, player, tracker);
             service.highlight(player, tracker, seconds);
         }
         player.sendMessage(plugin.getMessages().getComponent("itrak-route-cancel-button"));
@@ -283,8 +340,7 @@ public class ItrakCommand implements SubCommand {
         @Override
         public void execute(Player player, String[] args) {
             HahGpsPlugin plugin = HahGpsPlugin.getInstance();
-            if (plugin.getTrackerService() == null) {
-                player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
+            if (!prepareScan(plugin, player, plugin.getConfigManager().getItrakScanRadius())) {
                 return;
             }
             reportScan(plugin, player);

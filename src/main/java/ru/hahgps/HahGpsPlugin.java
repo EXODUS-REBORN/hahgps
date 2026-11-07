@@ -8,6 +8,7 @@ import ru.hahgps.gui.GuiManager;
 import ru.hahgps.gui.InputManager;
 import ru.hahgps.listener.ChatInputListener;
 import ru.hahgps.listener.GuiListener;
+import ru.hahgps.listener.MapPanListener;
 import ru.hahgps.listener.PlayerQuitListener;
 import ru.hahgps.listener.RouteRecordListener;
 import ru.hahgps.listener.TrackerListener;
@@ -45,6 +46,7 @@ public class HahGpsPlugin extends JavaPlugin {
     private NavigationService navigationService;
     private SearchService searchService;
     private MapService mapService;
+    private WorldMapCache worldMapCache;
     private CommandManager commandManager;
     private UpdaterService updater;
     private GraphService graphService;
@@ -259,6 +261,7 @@ public class HahGpsPlugin extends JavaPlugin {
             navigationService = new NavigationService(this, configManager, messagesManager);
             searchService = new SearchService(dataService,
                     configManager.getSearchMaxResults(), configManager.getSearchThreshold());
+            worldMapCache = new WorldMapCache(this);
             mapService = new MapService(this);
             visualizationService = new VisualizationService(graphService);
             hudService = new HudService();
@@ -331,6 +334,11 @@ public class HahGpsPlugin extends JavaPlugin {
                     Bukkit.getPluginManager().registerEvents(new WorldLoadListener(this), this);
                     Bukkit.getPluginManager().registerEvents(new RouteRecordListener(this), this);
                     Bukkit.getPluginManager().registerEvents(new TrackerListener(this), this);
+                    Bukkit.getPluginManager().registerEvents(new MapPanListener(this), this);
+                    if (worldMapCache != null) {
+                        Bukkit.getPluginManager().registerEvents(worldMapCache, this);
+                        worldMapCache.start();
+                    }
                     ItrakCraftingListener crafting = new ItrakCraftingListener(this);
                     Bukkit.getPluginManager().registerEvents(crafting, this);
                     crafting.registerRecipes();
@@ -420,6 +428,14 @@ public class HahGpsPlugin extends JavaPlugin {
             }
         } catch (Throwable t) {
             getLogger().log(Level.WARNING, "HahGps: map stop failed", t);
+        }
+        try {
+            if (worldMapCache != null) {
+                worldMapCache.stop();
+                worldMapCache = null;
+            }
+        } catch (Throwable t) {
+            getLogger().log(Level.WARNING, "HahGps: map cache stop failed", t);
         }
         try {
             if (routeService != null) {
@@ -517,6 +533,10 @@ public class HahGpsPlugin extends JavaPlugin {
 
     public SearchService getSearchService() {
         return searchService;
+    }
+
+    public WorldMapCache getWorldMapCache() {
+        return worldMapCache;
     }
 
     public MapService getMapService() {

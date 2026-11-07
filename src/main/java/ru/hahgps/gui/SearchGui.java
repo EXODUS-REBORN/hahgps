@@ -1,19 +1,31 @@
 package ru.hahgps.gui;
+
+import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import ru.hahgps.HahGpsPlugin;
+import ru.hahgps.item.ItemIds;
 import ru.hahgps.service.SearchService;
+import ru.hahgps.service.TrackerService;
 
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Поиск мест. Процент совпадения в списке не печатается: он живёт в
+ * подсказке при наведении вместе с координатами, полным названием и числом
+ * игроков, которые искали это место. Количество результатов настраивается
+ * прямо здесь (1..25) и запоминается для игрока.
+ */
 public class SearchGui extends GuiScreen {
+
+    private static final int LIMIT_SLOT = 49;
+    private static final int LIMIT_SLOT_PLAIN = 24;
 
     private List<SearchService.SearchResult> results = new ArrayList<>();
     private String query = "";
     private boolean showingResults;
-
 
     private final String initialQuery;
     private final List<SearchService.SearchResult> initialResults;
@@ -42,7 +54,6 @@ public class SearchGui extends GuiScreen {
     public void open() {
         super.open();
 
-
         if (initialResults != null) {
             showResults(initialQuery, initialResults);
         }
@@ -59,6 +70,7 @@ public class SearchGui extends GuiScreen {
                 lore("gui.lore-search-name"), ru.hahgps.item.ItemIds.SEARCH_QUICK));
 
         inventory.setItem(22, GuiTheme.navBack(getMsg("gui.back")));
+        inventory.setItem(LIMIT_SLOT_PLAIN, limitItem());
         inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));
 
         for (int i = 0; i < size(); i++) {
@@ -77,8 +89,10 @@ public class SearchGui extends GuiScreen {
             return;
         }
 
-
-
+        if (slot == LIMIT_SLOT || slot == LIMIT_SLOT_PLAIN) {
+            changeLimit(clickType);
+            return;
+        }
 
         if (showingResults) {
             if (slot == 53) {
@@ -104,7 +118,6 @@ public class SearchGui extends GuiScreen {
             return;
         }
 
-
         if (slot == 22) {
             new MainMenuGui(player).open();
             GuiTheme.click(player);
@@ -114,19 +127,49 @@ public class SearchGui extends GuiScreen {
             player.closeInventory();
             InputManager.getInstance().request(player,
                     plugin.getMessages().getPrefixed("input-search"),
-                    input -> plugin.getSearchService().search(input).whenComplete((found, error) -> {
-                        if (error != null) {
-                            reportError(error);
-                            return;
-                        }
-                        plugin.getDataService().runSync(() -> {
-                            if (player.isOnline()) {
-
-                                new SearchGui(player, input, found).open();
-                            }
-                        });
-                    }));
+                    input -> runSearch(plugin, input));
         }
+    }
+
+    /** Меню количества результатов: 1..25, ЛКМ +1, ПКМ −1, Shift — по 5. */
+    private void changeLimit(ClickType clickType) {
+        HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+        int delta = clickType.isShiftClick() ? 5 : 1;
+        boolean down = clickType == ClickType.RIGHT || clickType == ClickType.SHIFT_RIGHT
+                || clickType == ClickType.MIDDLE;
+        int current = plugin.getSearchService().limitFor(player.getUniqueId());
+        int next = plugin.getSearchService().setLimitFor(player.getUniqueId(),
+                current + (down ? -delta : delta));
+        GuiTheme.click(player);
+        if (showingResults && !query.isBlank()) {
+            runSearch(plugin, query);
+            return;
+        }
+        refresh();
+        player.sendMessage(plugin.getMessages().getPrefixed("gui.search-limit",
+                "count", String.valueOf(next)));
+    }
+
+    private void runSearch(HahGpsPlugin plugin, String input) {
+        plugin.getSearchService().search(input, player.getUniqueId()).whenComplete((found, error) -> {
+            if (error != null) {
+                reportError(error);
+                return;
+            }
+            plugin.getDataService().runSync(() -> {
+                if (player.isOnline()) {
+                    new SearchGui(player, input, found).open();
+                }
+            });
+        });
+    }
+
+    private org.bukkit.inventory.ItemStack limitItem() {
+        HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+        int limit = plugin.getSearchService().limitFor(player.getUniqueId());
+        return GuiUtil.item(Material.REPEATER,
+                comp("gui.search-limit", "count", String.valueOf(limit)),
+                lore("gui.lore-search-limit"), ItemIds.SEARCH_LIMIT);
     }
 
     private void showResults(String query, List<SearchService.SearchResult> found) {
@@ -144,18 +187,13 @@ public class SearchGui extends GuiScreen {
                 if (slot >= 44) {
                     break;
                 }
-                java.util.List<net.kyori.adventure.text.Component> lines = new java.util.ArrayList<>();
-                lines.add(comp("gui.search-result-type"));
-                lines.addAll(lore("gui.lore-search-result",
-                        "percent", String.valueOf((int) (result.similarity * 100))));
-                inventory.setItem(slot++, GuiUtil.item(Material.COMPASS,
-                        GuiUtil.tonedName(9, result.name),
-                        lines, ru.hahgps.item.ItemIds.SEARCH_RESULT));
+                inventory.setItem(slot++, resultItem(result));
             }
             inventory.setItem(48, GuiUtil.item(Material.PAPER,
                     comp("search-header", "count", String.valueOf(this.results.size())),
                     null, ru.hahgps.item.ItemIds.SEARCH_RESULT));
         }
+        inventory.setItem(LIMIT_SLOT, limitItem());
         inventory.setItem(53, GuiTheme.navBack(getMsg("gui.back")));
         inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));
         for (int i = 0; i < size(); i++) {
@@ -164,5 +202,24 @@ public class SearchGui extends GuiScreen {
             }
         }
         putBrand();
+    }
+
+    /** Место в поиске: при наведении — полное название, координаты, игроки и процент. */
+    private org.bukkit.inventory.ItemStack resultItem(SearchService.SearchResult result) {
+        List<Component> lines = new ArrayList<>();
+        lines.add(comp("gui.search-result-type"));
+        lines.addAll(lore("gui.lore-search-full-name", "full", result.name));
+        if (result.poi != null) {
+            lines.addAll(lore("gui.lore-search-coords",
+                    "x", TrackerService.formatCoord(result.poi.getX()),
+                    "y", TrackerService.formatCoord(result.poi.getY()),
+                    "z", TrackerService.formatCoord(result.poi.getZ())));
+        }
+        lines.addAll(lore("gui.lore-search-searchers",
+                "count", String.valueOf(result.searchers)));
+        lines.addAll(lore("gui.lore-search-result",
+                "percent", String.valueOf(result.percent())));
+        return GuiUtil.item(Material.COMPASS,
+                GuiUtil.tonedName(9, result.name), lines, ru.hahgps.item.ItemIds.SEARCH_RESULT);
     }
 }

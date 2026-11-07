@@ -317,6 +317,30 @@ class SqliteStorageProviderTest {
     }
 
     @Test
+    void searchStatsCountDistinctPlayersPerPoiAndQuery() {
+        Category category = provider.createCategory("Поиск", false);
+        Poi placed = provider.createPoi(poi("Авиапарк", category.getId()));
+        assertNotNull(placed);
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+
+        provider.recordPoiSearch(placed.getId(), first, "авиапарк");
+        // Тот же игрок и тот же запрос второй раз: счётчик игроков не растёт.
+        provider.recordPoiSearch(placed.getId(), first, "авиапарк");
+        provider.recordPoiSearch(placed.getId(), second, "авиапарк");
+        provider.recordPoiSearch(placed.getId(), second, "хайсовская 10");
+
+        Map<Integer, Map<String, Integer>> stats = provider.getPoiSearchStats();
+        assertEquals(2, stats.get(placed.getId()).get("авиапарк"));
+        assertEquals(1, stats.get(placed.getId()).get("хайсовская 10"));
+        assertEquals(2, provider.getPoiSearcherCounts().get(placed.getId()));
+
+        // Удаление точки уносит и её статистику поиска.
+        assertTrue(provider.deletePoi(placed.getId()));
+        assertFalse(provider.getPoiSearchStats().containsKey(placed.getId()));
+    }
+
+    @Test
     void duplicatePoiNameIsRejectedBySchema() {
         Category category = provider.createCategory("Тест", false);
         provider.createPoi(poi("Спавн", category.getId()));

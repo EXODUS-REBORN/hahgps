@@ -508,19 +508,27 @@ public class TrackerListener implements Listener {
     }
 
     private void runScan(Player player, int itemRadius) {
-        TrackerService service = plugin.getTrackerService();
-        if (service == null || !plugin.getConfigManager().isItrakEnabled()) {
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-disabled"));
-            return;
-        }
-        if (!service.isScanReady(player)) {
-            return;
-        }
-        service.markScan(player);
         // 0 — старый локатор без радиуса в PDC: берём радиус из конфига.
         int radius = itemRadius > 0 ? itemRadius
                 : (int) plugin.getConfigManager().getItrakScanRadius();
+        // Перезарядка (5 минут на 10 блоков, 7 — на дальний) проверяется и
+        // здесь, и в /gps itrak scan: второй локатор не должен её обходить.
+        if (!ItrakCommand.prepareScan(plugin, player, radius)) {
+            return;
+        }
         ItrakCommand.reportScan(plugin, player, radius);
+    }
+
+    /**
+     * Перезаход сбрасывал ванильную полосу КД (она живёт в памяти сессии),
+     * а сам КД — нет. Возвращаем полосу, чтобы игрок видел перезарядку.
+     */
+    @EventHandler
+    public void onJoin(org.bukkit.event.player.PlayerJoinEvent event) {
+        TrackerService service = plugin.getTrackerService();
+        if (service != null) {
+            service.applyScanCooldownBar(event.getPlayer());
+        }
     }
 
     @EventHandler

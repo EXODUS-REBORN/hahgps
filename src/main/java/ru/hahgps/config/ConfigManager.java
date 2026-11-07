@@ -95,6 +95,8 @@ public class ConfigManager {
         checkRange("itrak.particle-radius", 48, 8, 128);
         checkRange("itrak.scan-radius", 10, 1, 1000);
         checkRange("itrak.locator-long-radius", 15, 1, 1000);
+        checkRange("itrak.scan-cooldown-seconds", 300, 0, 86400);
+        checkRange("itrak.scan-cooldown-long-seconds", 420, 0, 86400);
         checkRange("itrak.detach-after-minutes", 30, 0, 10080);
         checkRange("itrak.take-radius", 5, 1, 32);
         checkRange("itrak.max-per-player", 8, 1, 64);
@@ -245,6 +247,31 @@ public class ConfigManager {
         return config.getBoolean("map.show-players", false);
     }
 
+    /** Мышь двигает карту в руке (панорама без ходьбы). */
+    public boolean isMapMousePan() {
+        return config.getBoolean("map.mouse-pan", true);
+    }
+
+    /** Чувствительность мышиного сдвига карты. */
+    public double getMapPanSensitivity() {
+        double value = config.getDouble("map.mouse-pan-sensitivity", 1.0);
+        return Double.isFinite(value) ? Math.max(0.1, Math.min(5.0, value)) : 1.0;
+    }
+
+    /** Кэш карты мира: исследованные места не пропадают без загруженных чанков. */
+    public boolean isMapWorldCache() {
+        return config.getBoolean("map.world-cache", true);
+    }
+
+    /** Блоков на пиксель в кэше карты мира: 4, 8 или 16. */
+    public int getMapCacheBlocksPerPixel() {
+        int value = config.getInt("map.world-cache-blocks-per-pixel", 8);
+        if (value <= 0) {
+            return 8;
+        }
+        return Math.max(4, Math.min(16, value));
+    }
+
     public boolean isTransportAvailable(String key) {
         return config.getBoolean("transport." + key, false);
     }
@@ -343,6 +370,16 @@ public class ConfigManager {
     /** Сколько секунд локатор подсвечивает найденные трекеры. */
     public int getItrakScanHighlightSeconds() {
         return Math.max(1, Math.min(120, config.getInt("itrak.scan-highlight-seconds", 10)));
+    }
+
+    /** Перезарядка обычного локатора, секунд (0 — без КД). */
+    public int getItrakScanCooldownSeconds() {
+        return Math.max(0, Math.min(86400, config.getInt("itrak.scan-cooldown-seconds", 300)));
+    }
+
+    /** Перезарядка дальнего локатора, секунд (0 — без КД). */
+    public int getItrakScanCooldownLongSeconds() {
+        return Math.max(0, Math.min(86400, config.getInt("itrak.scan-cooldown-long-seconds", 420)));
     }
 
     public double getItrakTakeRadius() {

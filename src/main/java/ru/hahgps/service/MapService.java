@@ -35,10 +35,24 @@ public class MapService {
     private final HahGpsPlugin plugin;
     private final TerrainRenderer terrainRenderer;
 
+    /** Ширина полотна карты в пикселях (ванильная карта 128×128). */
+    public static final int MAP_SIZE = 128;
+
+    /** Не чаще этой паузы полотно карты перерисовывается при движении мышью. */
+    private static final long PAN_RENDER_INTERVAL_MS = 300L;
+
+    /** Порядок масштабов: от самого крупного к самому мелкому. */
+    private static final MapView.Scale[] SCALES = {
+            MapView.Scale.CLOSEST, MapView.Scale.CLOSE, MapView.Scale.NORMAL,
+            MapView.Scale.FAR, MapView.Scale.FARTHEST};
+
     private final Map<UUID, MapView> playerMaps = new ConcurrentHashMap<>();
     private final Map<UUID, BufferedImage> renderedImages = new ConcurrentHashMap<>();
     private final Map<UUID, MapRenderer> renderers = new ConcurrentHashMap<>();
     private final Map<UUID, AtomicLong> renderTokens = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> lastPanRender = new ConcurrentHashMap<>();
+    /** Накопленный сдвиг, ещё не перенесённый на картинку: {dx, dz} в блоках. */
+    private final Map<UUID, int[]> pendingPan = new ConcurrentHashMap<>();
 
     /**
      * Пустая картинка для карты до первого рендера.
@@ -70,6 +84,182 @@ public class MapService {
         player.sendMap(view);
         renderAsync(player, view);
         giveMapItem(player, view);
+    }
+
+    /** Показать уже существующую карту, не сбрасывая её центр на игроке. */
+    public void showMap(Player player) {
+        MapView view = playerMaps.get(player.getUniqueId());
+        if (view == null || view.getWorld() == null
+                || !ru.hahgps.util.LocationUtil.sameWorld(view.getWorld(), player.getWorld())) {
+            openMap(player);
+            return;
+        }
+        giveMapItem(player, view);
+        player.sendMap(view);
+        renderAsync(player, view);
+    }
+
+    /** Масштаб карты игрока (null — карта ещё не открывалась). */
+    public MapView.Scale scaleOf(Player player) {
+        MapView view = playerMaps.get(player.getUniqueId());
+        return view == null ? null : view.getScale();
+    }
+
+    /** Блоков на пиксель у текущей карты игрока. */
+    public double blocksPerPixel(Player player) {
+        MapView.Scale scale = scaleOf(player);
+        return TerrainRenderer.blocksPerPixel(scale == null ? MapView.Scale.CLOSE : scale);
+    }
+
+    /**
+     * Карта в главной руке. Именно там она разворачивается на весь экран;
+     * мини-карта в левой руке мышью не управляется.
+     */
+    public boolean isHoldingMapMainHand(Player player) {
+        if (player == null) {
+            return false;
+        }
+        MapView view = playerMaps.get(player.getUniqueId());
+        if (view == null) {
+            return false;
+        }
+        return matchesMap(player.getInventory().getItemInMainHand(), view.getId());
+    }
+
+    /** Этот предмет — карта, выданная HahGps (даже если её ещё не открывали). */
+    public static boolean isGpsMap(ItemStack item) {
+        if (item == null || item.getType() != Material.FILLED_MAP || !item.hasItemMeta()) {
+            return false;
+        }
+        if (!(item.getItemMeta() instanceof MapMeta meta) || !meta.hasMapId()) {
+            return false;
+        }
+        Integer model = meta.getCustomModelData();
+        return model != null && model == ru.hahgps.item.ItemIds.MAP_ITEM;
+    }
+
+    private static boolean matchesMap(ItemStack item, int mapId) {
+        if (item == null || item.getType() != Material.FILLED_MAP || !item.hasItemMeta()) {
+            return false;
+        }
+        if (!(item.getItemMeta() instanceof MapMeta meta) || !meta.hasMapId()) {
+            return false;
+        }
+        return meta.getMapId() == mapId;
+    }
+
+    /**
+     * Сдвиг полотна карты (панорама мышью): центр карты едет за курсором,
+     * картинка сразу сдвигается, а точная перерисовка приходит из фонового
+     * рендера. Не чаще {@link #PAN_RENDER_INTERVAL_MS}, иначе на каждое
+     * движение мыши уходил бы пакет карты на 16 КБ.
+     */
+    public void pan(Player player, double dx, double dz) {
+        if (player == null || !plugin.isEnabled()) {
+            return;
+        }
+        MapView view = playerMaps.get(player.getUniqueId());
+        if (view == null) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        Long last = lastPanRender.get(player.getUniqueId());
+        boolean render = last == null || now - last >= PAN_RENDER_INTERVAL_MS;
+        if (render) {
+            lastPanRender.put(player.getUniqueId(), now);
+        }
+        int targetX = clampCenter(view.getCenterX() + (int) Math.round(dx));
+        int targetZ = clampCenter(view.getCenterZ() + (int) Math.round(dz));
+        int stepX = targetX - view.getCenterX();
+        int stepZ = targetZ - view.getCenterZ();
+        if (stepX == 0 && stepZ == 0) {
+            return;
+        }
+        view.setCenterX(targetX);
+        view.setCenterZ(targetZ);
+        int[] pending = pendingPan.computeIfAbsent(player.getUniqueId(), k -> new int[2]);
+        pending[0] += stepX;
+        pending[1] += stepZ;
+        if (!render) {
+            return;
+        }
+        int dxTotal = pending[0];
+        int dzTotal = pending[1];
+        pending[0] = 0;
+        pending[1] = 0;
+        shiftImage(player, view, dxTotal, dzTotal);
+        player.sendMap(view);
+        renderAsync(player, view);
+    }
+
+    /**
+     * Сдвиг полотна за поворот мыши: {dx, dz} в блоках.
+     *
+     * За 180° поворота карта проезжает половину своей ширины. Знак обратный:
+     * карту «тянут» за курсором, поэтому взгляд вправо уводит центр на запад.
+     */
+    public static double[] panDelta(float yawDelta, float pitchDelta,
+                                    double blocksPerPixel, double sensitivity) {
+        double perDegree = MAP_SIZE * blocksPerPixel / 360.0 * sensitivity;
+        return new double[]{-yawDelta * perDegree, -pitchDelta * perDegree};
+    }
+
+    /** Сдвиг на кнопку меню: без паузы, игрок ждёт результат сразу. */
+    public void panStep(Player player, double dx, double dz) {
+        lastPanRender.remove(player.getUniqueId());
+        pan(player, dx, dz);
+    }
+
+    /** Сдвинуть уже нарисованную картинку — панорама отзывается мгновенно. */
+    private void shiftImage(Player player, MapView view, int blockDx, int blockDz) {
+        BufferedImage source = renderedImages.get(player.getUniqueId());
+        if (source == null) {
+            return;
+        }
+        double bpp = TerrainRenderer.blocksPerPixel(view.getScale());
+        int px = (int) Math.round(blockDx / bpp);
+        int pz = (int) Math.round(blockDz / bpp);
+        if (px == 0 && pz == 0) {
+            return;
+        }
+        BufferedImage shifted = new BufferedImage(MAP_SIZE, MAP_SIZE, BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D graphics = shifted.createGraphics();
+        graphics.setColor(new java.awt.Color(0x202020));
+        graphics.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+        graphics.drawImage(source, -px, -pz, null);
+        graphics.dispose();
+        renderedImages.put(player.getUniqueId(), shifted);
+    }
+
+    /** Зум: +1 — ближе, −1 — дальше. Возвращает новый масштаб. */
+    public MapView.Scale zoom(Player player, int direction) {
+        MapView view = playerMaps.get(player.getUniqueId());
+        if (view == null) {
+            openMap(player);
+            view = playerMaps.get(player.getUniqueId());
+        }
+        if (view == null) {
+            return null;
+        }
+        int index = 0;
+        for (int i = 0; i < SCALES.length; i++) {
+            if (SCALES[i] == view.getScale()) {
+                index = i;
+                break;
+            }
+        }
+        int next = Math.max(0, Math.min(SCALES.length - 1, index + direction));
+        if (next != index) {
+            view.setScale(SCALES[next]);
+        }
+        player.sendMap(view);
+        renderAsync(player, view);
+        giveMapItem(player, view);
+        return view.getScale();
+    }
+
+    private static int clampCenter(int value) {
+        return Math.max(-29_999_984, Math.min(29_999_984, value));
     }
 
     public void recenter(Player player) {
@@ -216,8 +406,11 @@ public class MapService {
         List<Location> finalRoute = route;
         List<Location> finalOthers = others;
 
+        WorldMapCache cache = config.isMapWorldCache() ? plugin.getWorldMapCache() : null;
+        TerrainRenderer.CachedColors cached = cache == null ? null
+                : (cachedWorld, x, z) -> cache.colorAt(cachedWorld, x, z);
         terrainRenderer.render(world, centerX, centerZ, scale, finalPois, finalRoute, playerLoc,
-                        finalOthers, cancelled)
+                        finalOthers, cancelled, cached)
                 .thenAccept(image -> {
                     if (image != null) {
                         applyRenderedImage(id, token, view, player, image);
@@ -285,6 +478,8 @@ public class MapService {
         }
         renderedImages.remove(id);
         renderTokens.remove(id);
+        lastPanRender.remove(id);
+        pendingPan.remove(id);
     }
 
     public void stop() {
@@ -298,6 +493,8 @@ public class MapService {
         renderers.clear();
         renderedImages.clear();
         renderTokens.clear();
+        lastPanRender.clear();
+        pendingPan.clear();
         terrainRenderer.shutdown();
     }
 
