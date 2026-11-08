@@ -377,6 +377,7 @@ public class HahGpsPlugin extends JavaPlugin {
     private void initUpdater() {
 
         UpdaterService.ensureTokenFile(this);
+        HotSwap.prime();
         updater = new UpdaterService(this);
         updater.start();
 

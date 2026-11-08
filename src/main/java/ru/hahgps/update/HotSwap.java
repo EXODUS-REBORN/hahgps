@@ -25,6 +25,7 @@ public final class HotSwap {
     private static volatile String lastResult = "";
     private static volatile boolean running;
     private static volatile boolean queued;
+    private static volatile boolean closedWarned;
     private static final String FAILED = "hot-failed.txt";
     private static final String STATE = "hot-last.txt";
     private static final long STATE_FRESH_MS = 5L * 60L * 1000L;
@@ -37,10 +38,57 @@ public final class HotSwap {
     public static void reset() {
         queued = false;
         running = false;
+        closedWarned = false;
     }
     public static String lastResult() {
         return lastResult;
     }
+
+    /**
+     * Прогрев всего, что нужно подмене после того, как загрузчик закроется.
+     *
+     * <p>Зовётся при включении плагина, пока jar ещё читается: {@code Result} и
+     * {@code LoaderState} — отдельные класс-файлы, и без прогрева первое же
+     * обращение к ним в мёртвом загрузчике даёт «zip file closed» вместо
+     * внятного сообщения.
+     */
+    public static void prime() {
+        Result probe = new Result(false, "", "");
+        probe.applied();
+        probe.version();
+        probe.reason();
+        LoaderState.zipClosed(null);
+    }
+
+    /**
+     * Текущая копия уже выгружена сервером: загрузчик закрыт, подменить нечего.
+     * Обновление встанет при перезапуске, поэтому версия отмечается как
+     * неудавшаяся — иначе каждая проверка по кругу пишет одно и то же.
+     */
+    private static Result closedLoader(HahGpsPlugin plugin, Path staged, Consumer<String> feedback) {
+        String version = versionFromJarName(staged);
+        String reason = "загрузчик текущей копии закрыт — нужен перезапуск сервера";
+        Path updateDir = plugin.getDataFolder().toPath().resolve("update");
+        boolean fresh = !version.equals(failedVersion(updateDir));
+        if (fresh) {
+            markFailed(updateDir, version);
+            writeState(updateDir, version, false, reason);
+        }
+        lastResult = "не удалось: " + reason;
+        if (fresh || !closedWarned) {
+            closedWarned = true;
+            log(Level.SEVERE, "Горячая подмена невозможна: загрузчик классов текущей копии закрыт "
+                    + "(сервер выгрузил плагин и поднял тот же экземпляр — так бывает после reload "
+                    + "или неудачной подмены). Версия " + version + " применится при перезапуске: "
+                    + "в plugins/ должен остаться один jar HahGps-" + version + ".jar.", null);
+        }
+        if (fresh) {
+            reply(feedback, "Горячее обновление невозможно: сервер выгрузил текущую копию плагина — "
+                    + "нужен перезапуск. Версия " + version + " применится при старте.");
+        }
+        return new Result(false, version, reason);
+    }
+
     public static Result apply(HahGpsPlugin plugin, Path staged, boolean force, Consumer<String> feedback) {
         return apply(plugin, staged, force, feedback, false);
     }
@@ -52,6 +100,9 @@ public final class HotSwap {
         }
         if (plugin == null || staged == null) {
             return new Result(false, "", "нечего ставить");
+        }
+        if (LoaderState.closed(plugin.getClass().getClassLoader())) {
+            return closedLoader(plugin, staged, feedback);
         }
         if (!deferred) {
             queued = true;
@@ -99,6 +150,10 @@ public final class HotSwap {
 
     private static Result doApply(HahGpsPlugin plugin, Path staged, boolean force, Consumer<String> feedback) {
         String version = versionFromJarName(staged);
+        prime();
+        if (LoaderState.closed(plugin.getClass().getClassLoader())) {
+            return closedLoader(plugin, staged, feedback);
+        }
 
         String textStart = "Горячее обновление: ставлю " + version + " на ходу…";
         String textMissing = "Файл обновления не найден: " + staged.getFileName();
@@ -220,6 +275,19 @@ public final class HotSwap {
         if (!loaded.isEnabled()) {
             return rollback(oldJar, target, updateDir, version, "новая версия не включилась",
                     rollbackTemplate, loaded);
+        }
+        if (loaded == plugin
+                || loaded.getClass().getClassLoader() == plugin.getClass().getClassLoader()
+                || LoaderState.closed(loaded.getClass().getClassLoader())) {
+            retire(target);
+            markFailed(updateDir, version);
+            writeState(updateDir, version, false, "сервер вернул прежнюю копию");
+            String reason = "сервер поднял прежнюю копию вместо новой";
+            log(Level.SEVERE, "Горячая подмена: " + reason
+                    + " — обновление применится при перезапуске сервера.", null);
+            reply(feedback, "Горячее обновление не поднялось: сервер вернул прежнюю копию — "
+                    + "нужен перезапуск. Версия " + version + " применится при старте.");
+            return new Result(false, version, reason);
         }
 
         // Новая версия работает: только теперь закрываем classloader прежней.

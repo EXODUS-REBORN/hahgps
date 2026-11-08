@@ -58,6 +58,7 @@ public final class UpdaterService {
     private volatile String tokenSource = "";
     private volatile String loggedError = "";
     private volatile String announcedVersion = "";
+    private volatile String taskFailure = "";
     private volatile boolean remindedPlaceholder;
     public UpdaterService(HahGpsPlugin plugin) {
         this.plugin = plugin;
@@ -845,10 +846,33 @@ public final class UpdaterService {
     private void runOnMain(Runnable action) {
         if (!plugin.isEnabled()) return;
         try {
-            Bukkit.getScheduler().runTask(plugin, action);
-        } catch (Throwable ignored) {
-
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                try {
+                    action.run();
+                } catch (Throwable t) {
+                    taskFailed(t);
+                }
+            });
+        } catch (Throwable t) {
+            taskFailed(t);
         }
+    }
+
+    /**
+     * Задача не выполнилась — почти всегда это закрытый загрузчик: сервер
+     * выгрузил плагин и поднял тот же экземпляр, поэтому любой новый класс
+     * падает с «zip file closed». Пишем один раз, а не стектрейс на каждую
+     * проверку; сама подмена в этом состоянии честно отказывает
+     * ({@code HotSwap.closedLoader}).
+     */
+    private void taskFailed(Throwable error) {
+        String message = error == null ? "" : String.valueOf(error.getMessage());
+        if (message.isBlank() && error != null) message = error.getClass().getSimpleName();
+        if (message.equals(taskFailure)) return;
+        taskFailure = message;
+        plugin.getLogger().warning("Обновление: задача не выполнилась (" + message + ") — "
+                + "похоже, сервер закрыл загрузчик плагина: горячая подмена невозможна, "
+                + "нужен перезапуск сервера.");
     }
 
     private static String str(Object value) {
