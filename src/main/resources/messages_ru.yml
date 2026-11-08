@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Версия схемы палитры: при несовпадении файл заменяется эталоном (старый — в .bak)
-palette-version: 7
+palette-version: 9
 
 no-permission: "<#3f86ff>✖ У вас нет прав для выполнения этой команды.</#3f86ff>"
 player-only: "<#3f86ff>✖ Эта команда доступна только игрокам.</#3f86ff>"
@@ -109,7 +109,13 @@ search-no-results: "<#3f86ff>✖ По запросу <white><bold>{query}</bold>
 search-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff> <dark_gray>|</dark_gray> <gray>ищут:</gray> <#8fc6ff>{players}</#8fc6ff>"
 
 # --- Карта ---
-map-open-hint: "<#66aaff>→</#66aaff> <gray>Карта в руке: двигай её мышью. ПКМ — центр на себе, Shift+ПКМ — меню карты.</gray>"
+map-open-hint: "<#66aaff>→</#66aaff> <gray>Карта в руке идёт за тобой: Shift+мышь — сдвинуть, ПКМ — центр, Shift+ПКМ — меню.</gray>"
+map-item-name: "Карта"
+map-item-lore: "Карта местности: следует за тобой и показывает трекеры"
+map-item-hint: "ПКМ — центр на себе, Shift+ПКМ — меню"
+map-follow-on: "<#8fe9f5>✔</#8fe9f5> <gray>Карта снова следует за тобой.</gray>"
+map-follow-off: "<#66aaff>→</#66aaff> <gray>Карта закреплена — Shift+мышью двигай, ПКМ вернёт центр.</gray>"
+map-pan-pinned: "<#66aaff>→</#66aaff> <gray>Карта закреплена здесь: ПКМ вернёт её на тебя.</gray>"
 map-centered: "<#8fe9f5>✔</#8fe9f5> <gray>Карта снова в центре на тебе.</gray>"
 map-zoom: "<#8fe9f5>✔</#8fe9f5> <gray>Масштаб карты:</gray> <white><bold>{scale}</bold></white>"
 map-scale-1: "1 блок/пиксель"
@@ -171,9 +177,9 @@ itrak-place-failed: "<#3f86ff>✖ Не удалось установить тр�
 itrak-placed: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>установлен:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-placed-sunk: "<#66aaff>→</#66aaff> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>утонул и потерял сигнал — подбери его:</gray> <white>/gps itrak take {code}</white>"
 itrak-placed-submerged: "<#66aaff>→</#66aaff> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>утоплен и лежит на дне — водонепроницаемый, сигнал сохраняется. Подобрать:</gray> <white>/gps itrak take {code}</white>"
-itrak-attached: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>прицеплен к</gray> <#8fc6ff>{entity}</#8fc6ff>"
+itrak-attached: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>прицеплен:</gray> <#8fc6ff>{entity}</#8fc6ff>"
 itrak-attach-players-off: "<#3f86ff>✖ Привязка трекеров к игрокам выключена в конфиге.</#3f86ff>"
-itrak-attach-unsupported: "<#3f86ff>✖ Прицепить можно только к существу или транспорту.</#3f86ff>"
+itrak-attach-unsupported: "<#3f86ff>✖ К этому существу трекер не прицепить.</#3f86ff>"
 itrak-exists: "<#3f86ff>✖ Этот трекер уже установлен.</#3f86ff>"
 itrak-code-refreshed: "<#66aaff>→</#66aaff> <gray>Код трекера обновлён на</gray> <#8fc6ff>{code}</#8fc6ff> <gray>— старый код уже занят другим трекером.</gray>"
 itrak-limit: "<#3f86ff>✖ Лимит трекеров:</#3f86ff> <white><bold>{max}</bold></white>"
@@ -194,6 +200,9 @@ itrak-find-header: "<bold><gradient:#2464c8:#8fe9f5>═══ МОИ ТРЕКЕ�
 itrak-find-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>#{id}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff>"
 itrak-find-map-button: "  <click:run_command:'/gps itrak find {code}'><#66aaff>[показать на карте]</#66aaff></click>"
 itrak-find-focused: "<#8fe9f5>✔</#8fe9f5> <gray>Карта наведена на трекер</gray> <white><bold>{name}</bold></white> <dark_gray>·</dark_gray> <gray>{status}</gray> <dark_gray>·</dark_gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
+itrak-find-far: "<#8fe9f5>✔</#8fe9f5> <gray>Карта наведена на район трекера</gray> <white><bold>{name}</bold></white> <dark_gray>·</dark_gray> <gray>{status}</gray> <dark_gray>·</dark_gray> <#8fc6ff>{region}</#8fc6ff>"
+itrak-find-far-entry: "  <#66aaff>→</#66aaff> <gray>{region}</gray> <dark_gray>·</dark_gray> <gray>{last}</gray>"
+itrak-watch-far: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{region}</#8fc6ff> <dark_gray>|</dark_gray> <gray>{last}</gray>"
 itrak-find-other-world: "<#3f86ff>✖ Трекер в другом мире:</#3f86ff> <#8fc6ff>{world}</#8fc6ff> <gray>— карту там не открыть.</gray>"
 itrak-scan-header: "<bold><gradient:#2464c8:#8fe9f5>═══ ЛОКАТОР ({radius}): ТРЕКЕРЫ ({count}) ═══</gradient></bold>"
 itrak-scan-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff>"
@@ -204,7 +213,12 @@ itrak-scan-self: "<#66aaff>→</#66aaff> <gray>Этот маячок на теб
 itrak-locator-cooldown: "<#3f86ff>✖ Локатор перезаряжается:</#3f86ff> <white><bold>{time}</bold></white> <gray>— подожди немного.</gray>"
 itrak-scan-highlight: "<#66aaff>→</#66aaff> <gray>Подсвечено трекеров:</gray> <white>{count}</white> <gray>на</gray> <white>{seconds}</white> <gray>с</gray>"
 itrak-scan-empty: "<#3f86ff>✖ В радиусе <white><bold>{radius}</bold></white> блоков трекеров нет.</#3f86ff>"
+itrak-scan-empty-free: "<#66aaff>→</#66aaff> <gray>Попытка не потрачена — перезарядка не началась.</gray>"
+itrak-scan-attempts: "<#66aaff>→</#66aaff> <gray>Осталось попыток:</gray> <white><bold>{left}</bold></white> <gray>из</gray> <white>{max}</white>"
+itrak-locator-discharged: "<#66aaff>→</#66aaff> <gray>Попытки кончились — локатор перезаряжается</gray> <white><bold>{time}</bold></white>"
+itrak-locator-updated: "<#66aaff>→</#66aaff> <gray>Локатор обновлён: радиус {radius} блоков.</gray>"
 itrak-route-started: "<#8fe9f5>✔</#8fe9f5> <gray>Маршрут к трекеру</gray> <white><bold>{name}</bold></white> <dark_gray>начат · осталось</dark_gray> <#8fc6ff><bold>{distance}</bold></#8fc6ff>"
+itrak-route-far: "<#66aaff>→</#66aaff> <gray>Трекер вне зоны связи — маршрут ведёт в район:</gray> <#8fc6ff>{region}</#8fc6ff> <dark_gray>·</dark_gray> <gray>{last}</gray>"
 itrak-route-live: "<#66aaff>→</#66aaff> <gray>Трекер в движении — маршрут обновляется в реальном времени.</gray>"
 itrak-watch-on: "<#8fe9f5>✔</#8fe9f5> <gray>Следим за трекером</gray> <white><bold>{name}</bold></white>"
 itrak-watch-off: "<#8fe9f5>✔</#8fe9f5> <gray>Больше не следим за</gray> <white><bold>{name}</bold></white>"
@@ -222,7 +236,8 @@ itrak-info: |
   <gray>Владелец:</gray> <white>{owner}</white>
   <gray>Состояние:</gray> <#8fc6ff>{status}</#8fc6ff> <dark_gray>·</dark_gray> <gray>{state}</gray>
   <gray>Мир:</gray> <white>{world}</white>
-  <gray>Координаты:</gray> <#8fc6ff><bold>{x}, {y}, {z}</bold></#8fc6ff>
+  <gray>Координаты:</gray> <#8fc6ff><bold>{coords}</bold></#8fc6ff>
+  <gray>Сигнал:</gray> <#8fc6ff>{signal}</#8fc6ff>
   <gray>До тебя:</gray> <#8fc6ff><bold>{distance}</bold></#8fc6ff>
   <gray>Неподвижен:</gray> <#8fc6ff>{time}</#8fc6ff>
 itrak-color-blue: "синий"
@@ -236,6 +251,14 @@ itrak-color-white: "белый"
 itrak-type-regular: "обычный"
 itrak-type-waterproof: "водонепроницаемый"
 itrak-status-live: "в сети"
+itrak-status-out-of-range: "вне зоны"
+itrak-state-unknown: "нет точных данных"
+itrak-region: "район {x1}..{x2}, {z1}..{z2}"
+itrak-last-known: "{x}, {y}, {z} · {ago} назад"
+itrak-last-known-none: "последних данных нет"
+itrak-signal-ok: "в зоне связи, координаты точные"
+itrak-signal-far: "вне зоны связи · последнее: {last}"
+itrak-signal-far-none: "вне зоны связи · последних данных нет"
 itrak-status-no-signal: "нет сигнала"
 itrak-status-offline: "офлайн"
 itrak-status-sunk: "затонул"
@@ -262,7 +285,7 @@ itrak-thrown: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{na
 itrak-thrown-failed: "<#3f86ff>✖ Не удалось бросить трекер.</#3f86ff>"
 itrak-tracker-fell: "<#8fe9f5>✔</#8fe9f5> <gray>Блок сломан — трекер</gray> <white><bold>{name}</bold></white> <gray>выпал.</gray>"
 itrak-tracker-fell-owner: "<#66aaff>→</#66aaff> <gray>Твой трекер</gray> <white><bold>{name}</bold></white> <gray>выпал: сломали блок, на котором он держался.</gray>"
-itrak-tracker-fell-entity-owner: "<#66aaff>→</#66aaff> <gray>Твой трекер</gray> <white><bold>{name}</bold></white> <gray>слетел с</gray> <#8fc6ff>{entity}</#8fc6ff> <gray>и выпал:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
+itrak-tracker-fell-entity-owner: "<#66aaff>→</#66aaff> <gray>Твой трекер</gray> <white><bold>{name}</bold></white> <gray>слетел и выпал:</gray> <#8fc6ff>{entity}</#8fc6ff> <dark_gray>·</dark_gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-terminal-placed: "<#8fe9f5>✔</#8fe9f5> <gray>Терминал iTrak установлен:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-terminal-broken: "<#8fe9f5>✔</#8fe9f5> <gray>Терминал iTrak снят и выпал предметом.</gray>"
 itrak-terminal-occupied: "<#3f86ff>✖ Здесь уже что-то стоит — выбери свободный блок.</#3f86ff>"
@@ -356,6 +379,15 @@ gui:
   lore-map-pan: "<gray><italic>Сдвинуть карту</italic></gray>"
   lore-map-zoom: "<gray>Сейчас: <white>{scale}</white></gray>"
   lore-map-mouse: "<gray><italic>В руке карту двигает мышь</italic></gray>"
+  map-info: "<#8fc6ff>О карте</#8fc6ff>"
+  map-follow: "<#8fc6ff>Следовать за мной</#8fc6ff>"
+  map-center: "<#8fc6ff>Центр на мне</#8fc6ff>"
+  lore-map-info-scale: "<gray>Масштаб: <white>{scale}</white></gray>"
+  lore-map-info-center: "<gray>Центр: <#8fc6ff>{x}, {z}</#8fc6ff></gray>"
+  lore-map-info-follow-on: "<gray>Следование: <#8fe9f5>включено</#8fe9f5></gray>"
+  lore-map-info-follow-off: "<gray>Следование: <#66aaff>выключено</#66aaff></gray>"
+  lore-map-follow: "<gray><italic>Карта сама едет за игроком</italic></gray>"
+  lore-map-center: "<gray><italic>Вернуть карту на игрока</italic></gray>"
   lore-info: "<gray><italic>Подробная информация</italic></gray>"
   lore-goto: "<gray><italic>Построить маршрут</italic></gray>"
   lore-rate: "<gray><italic>Оценить (1-10)</italic></gray>"
@@ -393,6 +425,8 @@ gui:
   lore-itrak-code: "<gray>Код: <#8fc6ff>{code}</#8fc6ff></gray>"
   lore-itrak-time: "<gray>Стоит: <#8fc6ff>{time}</#8fc6ff></gray>"
   lore-itrak-live: "<gray><italic>Обновляется в реальном времени</italic></gray>"
+  lore-itrak-region: "<gray>Район: <#8fc6ff>{region}</#8fc6ff></gray>"
+  lore-itrak-last-known: "<gray>Последнее: <#8fc6ff>{last}</#8fc6ff></gray>"
   lore-itrak-none: "<gray><italic>Прицепи iTrak к поверхности</italic></gray>"
   lore-itrak-scan: "<gray><italic>Найти трекеры поблизости</italic></gray>"
   lore-itrak-find: "<gray><italic>Открыть карту со своими маячками</italic></gray>"

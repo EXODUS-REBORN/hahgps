@@ -43,8 +43,12 @@ public final class ItemFactory {
     /** Shift-бросок: попав в воду, трекер тонет, а не остаётся на поверхности. */
     public static final NamespacedKey SINK = NamespacedKey.fromString("hahgps:itrak_sink");
 
-    /** Граница «дальнего» локатора: от 15 блоков у него отдельный ID модели. */
-    public static final int LONG_LOCATOR_RADIUS = 15;
+    /** Граница «дальнего» локатора: от 30 блоков у него отдельный ID модели. */
+    public static final int LONG_LOCATOR_RADIUS = 30;
+
+    /** Радиусы локаторов до 1.3.1 — для одноразового обновления предметов. */
+    public static final int LEGACY_LOCATOR_RADIUS = 10;
+    public static final int LEGACY_LONG_LOCATOR_RADIUS = 15;
 
     /**
      * Материал локатора. Намеренно не {@link Material#COMPASS}: компас — это
@@ -119,8 +123,8 @@ public final class ItemFactory {
      * Локатор с конкретным радиусом поиска.
      *
      * Радиус живёт в PDC, а не только в подписи: у сервера может быть несколько
-     * версий локатора (10 и 15 блоков), и сканирование должно брать радиус из
-     * предмета в руке, а не из общего конфига.
+     * версий локатора (обычный и дальний), и сканирование должно брать радиус
+     * из предмета в руке, а не из общего конфига.
      */
     public static ItemStack locatorItem(int radius) {
         int value = normalizeLocatorRadius(radius);
@@ -166,7 +170,7 @@ public final class ItemFactory {
         return Math.min(1000, radius);
     }
 
-    /** Радиус локатора по умолчанию: из конфига, иначе 10. */
+    /** Радиус локатора по умолчанию: из конфига, иначе 20. */
     public static int defaultLocatorRadius() {
         try {
             HahGpsPlugin plugin = HahGpsPlugin.getInstance();
@@ -175,7 +179,7 @@ public final class ItemFactory {
             }
         } catch (Throwable ignored) {
         }
-        return 10;
+        return 20;
     }
 
     public static int normalizeLocatorRadius(int radius) {
@@ -183,6 +187,52 @@ public final class ItemFactory {
             return defaultLocatorRadius();
         }
         return Math.max(1, Math.min(1000, radius));
+    }
+
+    /**
+     * Обновить локатор в руке до актуальной версии. Старый компас, предмет без
+     * радиуса и локаторы прежних радиусов (10 и 15 блоков) заменяются на
+     * нынешние (20 и 30), иначе после обновления плагина в инвентарях
+     * оставались бы предметы со старым радиусом.
+     *
+     * @return новый предмет или null, если менять нечего
+     */
+    public static ItemStack upgradedLocator(ItemStack item, int normalRadius, int longRadius) {
+        if (item == null || item.getType().isAir() || !isLocator(item)) {
+            return null;
+        }
+        if (isLegacyLocator(item)) {
+            return locatorItem(normalRadius);
+        }
+        int radius = readLocatorRadius(item);
+        if (radius <= 0) {
+            return locatorItem(normalRadius);
+        }
+        if (radius == LEGACY_LOCATOR_RADIUS && normalRadius != LEGACY_LOCATOR_RADIUS) {
+            return locatorItem(normalRadius);
+        }
+        if (radius == LEGACY_LONG_LOCATOR_RADIUS && longRadius != LEGACY_LONG_LOCATOR_RADIUS) {
+            return locatorItem(longRadius);
+        }
+        return null;
+    }
+
+    /**
+     * Актуальный предмет-трекер: материал мог устареть (синий трекер раньше
+     * был компасом восстановления, как локатор). Данные в PDC те же.
+     *
+     * @return новый предмет или null, если материал уже правильный
+     */
+    public static ItemStack healedTrackerItem(ItemStack item) {
+        TrackerSpec spec = readTracker(item);
+        if (spec == null) {
+            return null;
+        }
+        TrackerColor color = spec.color() == null ? TrackerColor.BLUE : spec.color();
+        if (item.getType() == color.getMaterial()) {
+            return null;
+        }
+        return trackerItem(spec);
     }
 
     /**

@@ -10,6 +10,7 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Snowball;
@@ -24,6 +25,7 @@ import ru.hahgps.item.TrackerCodes;
 import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TrackerColor;
 import ru.hahgps.storage.DataService;
+import ru.hahgps.util.EntityNames;
 import ru.hahgps.util.LocationUtil;
 
 import java.util.ArrayList;
@@ -65,6 +67,28 @@ public class TrackerService {
     public record Nearby(Tracker tracker, double distance) {
     }
 
+    /** Последняя точка, которую игрок получил, пока трекер был в зоне связи. */
+    private record LastKnown(String world, double x, double y, double z, long at) {
+        Location toLocation() {
+            World loaded = world == null ? null : Bukkit.getWorld(world);
+            return loaded == null ? null : new Location(loaded, x, y, z);
+        }
+    }
+
+    /**
+     * Что игрок видит про трекер: {@code exact} — точное место (в зоне связи),
+     * иначе только район и последняя известная отметка.
+     */
+    public record Signal(Location exact, Location lastKnown, long lastKnownAt, String region) {
+        public boolean inRange() {
+            return exact != null;
+        }
+    }
+
+    /** Результат удачного скана: сколько попыток осталось и началась ли перезарядка. */
+    public record ScanConsumption(int left, int max, boolean cooldownStarted) {
+    }
+
     private final HahGpsPlugin plugin;
     private final DataService data;
 
@@ -77,6 +101,14 @@ public class TrackerService {
      * только декорацией.
      */
     private final Map<UUID, Long> scanCooldownEnd = new ConcurrentHashMap<>();
+    /** Сколько удачных сканирований у игрока осталось до перезарядки. */
+    private final Map<UUID, Integer> scanAttempts = new ConcurrentHashMap<>();
+    /**
+     * Последнее точное место трекера, которое видел конкретный игрок, пока
+     * был в зоне связи. Дальше этого расстояния точные координаты не
+     * показываются — только район и эта отметка.
+     */
+    private final Map<UUID, Map<Integer, LastKnown>> lastKnown = new ConcurrentHashMap<>();
     private final Set<Integer> stationaryNotified = ConcurrentHashMap.newKeySet();
     private final Set<Integer> dirty = ConcurrentHashMap.newKeySet();
     /** Коды, которые прямо сейчас вставляются в БД: двойной клик не создаст два трекера. */
@@ -106,6 +138,7 @@ public class TrackerService {
         trackers.clear();
         lostSince.clear();
         placingCodes.clear();
+        lastKnown.clear();
         Set<String> seenCodes = new HashSet<>();
         if (loaded != null) {
             for (Tracker tracker : loaded) {
@@ -202,6 +235,8 @@ public class TrackerService {
         watchedByPlayer.clear();
         lastWatchMessage.clear();
         scanCooldownEnd.clear();
+        scanAttempts.clear();
+        lastKnown.clear();
         stationaryNotified.clear();
         dirty.clear();
         lostSince.clear();
@@ -247,6 +282,7 @@ public class TrackerService {
             spawnParticles();
         }
         spawnHighlights(now);
+        refreshSignalSnapshots();
         pushWatchMessages(now);
         saveDirty(now);
     }
@@ -322,6 +358,12 @@ public class TrackerService {
         }
         Entity entity = Bukkit.getEntity(tracker.getEntityUuid());
         if (entity == null || !entity.isValid() || entity.isDead()) {
+            // Сущность в выгруженном чанке тоже не находится: это не потеря
+            // привязки. Иначе лошадь в загоне без игроков «теряла» трекер через
+            // detach-after-minutes, и он выпадал предметом.
+            if (entity == null && !isChunkLoadedAt(tracker)) {
+                return;
+            }
             if (tracker.hasSignal()) {
                 tracker.setSignal(false);
                 dirty.add(tracker.getId());
@@ -360,9 +402,17 @@ public class TrackerService {
         }
     }
 
+    /** Загружен ли чанк, где трекер видели в последний раз. */
+    private static boolean isChunkLoadedAt(Tracker tracker) {
+        World world = tracker.getWorld() == null ? null : Bukkit.getWorld(tracker.getWorld());
+        if (world == null) {
+            return false;
+        }
+        return world.isChunkLoaded(floor(tracker.getX()) >> 4, floor(tracker.getZ()) >> 4);
+    }
+
     /** Носитель трекера — игрок. Тип определяется один раз и кэшируется в трекере. */
-    private boolean isPlayerCarrier(Tracker tracker) {
-        if (!tracker.isAttached()) {
+    private boolean isPlayerCarrier(Tracker tracker) {        if (!tracker.isAttached()) {
             return false;
         }
         if (!tracker.isCarrierTypeKnown()) {
@@ -527,19 +577,31 @@ public class TrackerService {
                     entry.getValue().remove(id);
                     continue;
                 }
-                Location location = tracker.getLocation();
-                double distance = location == null ? Double.MAX_VALUE
-                        : LocationUtil.distance(player.getLocation(), location);
-                player.sendMessage(messages.getPrefixed("itrak-watch-update",
-                        "name", tracker.getDisplayName(),
-                        "code", tracker.getCode(),
-                        "x", formatCoord(tracker.getX()),
-                        "y", formatCoord(tracker.getY()),
-                        "z", formatCoord(tracker.getZ()),
-                        "world", tracker.getWorld() == null ? "?" : tracker.getWorld(),
-                        "distance", LocationUtil.formatDistance(distance),
-                        "status", statusText(tracker),
-                        "time", formatDuration(tracker.stationaryMillis(now))));
+                Signal signal = signal(player, tracker);
+                if (signal.inRange()) {
+                    Location location = signal.exact();
+                    double distance = LocationUtil.distance(player.getLocation(), location);
+                    player.sendMessage(messages.getPrefixed("itrak-watch-update",
+                            "name", tracker.getDisplayName(),
+                            "code", tracker.getCode(),
+                            "x", formatCoord(location.getX()),
+                            "y", formatCoord(location.getY()),
+                            "z", formatCoord(location.getZ()),
+                            "world", tracker.getWorld() == null ? "?" : tracker.getWorld(),
+                            "distance", LocationUtil.formatDistance(distance),
+                            "status", statusText(player, tracker),
+                            "time", formatDuration(tracker.stationaryMillis(now))));
+                } else {
+                    // Вне зоны связи: только район и последняя отметка — та,
+                    // что успела дойти до этого игрока.
+                    player.sendMessage(messages.getPrefixed("itrak-watch-far",
+                            "name", tracker.getDisplayName(),
+                            "code", tracker.getCode(),
+                            "world", tracker.getWorld() == null ? "?" : tracker.getWorld(),
+                            "status", statusText(player, tracker),
+                            "region", signal.region(),
+                            "last", lastKnownText(signal)));
+                }
             }
         }
     }
@@ -651,11 +713,27 @@ public class TrackerService {
 
         long now = System.currentTimeMillis();
         String label = spec.name() == null ? "" : spec.name().trim();
+        TrackerColor color = spec.color() == null ? TrackerColor.BLUE : spec.color();
+        if (target != null) {
+            EntityType carrierType = target.getType();
+            // Без своего имени трекер называется по-русски: «Лодка», «Лошадь»,
+            // «Свинья». Ванильное EntityType#getName() — английское, поэтому
+            // подпись берём из EntityNames.
+            if (label.isEmpty()) {
+                label = EntityNames.name(carrierType);
+            }
+            // Цвет по типу носителя: на карте и в локаторе сразу видно, что
+            // за маячок (лодка — синий, лошадь — жёлтый, монстр — красный).
+            TrackerColor auto = EntityNames.color(carrierType);
+            if (auto != null) {
+                color = auto;
+            }
+        }
         if (label.length() > 64) {
             label = label.substring(0, 64);
         }
         boolean floating = floatingWater;
-        Tracker candidate = new Tracker(0, spec.code(), label, spec.color(), spec.waterproof(),
+        Tracker candidate = new Tracker(0, spec.code(), label, color, spec.waterproof(),
                 player.getUniqueId(), player.getName(), location.getWorld().getName(),
                 location.getX(), location.getY(), location.getZ(),
                 target == null ? null : target.getUniqueId(), sunk, now, now, now, support);
@@ -939,9 +1017,44 @@ public class TrackerService {
         long remaining = LocatorCooldown.remaining(endsAt, System.currentTimeMillis());
         if (remaining <= 0L) {
             scanCooldownEnd.remove(player.getUniqueId());
+            // Перезарядка кончилась — попытки снова полные.
+            scanAttempts.remove(player.getUniqueId());
             return 0L;
         }
         return remaining;
+    }
+
+    /** Сколько удачных сканирований осталось до перезарядки. */
+    public int scanAttemptsLeft(Player player) {
+        if (player == null) {
+            return 0;
+        }
+        int max = plugin.getConfigManager().getItrakScanAttempts();
+        if (scanCooldownRemaining(player) > 0L) {
+            return 0;
+        }
+        Integer left = scanAttempts.get(player.getUniqueId());
+        return left == null ? max : Math.max(0, Math.min(max, left));
+    }
+
+    /**
+     * Списать попытку за удачный скан. Пустой скан попытку не тратит: если
+     * рядом ничего нет, локатор не уходит в перезарядку. Она начинается
+     * только когда попытки реально израсходованы на найденные трекеры.
+     */
+    public ScanConsumption consumeScanAttempt(Player player, double radius) {
+        if (player == null) {
+            return new ScanConsumption(0, 0, false);
+        }
+        int max = plugin.getConfigManager().getItrakScanAttempts();
+        int left = scanAttemptsLeft(player) - 1;
+        if (left <= 0) {
+            scanAttempts.remove(player.getUniqueId());
+            startScanCooldown(player, scanCooldownSeconds(radius));
+            return new ScanConsumption(0, max, true);
+        }
+        scanAttempts.put(player.getUniqueId(), left);
+        return new ScanConsumption(left, max, false);
     }
 
     /** Перезарядка для локатора с этим радиусом: дальний — дольше. */
@@ -970,8 +1083,9 @@ public class TrackerService {
 
     /**
      * Белая полоса КД на предмете локатора: ванильный оверлей, как у предметов
-     * с перезарядкой. Оба локатора — один материал, поэтому полоса видна на
-     * обоих: КД общий на игрока, менять предмет, чтобы обойти его, нельзя.
+     * с перезарядкой. Полоса рисуется по материалу предмета, поэтому у
+     * трекеров теперь свои материалы — КД локатора на маячках больше не висит
+     * (раньше синий трекер был тем же компасом восстановления).
      */
     public void applyScanCooldownBar(Player player) {
         if (player == null) {
@@ -991,6 +1105,136 @@ public class TrackerService {
         }
         long now = System.currentTimeMillis();
         scanCooldownEnd.entrySet().removeIf(entry -> entry.getValue() <= now);
+    }
+
+    // ------------------------------------------------------------------
+    // Дальность сигнала: точное место или район
+    // ------------------------------------------------------------------
+
+    /**
+     * Что игрок видит про трекер. В зоне связи — живые точные координаты; за
+     * дальностью сигнала — только район и последняя отметка, которую успел
+     * получить именно этот игрок. Так далёкий маячок не выдаёт точку, но и не
+     * пропадает из списка.
+     */
+    public Signal signal(Player viewer, Tracker tracker) {
+        if (tracker == null || viewer == null) {
+            return new Signal(null, null, 0L, null);
+        }
+        Location live = liveLocation(tracker);
+        if (live == null) {
+            live = tracker.getLocation();
+        }
+        if (live == null) {
+            return new Signal(null, null, 0L, null);
+        }
+        int range = plugin.getConfigManager().getItrakSignalRange();
+        double distance = LocationUtil.distance(viewer.getLocation(), live);
+        if (SignalRegion.inRange(distance, range)) {
+            rememberLastKnown(viewer, tracker, live);
+            return new Signal(live, live, System.currentTimeMillis(), null);
+        }
+        LastKnown known = recallLastKnown(viewer, tracker);
+        return new Signal(null, known == null ? null : known.toLocation(),
+                known == null ? 0L : known.at(), regionText(live));
+    }
+
+    /**
+     * Куда ведёт маршрут: в зоне связи — в точку трекера, вне её — в центр
+     * района. Иначе маршрут выдавал бы точное место далёкого маячка.
+     */
+    public Location targetLocation(Player viewer, Tracker tracker) {
+        if (tracker == null) {
+            return null;
+        }
+        Location live = liveLocation(tracker);
+        if (live == null) {
+            live = tracker.getLocation();
+        }
+        if (live == null || viewer == null) {
+            return live;
+        }
+        int range = plugin.getConfigManager().getItrakSignalRange();
+        if (SignalRegion.inRange(LocationUtil.distance(viewer.getLocation(), live), range)) {
+            return live;
+        }
+        int cell = plugin.getConfigManager().getItrakSignalRegionSize();
+        int x = SignalRegion.center(floor(live.getX()), cell);
+        int z = SignalRegion.center(floor(live.getZ()), cell);
+        return new Location(live.getWorld(), x + 0.5, live.getY(), z + 0.5);
+    }
+
+    /** «Район X..X, Z..Z» — приблизительное место при потере сигнала. */
+    public String regionText(Location live) {
+        if (live == null) {
+            return "?";
+        }
+        int cell = plugin.getConfigManager().getItrakSignalRegionSize();
+        int x = floor(live.getX());
+        int z = floor(live.getZ());
+        return plugin.getMessages().get("itrak-region",
+                "x1", String.valueOf(SignalRegion.start(x, cell)),
+                "x2", String.valueOf(SignalRegion.end(x, cell)),
+                "z1", String.valueOf(SignalRegion.start(z, cell)),
+                "z2", String.valueOf(SignalRegion.end(z, cell)));
+    }
+
+    /** «Последнее известное: x, y, z (N назад)» — для чата и GUI. */
+    public String lastKnownText(Signal signal) {
+        Location known = signal == null ? null : signal.lastKnown();
+        if (known == null) {
+            return plugin.getMessages().get("itrak-last-known-none");
+        }
+        long ago = Math.max(0L, System.currentTimeMillis() - signal.lastKnownAt());
+        return plugin.getMessages().get("itrak-last-known",
+                "x", formatCoord(known.getX()),
+                "y", formatCoord(known.getY()),
+                "z", formatCoord(known.getZ()),
+                "ago", formatDuration(ago));
+    }
+
+    private void rememberLastKnown(Player viewer, Tracker tracker, Location live) {
+        if (viewer == null || tracker == null || live == null) {
+            return;
+        }
+        lastKnown.computeIfAbsent(viewer.getUniqueId(), key -> new ConcurrentHashMap<>())
+                .put(tracker.getId(), new LastKnown(
+                        live.getWorld() == null ? null : live.getWorld().getName(),
+                        live.getX(), live.getY(), live.getZ(), System.currentTimeMillis()));
+    }
+
+    private LastKnown recallLastKnown(Player viewer, Tracker tracker) {
+        if (viewer == null || tracker == null) {
+            return null;
+        }
+        Map<Integer, LastKnown> known = lastKnown.get(viewer.getUniqueId());
+        return known == null ? null : known.get(tracker.getId());
+    }
+
+    /**
+     * Пока игрок в зоне связи, запоминаем для него точку трекера: когда он
+     * уйдёт дальше, показать будет что — «последнее известное местоположение».
+     */
+    private void refreshSignalSnapshots() {
+        int range = plugin.getConfigManager().getItrakSignalRange();
+        if (range <= 0 || trackers.isEmpty()) {
+            return;
+        }
+        for (Tracker tracker : trackers.values()) {
+            Location live = tracker.liveLocation();
+            if (live == null) {
+                continue;
+            }
+            for (UUID id : recipientsOf(tracker)) {
+                Player player = Bukkit.getPlayer(id);
+                if (player == null || !player.isOnline()) {
+                    continue;
+                }
+                if (LocationUtil.distance(player.getLocation(), live) <= range) {
+                    rememberLastKnown(player, tracker, live);
+                }
+            }
+        }
     }
 
     public void watch(Player player, Tracker tracker) {
@@ -1033,7 +1277,9 @@ public class TrackerService {
         }
         watchedByPlayer.remove(player.getUniqueId());
         lastWatchMessage.remove(player.getUniqueId());
-        // scanCooldownEnd НЕ трогаем: перезаход не должен сбрасывать КД локатора.
+        lastKnown.remove(player.getUniqueId());
+        // scanCooldownEnd и scanAttempts НЕ трогаем: перезаход не должен
+        // сбрасывать КД локатора и накопленные попытки.
     }
 
     /** Трекеры, прицепленные к этой сущности: их может быть несколько. */
@@ -1061,7 +1307,7 @@ public class TrackerService {
             return;
         }
         Location at = entity.getLocation();
-        String entityName = entity.getName();
+        String entityName = EntityNames.name(entity.getType());
         long now = System.currentTimeMillis();
         for (Tracker tracker : trackersOnEntity(entity.getUniqueId())) {
             if (entity instanceof Player) {
@@ -1160,8 +1406,7 @@ public class TrackerService {
         }
         boolean attachPlayers = plugin.getConfigManager().isItrakAttachPlayers();
         if (hitEntity != null && hitEntity.isValid() && !hitEntity.isDead()
-                && (hitEntity instanceof org.bukkit.entity.LivingEntity
-                || hitEntity instanceof org.bukkit.entity.Vehicle)
+                && hitEntity.getType() != EntityType.UNKNOWN
                 && (!(hitEntity instanceof Player) || attachPlayers)) {
             return place(thrower, spec, hitEntity.getLocation().getBlock(), BlockFace.UP, hitEntity,
                     false);
@@ -1223,6 +1468,39 @@ public class TrackerService {
         return tracker.isStationary(now, threshold)
                 ? messages.get("itrak-state-stationary")
                 : messages.get("itrak-state-moving");
+    }
+
+    /**
+     * Статус глазами конкретного игрока: за дальностью сигнала у трекера нет
+     * точных данных, и это важнее «в сети»/«нет сигнала».
+     */
+    public String statusText(Player viewer, Tracker tracker) {
+        MessagesManager messages = plugin.getMessages();
+        if (tracker == null) {
+            return "?";
+        }
+        if (tracker.isSunk() && tracker.isWaterproof()) {
+            return messages.get("itrak-status-submerged");
+        }
+        if (tracker.isCarrierOffline()) {
+            return messages.get("itrak-status-offline");
+        }
+        if (viewer != null && !signal(viewer, tracker).inRange()) {
+            return messages.get("itrak-status-out-of-range");
+        }
+        return switch (tracker.status()) {
+            case LIVE -> messages.get("itrak-status-live");
+            case SUNK -> messages.get("itrak-status-sunk");
+            case NO_SIGNAL -> messages.get("itrak-status-no-signal");
+        };
+    }
+
+    /** Состояние глазами игрока: вне зоны связи точных данных нет. */
+    public String stateText(Player viewer, Tracker tracker, long now) {
+        if (viewer != null && tracker != null && !signal(viewer, tracker).inRange()) {
+            return plugin.getMessages().get("itrak-state-unknown");
+        }
+        return stateText(tracker, now);
     }
 
     public String formatDuration(long millis) {

@@ -8,13 +8,16 @@ import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.item.ItemIds;
 import ru.hahgps.service.MapService;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Меню карты: открыть полотно, зум, центр на игроке и сдвиг по сторонам.
+ * Меню карты: зум, следование за игроком, центр и сдвиг по сторонам.
  *
  * Самого изображения карты здесь нет и быть не может: клиент Minecraft
  * рисует содержимое карты только когда она в руке или в рамке, в слоте меню
  * видна лишь иконка. Поэтому каждая кнопка применяет действие и показывает
- * карту в руке — там она двигается мышью.
+ * карту в руке — там она двигается мышью (Shift+мышь).
  */
 public class MapGui extends GuiScreen {
 
@@ -41,18 +44,35 @@ public class MapGui extends GuiScreen {
         MapService maps = plugin.getMapService();
         MapView.Scale scale = maps == null ? null : maps.scaleOf(player);
         String scaleText = scaleText(scale);
+        int[] center = maps == null ? null : maps.centerOf(player);
+        boolean follow = maps != null && maps.isFollowing(player);
+
+        List<net.kyori.adventure.text.Component> info = new ArrayList<>();
+        info.add(comp("gui.lore-map-info-scale", "scale", scaleText));
+        if (center != null) {
+            info.add(comp("gui.lore-map-info-center",
+                    "x", String.valueOf(center[0]), "z", String.valueOf(center[1])));
+        }
+        info.add(comp(follow ? "gui.lore-map-info-follow-on" : "gui.lore-map-info-follow-off"));
+        inventory.setItem(4, GuiUtil.item(Material.BOOK, comp("gui.map-info"), info, ItemIds.MAP_ITEM));
 
         inventory.setItem(11, GuiUtil.item(Material.MAP,
                 comp("gui.zoom-in"),
                 lore("gui.lore-map-zoom", "scale", scaleText), ItemIds.MAP_ITEM));
 
-        inventory.setItem(13, GuiUtil.item(Material.COMPASS,
-                comp("gui.recenter"),
-                lore("gui.lore-map-mouse"), ItemIds.MAP_ITEM));
-
         inventory.setItem(15, GuiUtil.item(Material.PAPER,
                 comp("gui.zoom-out"),
                 lore("gui.lore-map-zoom", "scale", scaleText), ItemIds.MAP_ITEM));
+
+        inventory.setItem(13, GuiUtil.item(Material.COMPASS,
+                comp("gui.map-center"),
+                lore("gui.lore-map-center"), ItemIds.MAP_ITEM));
+
+        org.bukkit.inventory.ItemStack followItem = GuiUtil.item(
+                follow ? Material.SPYGLASS : Material.GLASS,
+                comp("gui.map-follow"),
+                lore("gui.lore-map-follow"), ItemIds.MAP_ITEM);
+        inventory.setItem(16, follow ? GuiTheme.glow(followItem) : followItem);
 
         inventory.setItem(10, GuiUtil.item(Material.ARROW,
                 comp("gui.map-north"), lore("gui.lore-map-pan"), ItemIds.MAP_ITEM));
@@ -94,9 +114,17 @@ public class MapGui extends GuiScreen {
             case 15 -> applyZoom(plugin, maps, -1);
             case 13 -> {
                 player.closeInventory();
-                maps.openMap(player);
+                maps.recenter(player);
                 player.sendMessage(plugin.getMessages().getPrefixed("map-centered"));
                 GuiTheme.click(player);
+            }
+            case 16 -> {
+                boolean next = !maps.isFollowing(player);
+                maps.setFollowing(player, next);
+                player.sendMessage(plugin.getMessages().getPrefixed(
+                        next ? "map-follow-on" : "map-follow-off"));
+                GuiTheme.click(player);
+                refresh();
             }
             case 10 -> panBy(maps, 0, -1);
             case 12 -> panBy(maps, 0, 1);
@@ -121,9 +149,11 @@ public class MapGui extends GuiScreen {
     }
 
     private void panBy(MapService maps, int dx, int dz) {
+        HahGpsPlugin plugin = HahGpsPlugin.getInstance();
         double step = MapService.MAP_SIZE * maps.blocksPerPixel(player) * PAN_FRACTION;
         player.closeInventory();
         maps.panStep(player, dx * step, dz * step);
+        player.sendMessage(plugin.getMessages().getPrefixed("map-pan-pinned"));
         GuiTheme.click(player);
     }
 

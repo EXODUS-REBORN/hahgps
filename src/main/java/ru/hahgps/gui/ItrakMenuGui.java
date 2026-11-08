@@ -137,7 +137,9 @@ public class ItrakMenuGui extends GuiScreen {
                 comp("gui.page-info", "page", String.valueOf(page + 1),
                         "pages", String.valueOf(pages)), null, ItemIds.PAGE_INFO));
         if (player.hasPermission("gps.itrak.give")) {
-            inventory.setItem(50, GuiUtil.item(Material.RECOVERY_COMPASS,
+            // Лазурит, а не компас восстановления: на том же материале висит
+            // полоса КД локатора, и кнопка «выдать» мигала бы перезарядкой.
+            inventory.setItem(50, GuiUtil.item(Material.LAPIS_LAZULI,
                     comp("gui.itrak-give"), lore("gui.lore-itrak-give"), ItemIds.ITRAK_GIVE));
         }
         inventory.setItem(51, GuiUtil.item(Material.SPYGLASS,
@@ -161,16 +163,22 @@ public class ItrakMenuGui extends GuiScreen {
                     + "</color></bold> <dark_gray>·</dark_gray> <#8fc6ff>"
                     + tracker.getCode() + "</#8fc6ff>"));
             List<Component> lines = new ArrayList<>();
-            lines.add(comp("gui.lore-itrak-status", "status", service.statusText(tracker)));
-            lines.add(comp("gui.lore-itrak-state", "state", service.stateText(tracker, now)));
-            lines.add(comp("gui.lore-itrak-coords",
-                    "x", TrackerService.formatCoord(tracker.getX()),
-                    "y", TrackerService.formatCoord(tracker.getY()),
-                    "z", TrackerService.formatCoord(tracker.getZ())));
+            TrackerService.Signal signal = service.signal(player, tracker);
+            lines.add(comp("gui.lore-itrak-status", "status", service.statusText(player, tracker)));
+            lines.add(comp("gui.lore-itrak-state", "state", service.stateText(player, tracker, now)));
+            if (signal.inRange()) {
+                lines.add(comp("gui.lore-itrak-coords",
+                        "x", TrackerService.formatCoord(signal.exact().getX()),
+                        "y", TrackerService.formatCoord(signal.exact().getY()),
+                        "z", TrackerService.formatCoord(signal.exact().getZ())));
+            } else {
+                lines.add(comp("gui.lore-itrak-region", "region", signal.region()));
+                lines.add(comp("gui.lore-itrak-last-known", "last", service.lastKnownText(signal)));
+            }
             lines.add(comp("gui.lore-itrak-world",
                     "world", tracker.getWorld() == null ? "?" : tracker.getWorld()));
             lines.add(comp("gui.lore-itrak-distance",
-                    "distance", LocationUtil.formatDistance(distance(tracker))));
+                    "distance", LocationUtil.formatDistance(distance(tracker, signal))));
             meta.lore(lines);
             meta.setCustomModelData(ItemIds.tracker(tracker.getColor(), tracker.isWaterproof()));
             icon.setItemMeta(meta);
@@ -181,10 +189,11 @@ public class ItrakMenuGui extends GuiScreen {
         return icon;
     }
 
-    private double distance(Tracker tracker) {
-        Location location = tracker.getLocation();
-        return location == null ? Double.MAX_VALUE
-                : LocationUtil.distance(player.getLocation(), location);
+    private double distance(Tracker tracker, TrackerService.Signal signal) {
+        if (signal != null && signal.inRange()) {
+            return LocationUtil.distance(player.getLocation(), signal.exact());
+        }
+        return Double.MAX_VALUE;
     }
 
     @Override
@@ -201,13 +210,16 @@ public class ItrakMenuGui extends GuiScreen {
         }
         if (slot == 47) {
             // Свои трекеры видны прямо на карте (см. map.show-trackers):
-            // центрируем на ближайшем из них, иначе — на игроке.
+            // центрируем на ближайшем из них, иначе — на игроке. Вне зоны
+            // связи наводим на район, а не на точку.
             player.closeInventory();
             if (plugin.getMapService() != null) {
                 Location focus = null;
                 double nearest = Double.MAX_VALUE;
                 for (Tracker tracker : service.byOwner(player.getUniqueId())) {
-                    Location location = service.liveLocation(tracker);
+                    TrackerService.Signal signal = service.signal(player, tracker);
+                    Location location = signal.inRange() ? signal.exact()
+                            : service.targetLocation(player, tracker);
                     double distance = LocationUtil.distance(player.getLocation(), location);
                     if (distance < nearest) {
                         nearest = distance;
@@ -225,7 +237,11 @@ public class ItrakMenuGui extends GuiScreen {
             return;
         }
         if (slot == 48) {
-            ItrakCommand.reportScan(plugin, player);
+            player.closeInventory();
+            int radius = (int) plugin.getConfigManager().getItrakScanRadius();
+            if (ItrakCommand.prepareScan(plugin, player, radius)) {
+                ItrakCommand.reportScan(plugin, player, radius);
+            }
             return;
         }
         if (slot == 50 && player.hasPermission("gps.itrak.give")) {

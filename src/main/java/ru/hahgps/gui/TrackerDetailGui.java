@@ -174,20 +174,26 @@ public class TrackerDetailGui extends GuiScreen {
             meta.displayName(GuiTheme.mm("<bold><color:" + tracker.getColor().hex() + ">" + label
                     + "</color></bold>"));
             List<Component> lines = new ArrayList<>();
+            TrackerService.Signal signal = service.signal(player, tracker);
             lines.add(comp("gui.lore-itrak-code", "code", tracker.getCode()));
-            lines.add(comp("gui.lore-itrak-status", "status", service.statusText(tracker)));
-            lines.add(comp("gui.lore-itrak-state", "state", service.stateText(tracker, now)));
-            lines.add(comp("gui.lore-itrak-coords",
-                    "x", TrackerService.formatCoord(tracker.getX()),
-                    "y", TrackerService.formatCoord(tracker.getY()),
-                    "z", TrackerService.formatCoord(tracker.getZ())));
+            lines.add(comp("gui.lore-itrak-status", "status", service.statusText(player, tracker)));
+            lines.add(comp("gui.lore-itrak-state", "state", service.stateText(player, tracker, now)));
+            if (signal.inRange()) {
+                lines.add(comp("gui.lore-itrak-coords",
+                        "x", TrackerService.formatCoord(signal.exact().getX()),
+                        "y", TrackerService.formatCoord(signal.exact().getY()),
+                        "z", TrackerService.formatCoord(signal.exact().getZ())));
+            } else {
+                lines.add(comp("gui.lore-itrak-region", "region", signal.region()));
+                lines.add(comp("gui.lore-itrak-last-known", "last", service.lastKnownText(signal)));
+            }
             lines.add(comp("gui.lore-itrak-world",
                     "world", tracker.getWorld() == null ? "?" : tracker.getWorld()));
-            org.bukkit.Location location = tracker.getLocation();
-            double distance = location == null ? Double.MAX_VALUE
-                    : LocationUtil.distance(player.getLocation(), location);
+            double distance = signal.inRange()
+                    ? LocationUtil.distance(player.getLocation(), signal.exact())
+                    : Double.MAX_VALUE;
             lines.add(comp("gui.lore-itrak-distance", "distance", LocationUtil.formatDistance(distance)));
-            if (tracker.status() == Tracker.Status.LIVE) {
+            if (signal.inRange() && tracker.status() == Tracker.Status.LIVE) {
                 lines.add(comp("gui.lore-itrak-time",
                         "time", service.formatDuration(tracker.stationaryMillis(now))));
             }

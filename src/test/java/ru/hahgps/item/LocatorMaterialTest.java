@@ -2,6 +2,7 @@ package ru.hahgps.item;
 
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
+import ru.hahgps.model.TrackerColor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -12,6 +13,15 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  * игрока к блоку под прицелом (вниз — внутрь земли). Тест держит контракт.
  */
 class LocatorMaterialTest {
+
+    @Test
+    void noTrackerSharesTheLocatorMaterial() {
+        for (TrackerColor color : TrackerColor.values()) {
+            assertNotEquals(ItemFactory.LOCATOR_MATERIAL, color.getMaterial(),
+                    "трекер " + color.getKey() + " — тот же материал, что у локатора: "
+                            + "белая полоса КД локатора снова появится на маячке");
+        }
+    }
 
     @Test
     void locatorIsNotACompass() {

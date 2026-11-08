@@ -37,6 +37,22 @@ public class TerrainRenderer {
     /** Больше чанков за один рендер не грузим: остальное станет дырками NO_DATA. */
     private static final int MAX_CHUNK_REQUESTS = 512;
 
+    /**
+     * Сколько чанков разрешено догрузить на этом масштабе. Дальние карты
+     * рисуются из кэша мира и уже загруженных чанков: на FARTHEST полотно
+     * покрывает 128×128 чанков, и грузить их все на каждое открытие карты
+     * — гарантированный лаг. Кэш всё равно знает, что игрок уже видел.
+     */
+    private static int chunkBudget(org.bukkit.map.MapView.Scale scale) {
+        return switch (scale) {
+            case CLOSEST -> 128;
+            case CLOSE -> 256;
+            case NORMAL -> MAX_CHUNK_REQUESTS;
+            case FAR -> 128;
+            case FARTHEST -> 0;
+        };
+    }
+
     private static final int SAMPLES_PER_TICK = 2048;
 
     private static final int NO_DATA = 0x202020;
@@ -154,18 +170,22 @@ public class TerrainRenderer {
                 chunks.add(new int[]{cx, cz});
             }
         }
-        if (chunks.size() > MAX_CHUNK_REQUESTS) {
-            // Обрезаем по дальности от центра, но больше об этом молчать нельзя:
-            // на карте будут серые пятна, и админ должен понимать почему.
+        int budget = chunkBudget(scale);
+        if (budget <= 0) {
+            // Дальний масштаб: только загруженные чанки и кэш мира. Догружать
+            // тысячи чанков ради открытия карты нельзя — сервер встанет.
+            chunks = List.of();
+        } else if (chunks.size() > budget) {
+            // Обрезаем по дальности от центра: дальние края возьмут цвета из
+            // кэша мира, а непойманные останутся тёмными.
             chunks.sort(Comparator.comparingInt(c -> {
                 int dx = c[0] - centerChunkX;
                 int dz = c[1] - centerChunkZ;
                 return dx * dx + dz * dz;
             }));
-            plugin.getLogger().info("HahGps: для карты нужно " + chunks.size()
-                    + " чанков, загружаю " + MAX_CHUNK_REQUESTS
-                    + " ближайших — дальние края останутся пустыми.");
-            chunks = new ArrayList<>(chunks.subList(0, MAX_CHUNK_REQUESTS));
+            plugin.getLogger().fine("HahGps: для карты нужно " + chunks.size()
+                    + " чанков, загружаю " + budget + " ближайших.");
+            chunks = new ArrayList<>(chunks.subList(0, budget));
         }
 
         List<CompletableFuture<?>> loads = new ArrayList<>(chunks.size());
@@ -394,8 +414,18 @@ public class TerrainRenderer {
             }
         }
 
+        drawNorth(g);
         g.dispose();
         return image;
+    }
+
+    /** Стрелка «север» у верхнего края: без неё карта безликая и нечитаемая. */
+    private void drawNorth(Graphics2D g) {
+        int cx = MAP_SIZE / 2;
+        g.setColor(new Color(8, 18, 43));
+        g.fillPolygon(new int[]{cx, cx - 6, cx + 6}, new int[]{0, 10, 10}, 3);
+        g.setColor(Color.WHITE);
+        g.fillPolygon(new int[]{cx, cx - 4, cx + 4}, new int[]{2, 9, 9}, 3);
     }
 
     public static int materialColor(Material material) {

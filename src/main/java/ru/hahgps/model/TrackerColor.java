@@ -13,7 +13,13 @@ import java.util.Locale;
  */
 public enum TrackerColor {
 
-    BLUE("blue", Material.RECOVERY_COMPASS, 0x3F86FF),
+    /**
+     * Лазурит, а не компас восстановления: тот же материал у локатора, а
+     * ванильная перезарядка {@code Player#setCooldown} включается на материал
+     * целиком — белая полоса КД локатора появлялась и на синих трекерах.
+     * Теперь у локатора свой материал, и КД маячков не касается.
+     */
+    BLUE("blue", Material.LAPIS_LAZULI, 0x3F86FF),
     CYAN("cyan", Material.PRISMARINE_CRYSTALS, 0x4FD1E0),
     GREEN("green", Material.EMERALD, 0x55C36B),
     YELLOW("yellow", Material.GOLD_NUGGET, 0xF0C24B),

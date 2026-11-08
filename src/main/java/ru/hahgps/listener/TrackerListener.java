@@ -5,10 +5,9 @@ import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
-import org.bukkit.entity.Vehicle;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -26,6 +25,7 @@ import ru.hahgps.item.ItemFactory;
 import ru.hahgps.model.Tracker;
 import ru.hahgps.service.ItrakTerminalService;
 import ru.hahgps.service.TrackerService;
+import ru.hahgps.util.EntityNames;
 
 /**
  * Действия с iTrak в мире:
@@ -108,13 +108,15 @@ public class TrackerListener implements Listener {
             if (!rightClick) {
                 return;
             }
-            upgradeLegacyLocator(player);
+            upgradeLocator(player);
             runScan(player, ItemFactory.readLocatorRadius(
                     player.getInventory().getItemInMainHand()));
             return;
         }
 
-        ItemFactory.TrackerSpec spec = ItemFactory.readTracker(item);
+        healTrackerItem(player);
+        ItemFactory.TrackerSpec spec = ItemFactory.readTracker(
+                player.getInventory().getItemInMainHand());
         if (spec == null) {
             return;
         }
@@ -154,15 +156,37 @@ public class TrackerListener implements Listener {
     /**
      * Локатор раньше был компасом — а компас по умолчанию «навигационная
      * палочка» WorldEdit: её ПКМ/ЛКМ телепортируют к блоку под прицелом (вниз —
-     * внутрь земли). Меняем старый предмет на актуальный прямо в руке.
+     * внутрь земли). Кроме того, до 1.3.1 локаторы были на 10 и 15 блоков:
+     * такие предметы меняем на актуальные (20 и 30), иначе в инвентарях
+     * навсегда остались бы старые радиусы.
      */
-    private void upgradeLegacyLocator(Player player) {
+    private void upgradeLocator(Player player) {
         ItemStack item = player.getInventory().getItemInMainHand();
-        if (!ItemFactory.isLegacyLocator(item)) {
+        int normalRadius = (int) plugin.getConfigManager().getItrakScanRadius();
+        int longRadius = plugin.getConfigManager().getItrakLocatorLongRadius();
+        boolean legacy = ItemFactory.isLegacyLocator(item);
+        ItemStack upgraded = ItemFactory.upgradedLocator(item, normalRadius, longRadius);
+        if (upgraded == null) {
             return;
         }
-        player.getInventory().setItemInMainHand(ItemFactory.locatorItem());
-        player.sendMessage(plugin.getMessages().getPrefixed("itrak-locator-upgraded"));
+        player.getInventory().setItemInMainHand(upgraded);
+        player.sendMessage(legacy
+                ? plugin.getMessages().getPrefixed("itrak-locator-upgraded")
+                : plugin.getMessages().getPrefixed("itrak-locator-updated",
+                "radius", String.valueOf(ItemFactory.readLocatorRadius(upgraded))));
+    }
+
+    /**
+     * Материал трекера мог устареть (синий трекер был компасом восстановления,
+     * как локатор). Подменяем предмет в руке на актуальный — данные в PDC те
+     * же, меняется только вид.
+     */
+    private void healTrackerItem(Player player) {
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        ItemStack healed = ItemFactory.healedTrackerItem(hand);
+        if (healed != null) {
+            player.getInventory().setItemInMainHand(healed);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -193,7 +217,9 @@ public class TrackerListener implements Listener {
             return;
         }
 
-        ItemFactory.TrackerSpec spec = ItemFactory.readTracker(item);
+        healTrackerItem(player);
+        ItemFactory.TrackerSpec spec = ItemFactory.readTracker(
+                player.getInventory().getItemInMainHand());
         if (spec == null) {
             return;
         }
@@ -202,7 +228,11 @@ public class TrackerListener implements Listener {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-attach-players-off"));
             return;
         }
-        if (!(target instanceof LivingEntity) && !(target instanceof Vehicle)) {
+        // Прицепить можно к любой сущности: лодка, вагонетка, лошадь, свинья,
+        // стойка для брони, рамка — ко всему, что двигается и стоит. Раньше
+        // здесь пропускались только LivingEntity и Vehicle, и на вагонетку с
+        // лодкой-сундуком трекер не ставился.
+        if (target.getType() == EntityType.UNKNOWN) {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-attach-unsupported"));
             return;
         }
@@ -473,7 +503,7 @@ public class TrackerListener implements Listener {
         } else if (tracker.isAttached()) {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-attached",
                     "name", tracker.getDisplayName(),
-                    "entity", target == null ? "?" : target.getName()));
+                    "entity", target == null ? "?" : EntityNames.name(target.getType())));
         }
     }
 

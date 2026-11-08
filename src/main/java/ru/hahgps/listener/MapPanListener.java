@@ -15,17 +15,28 @@ import ru.hahgps.gui.MapGui;
 import ru.hahgps.service.MapService;
 
 /**
- * Мышиное управление картой в руке.
+ * Управление картой в руке.
  *
- * Держа карту, игрок не ходит, чтобы сдвинуть полотно: поворот мыши
- * сдвигает карту, как будто её тянут за собой. ПКМ по воздуху возвращает
- * центр на игрока, Shift+ПКМ открывает меню карты (зум, центр, сдвиг).
- * В левой руке (мини-карта) панорама не работает — там мышью смотрит мир.
+ * Карта сама едет за игроком (map.follow-player): смотреть по сторонам можно
+ * спокойно, полотно от этого не дёргается. Сдвинуть его вручную — только
+ * Shift+мышью, и тогда карта «отвязывается» от игрока. ПКМ по воздуху
+ * возвращает центр на игрока, Shift+ПКМ открывает меню карты (зум,
+ * следование, центр).
+ *
+ * Раньше панорама работала на любой поворот головы: достаточно было
+ * осмотреться, и карта уезжала — этим пользоваться было нельзя, поэтому
+ * теперь нужен явный Shift.
  */
 public class MapPanListener implements Listener {
 
     /** Ниже этого поворота движение мыши не считается панорамой. */
     private static final float DEAD_ZONE_DEGREES = 0.2f;
+
+    /**
+     * Максимальный поворот за одно событие. Телепорт или резкая смена угла
+     * иначе уносили бы карту на полкарты.
+     */
+    private static final float MAX_STEP_DEGREES = 20.0f;
 
     private final HahGpsPlugin plugin;
 
@@ -40,6 +51,10 @@ public class MapPanListener implements Listener {
             return;
         }
         Player player = event.getPlayer();
+        // Панорама — только с Shift: обычный взгляд не должен трогать карту.
+        if (!player.isSneaking()) {
+            return;
+        }
         if (!maps.isHoldingMapMainHand(player)) {
             return;
         }
@@ -55,8 +70,8 @@ public class MapPanListener implements Listener {
         if (to == null || from.getWorld() == null || !from.getWorld().equals(to.getWorld())) {
             return;
         }
-        float dyaw = wrapDegrees(to.getYaw() - from.getYaw());
-        float dpitch = to.getPitch() - from.getPitch();
+        float dyaw = clamp(wrapDegrees(to.getYaw() - from.getYaw()));
+        float dpitch = clamp(to.getPitch() - from.getPitch());
         if (Math.abs(dyaw) < DEAD_ZONE_DEGREES && Math.abs(dpitch) < DEAD_ZONE_DEGREES) {
             return;
         }
@@ -92,6 +107,10 @@ public class MapPanListener implements Listener {
         maps.openMap(player);
         player.sendMessage(plugin.getMessages().getPrefixed("map-centered"));
         GuiTheme.click(player);
+    }
+
+    private static float clamp(float angle) {
+        return Math.max(-MAX_STEP_DEGREES, Math.min(MAX_STEP_DEGREES, angle));
     }
 
     private static float wrapDegrees(float angle) {

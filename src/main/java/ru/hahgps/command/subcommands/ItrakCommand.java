@@ -85,7 +85,7 @@ public class ItrakCommand implements SubCommand {
 
     /**
      * Скан с радиусом конкретного локатора: у предмета может быть своя
-     * версия (10, 15 блоков), радиус берётся из PDC локатора в руке.
+     * версия (20 или 30 блоков), радиус берётся из PDC локатора в руке.
      */
     public static void reportScan(HahGpsPlugin plugin, Player player, double radius) {
         TrackerService service = plugin.getTrackerService();
@@ -95,8 +95,11 @@ public class ItrakCommand implements SubCommand {
         double scanRadius = Math.max(1, Math.min(1000, radius));
         List<TrackerService.Nearby> found = service.scan(player, scanRadius);
         if (found.isEmpty()) {
+            // Пустой скан попытку не тратит: перезарядка начинается только
+            // после реально найденных трекеров.
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-scan-empty",
                     "radius", String.valueOf((int) scanRadius)));
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-scan-empty-free"));
             GuiTheme.deny(player);
             return;
         }
@@ -106,21 +109,45 @@ public class ItrakCommand implements SubCommand {
         int seconds = plugin.getConfigManager().getItrakScanHighlightSeconds();
         for (TrackerService.Nearby nearby : found) {
             Tracker tracker = nearby.tracker();
+            Location live = service.liveLocation(tracker);
+            if (live == null) {
+                live = tracker.getLocation();
+            }
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-scan-entry",
                     "name", tracker.getDisplayName(),
                     "code", tracker.getCode(),
                     "distance", LocationUtil.formatDistance(nearby.distance()),
-                    "x", TrackerService.formatCoord(tracker.getX()),
-                    "y", TrackerService.formatCoord(tracker.getY()),
-                    "z", TrackerService.formatCoord(tracker.getZ()),
-                    "status", service.statusText(tracker)));
+                    "x", live == null ? TrackerService.formatCoord(tracker.getX())
+                            : TrackerService.formatCoord(live.getX()),
+                    "y", live == null ? TrackerService.formatCoord(tracker.getY())
+                            : TrackerService.formatCoord(live.getY()),
+                    "z", live == null ? TrackerService.formatCoord(tracker.getZ())
+                            : TrackerService.formatCoord(live.getZ()),
+                    "status", service.statusText(player, tracker)));
             sendTrackerAction(plugin, player, tracker);
             service.highlight(player, tracker, seconds);
         }
         player.sendMessage(plugin.getMessages().getComponent("itrak-route-cancel-button"));
         player.sendMessage(plugin.getMessages().getPrefixed("itrak-scan-highlight",
                 "count", String.valueOf(found.size()), "seconds", String.valueOf(seconds)));
+        reportAttempts(plugin, player, service.consumeScanAttempt(player, scanRadius));
         GuiTheme.click(player);
+    }
+
+    /** Сообщить, сколько попыток осталось и не ушёл ли локатор в перезарядку. */
+    private static void reportAttempts(HahGpsPlugin plugin, Player player,
+                                       TrackerService.ScanConsumption usage) {
+        if (usage == null) {
+            return;
+        }
+        if (usage.cooldownStarted()) {
+            long now = plugin.getTrackerService().scanCooldownRemaining(player);
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-locator-discharged",
+                    "time", LocatorCooldown.format(now)));
+            return;
+        }
+        player.sendMessage(plugin.getMessages().getPrefixed("itrak-scan-attempts",
+                "left", String.valueOf(usage.left()), "max", String.valueOf(usage.max())));
     }
 
     /**
@@ -128,9 +155,10 @@ public class ItrakCommand implements SubCommand {
      * Возвращает false, если сканировать нельзя (игрок уже получил ответ).
      *
      * КД общий на игрока, а не на предмет: длительность зависит от локатора,
-     * которым сканировали (10 блоков — 5 минут, дальний — 7), но второй
+     * которым сканировали (20 блоков — 5 минут, дальний — 7), но второй
      * локатор не даёт обойти перезарядку. Исключений для админов нет: иначе
-     * проверить и почувствовать КД было бы нельзя.
+     * проверить и почувствовать КД было бы нельзя. Сама перезарядка здесь не
+     * начинается: её запускает удачный скан, когда кончаются попытки.
      */
     public static boolean prepareScan(HahGpsPlugin plugin, Player player, double radius) {
         TrackerService service = plugin.getTrackerService();
@@ -155,7 +183,6 @@ public class ItrakCommand implements SubCommand {
             GuiTheme.deny(player);
             return false;
         }
-        service.startScanCooldown(player, service.scanCooldownSeconds(radius));
         return true;
     }
 
@@ -211,7 +238,7 @@ public class ItrakCommand implements SubCommand {
                     "y", TrackerService.formatCoord(tracker.getY()),
                     "z", TrackerService.formatCoord(tracker.getZ()),
                     "distance", LocationUtil.formatDistance(nearby.distance()),
-                    "status", service.statusText(tracker)));
+                    "status", service.statusText(player, tracker)));
             sendTrackerAction(plugin, player, tracker);
             service.highlight(player, tracker, seconds);
         }
@@ -228,7 +255,11 @@ public class ItrakCommand implements SubCommand {
         if (service == null || tracker == null) {
             return;
         }
-        Location target = service.liveLocation(tracker);
+        // Вне зоны связи маршрут ведёт в район, а не в точку: иначе дальность
+        // сигнала ничего не значила бы — маршрут выдавал бы точные координаты.
+        TrackerService.Signal signal = service.signal(player, tracker);
+        Location target = signal.inRange() ? signal.exact()
+                : service.targetLocation(player, tracker);
         if (target == null) {
             target = tracker.getLocation();
         }
@@ -238,6 +269,7 @@ public class ItrakCommand implements SubCommand {
             return;
         }
         final Location goal = target.clone();
+        final TrackerService.Signal routeSignal = signal;
         plugin.getRouteService().buildMultiModalAsync(player, goal, transport)
                 .whenComplete((path, error) -> plugin.getDataService().runSync(() -> {
                     if (!player.isOnline()) {
@@ -257,10 +289,17 @@ public class ItrakCommand implements SubCommand {
                     player.sendMessage(plugin.getMessages().getPrefixed("itrak-route-started",
                             "name", tracker.getDisplayName(),
                             "distance", LocationUtil.formatDistance(distance)));
-                    long now = System.currentTimeMillis();
-                    if (tracker.status() == Tracker.Status.LIVE
-                            && !tracker.isStationary(now, plugin.getConfigManager().getItrakStationaryMillis())) {
-                        player.sendMessage(plugin.getMessages().getPrefixed("itrak-route-live"));
+                    if (!routeSignal.inRange()) {
+                        player.sendMessage(plugin.getMessages().getPrefixed("itrak-route-far",
+                                "region", routeSignal.region(),
+                                "last", service.lastKnownText(routeSignal)));
+                    } else {
+                        long now = System.currentTimeMillis();
+                        if (tracker.status() == Tracker.Status.LIVE
+                                && !tracker.isStationary(now,
+                                plugin.getConfigManager().getItrakStationaryMillis())) {
+                            player.sendMessage(plugin.getMessages().getPrefixed("itrak-route-live"));
+                        }
                     }
                 }));
     }
@@ -317,7 +356,9 @@ public class ItrakCommand implements SubCommand {
         if (service == null || tracker == null || player == null) {
             return;
         }
-        Location target = service.liveLocation(tracker);
+        TrackerService.Signal signal = service.signal(player, tracker);
+        Location target = signal.inRange() ? signal.exact()
+                : service.targetLocation(player, tracker);
         if (target == null || target.getWorld() == null) {
             player.sendMessage(plugin.getMessages().getPrefixed("world-not-found",
                     "world", tracker.getWorld() == null ? "?" : tracker.getWorld()));
@@ -336,24 +377,51 @@ public class ItrakCommand implements SubCommand {
         }
         maps.focus(player, target);
         int seconds = plugin.getConfigManager().getItrakScanHighlightSeconds();
-        service.highlight(player, tracker, seconds);
-        player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-focused",
-                "name", tracker.getDisplayName(),
-                "id", String.valueOf(tracker.getId()),
-                "status", service.statusText(tracker),
-                "world", target.getWorld().getName(),
-                "x", TrackerService.formatCoord(target.getX()),
-                "y", TrackerService.formatCoord(target.getY()),
-                "z", TrackerService.formatCoord(target.getZ())));
+        if (signal.inRange()) {
+            service.highlight(player, tracker, seconds);
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-focused",
+                    "name", tracker.getDisplayName(),
+                    "id", String.valueOf(tracker.getId()),
+                    "status", service.statusText(player, tracker),
+                    "world", target.getWorld().getName(),
+                    "x", TrackerService.formatCoord(target.getX()),
+                    "y", TrackerService.formatCoord(target.getY()),
+                    "z", TrackerService.formatCoord(target.getZ())));
+        } else {
+            // Карта наведена на район, точных координат не показываем.
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-far",
+                    "name", tracker.getDisplayName(),
+                    "status", service.statusText(player, tracker),
+                    "region", signal.region(),
+                    "last", service.lastKnownText(signal)));
+        }
         GuiTheme.click(player);
     }
 
     public static void sendInfo(HahGpsPlugin plugin, Player player, Tracker tracker) {
         TrackerService service = plugin.getTrackerService();
         long now = System.currentTimeMillis();
-        Location location = tracker.getLocation();
-        double distance = location == null ? Double.MAX_VALUE
-                : LocationUtil.distance(player.getLocation(), location);
+        TrackerService.Signal signal = service == null
+                ? new TrackerService.Signal(null, null, 0L, null)
+                : service.signal(player, tracker);
+        String coords;
+        String signalText;
+        double distance;
+        if (signal.inRange()) {
+            Location live = signal.exact();
+            coords = TrackerService.formatCoord(live.getX()) + ", "
+                    + TrackerService.formatCoord(live.getY()) + ", "
+                    + TrackerService.formatCoord(live.getZ());
+            signalText = plugin.getMessages().get("itrak-signal-ok");
+            distance = LocationUtil.distance(player.getLocation(), live);
+        } else {
+            coords = signal.region();
+            signalText = signal.lastKnown() == null
+                    ? plugin.getMessages().get("itrak-signal-far-none")
+                    : plugin.getMessages().get("itrak-signal-far",
+                    "last", service == null ? "?" : service.lastKnownText(signal));
+            distance = Double.MAX_VALUE;
+        }
         String type = tracker.isWaterproof()
                 ? plugin.getMessages().get("itrak-type-waterproof")
                 : plugin.getMessages().get("itrak-type-regular");
@@ -364,12 +432,11 @@ public class ItrakCommand implements SubCommand {
                 "color", plugin.getMessages().get(tracker.getColor().messageKey()),
                 "type", type,
                 "owner", tracker.getOwnerName(),
-                "status", service == null ? "?" : service.statusText(tracker),
-                "state", service == null ? "?" : service.stateText(tracker, now),
+                "status", service == null ? "?" : service.statusText(player, tracker),
+                "state", service == null ? "?" : service.stateText(player, tracker, now),
                 "world", tracker.getWorld() == null ? "?" : tracker.getWorld(),
-                "x", TrackerService.formatCoord(tracker.getX()),
-                "y", TrackerService.formatCoord(tracker.getY()),
-                "z", TrackerService.formatCoord(tracker.getZ()),
+                "coords", coords,
+                "signal", signalText,
                 "distance", LocationUtil.formatDistance(distance),
                 "time", service == null ? "?" : service.formatDuration(tracker.stationaryMillis(now)));
         for (String line : raw.split("\n")) {
@@ -445,17 +512,15 @@ public class ItrakCommand implements SubCommand {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-list-header",
                     "count", String.valueOf(list.size())));
             for (Tracker tracker : list) {
-                Location location = service.liveLocation(tracker);
-                if (location == null) {
-                    location = tracker.getLocation();
-                }
-                double distance = location == null ? Double.MAX_VALUE
-                        : LocationUtil.distance(player.getLocation(), location);
+                TrackerService.Signal signal = service.signal(player, tracker);
+                double distance = signal.inRange()
+                        ? LocationUtil.distance(player.getLocation(), signal.exact())
+                        : Double.MAX_VALUE;
                 player.sendMessage(plugin.getMessages().getPrefixed("itrak-list-entry",
                         "name", tracker.getDisplayName(),
                         "id", String.valueOf(tracker.getId()),
                         "code", tracker.getCode(),
-                        "status", service.statusText(tracker),
+                        "status", service.statusText(player, tracker),
                         "distance", LocationUtil.formatDistance(distance),
                         "x", TrackerService.formatCoord(tracker.getX()),
                         "y", TrackerService.formatCoord(tracker.getY()),
@@ -517,21 +582,24 @@ public class ItrakCommand implements SubCommand {
                     "count", String.valueOf(list.size())));
             int seconds = plugin.getConfigManager().getItrakScanHighlightSeconds();
             for (Tracker tracker : list) {
-                Location location = service.liveLocation(tracker);
-                if (location == null) {
-                    location = tracker.getLocation();
-                }
+                TrackerService.Signal signal = service.signal(player, tracker);
+                Location location = signal.inRange() ? signal.exact() : null;
                 double distance = location == null ? Double.MAX_VALUE
                         : LocationUtil.distance(player.getLocation(), location);
                 player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-entry",
                         "name", tracker.getDisplayName(),
                         "id", String.valueOf(tracker.getId()),
                         "code", tracker.getCode(),
-                        "status", service.statusText(tracker),
+                        "status", service.statusText(player, tracker),
                         "distance", LocationUtil.formatDistance(distance),
                         "x", TrackerService.formatCoord(tracker.getX()),
                         "y", TrackerService.formatCoord(tracker.getY()),
                         "z", TrackerService.formatCoord(tracker.getZ())));
+                if (!signal.inRange()) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-far-entry",
+                            "region", signal.region(),
+                            "last", service.lastKnownText(signal)));
+                }
                 sendTrackerAction(plugin, player, tracker);
                 player.sendMessage(plugin.getMessages().getComponent("itrak-find-map-button",
                         "code", tracker.getCode()));

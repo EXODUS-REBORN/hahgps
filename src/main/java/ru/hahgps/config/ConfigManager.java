@@ -84,19 +84,31 @@ public class ConfigManager {
         }
 
         // Конфиги до 1.1.9: радиус локатора был 200 блоков, теперь по умолчанию
-        // 10. Явно изменённое значение не трогаем — переносим только старый дефолт.
+        // 20. Явно изменённое значение не трогаем — переносим только старый дефолт.
         if (!config.contains("itrak.scan-highlight-seconds")
                 && config.getInt("itrak.scan-radius", 200) == 200) {
-            config.set("itrak.scan-radius", 10);
+            config.set("itrak.scan-radius", 20);
+        }
+        // До 1.3.1 локаторы были на 10 и 15 блоков — старые предметы и конфиги
+        // поднимаем до 20 и 30. Значение 10/15 — это прежний дефолт, а не выбор
+        // админа: другой радиус (например, 5 или 50) не трогаем.
+        if (config.getInt("itrak.scan-radius", 20) == 10) {
+            config.set("itrak.scan-radius", 20);
+        }
+        if (config.getInt("itrak.locator-long-radius", 30) == 15) {
+            config.set("itrak.locator-long-radius", 30);
         }
 
         checkRange("itrak.update-interval", 20, 5, 200);
         checkRange("itrak.stationary-minutes", 1, 1, 600);
         checkRange("itrak.particle-radius", 48, 8, 128);
-        checkRange("itrak.scan-radius", 10, 1, 1000);
-        checkRange("itrak.locator-long-radius", 15, 1, 1000);
+        checkRange("itrak.scan-radius", 20, 1, 1000);
+        checkRange("itrak.locator-long-radius", 30, 1, 1000);
+        checkRange("itrak.scan-attempts", 5, 1, 10);
         checkRange("itrak.scan-cooldown-seconds", 300, 0, 86400);
         checkRange("itrak.scan-cooldown-long-seconds", 420, 0, 86400);
+        checkRange("itrak.signal-range", 100_000, 0, 30_000_000);
+        checkRange("itrak.signal-region-size", 512, 16, 4096);
         checkRange("itrak.detach-after-minutes", 30, 0, 10080);
         checkRange("itrak.take-radius", 5, 1, 32);
         checkRange("itrak.max-per-player", 8, 1, 64);
@@ -107,6 +119,7 @@ public class ConfigManager {
         checkRange("itrak.terminal-radius", 5, 1, 32);
         checkRange("itrak.terminal-highlight-seconds", 10, 1, 120);
         checkRange("itrak.scan-highlight-seconds", 10, 1, 120);
+        checkRange("map.refresh-seconds", 5, 1, 60);
         checkRange("navigation.walk-max-distance", 128, 8, 512);
     }
 
@@ -252,9 +265,19 @@ public class ConfigManager {
         return config.getBoolean("map.show-trackers", true);
     }
 
-    /** Мышь двигает карту в руке (панорама без ходьбы). */
+    /** Мышь двигает карту в руке (панорама без ходьбы), теперь — только с Shift. */
     public boolean isMapMousePan() {
         return config.getBoolean("map.mouse-pan", true);
+    }
+
+    /** Карта сама едет за игроком, а не остаётся на месте после каждого шага. */
+    public boolean isMapFollowPlayer() {
+        return config.getBoolean("map.follow-player", true);
+    }
+
+    /** Как часто обновлять маркеры на открытой карте, секунд. */
+    public int getMapRefreshSeconds() {
+        return Math.max(1, Math.min(60, config.getInt("map.refresh-seconds", 5)));
     }
 
     /** Чувствительность мышиного сдвига карты. */
@@ -350,9 +373,27 @@ public class ConfigManager {
         return config.getBoolean("itrak.particles-owner-only", true);
     }
 
-    /** Радиус дальнего локатора (версия на 15 блоков), блоков. */
+    /** Радиус дальнего локатора (версия на 30 блоков), блоков. */
     public int getItrakLocatorLongRadius() {
-        return Math.max(1, Math.min(1000, config.getInt("itrak.locator-long-radius", 15)));
+        return Math.max(1, Math.min(1000, config.getInt("itrak.locator-long-radius", 30)));
+    }
+
+    /** Сколько удачных сканирований подряд выдерживает локатор до перезарядки. */
+    public int getItrakScanAttempts() {
+        return Math.max(1, Math.min(10, config.getInt("itrak.scan-attempts", 5)));
+    }
+
+    /**
+     * Дальность сигнала, блоков: дальше трекер не отдаёт точные координаты.
+     * 0 — без ограничения (точное место видно всегда).
+     */
+    public int getItrakSignalRange() {
+        return Math.max(0, Math.min(30_000_000, config.getInt("itrak.signal-range", 100_000)));
+    }
+
+    /** Размер «квадрата» приблизительного района при потере сигнала, блоков. */
+    public int getItrakSignalRegionSize() {
+        return Math.max(16, Math.min(4096, config.getInt("itrak.signal-region-size", 512)));
     }
 
     /**
@@ -369,7 +410,7 @@ public class ConfigManager {
     }
 
     public double getItrakScanRadius() {
-        return Math.max(1, Math.min(1000, config.getInt("itrak.scan-radius", 10)));
+        return Math.max(1, Math.min(1000, config.getInt("itrak.scan-radius", 20)));
     }
 
     /** Сколько секунд локатор подсвечивает найденные трекеры. */
