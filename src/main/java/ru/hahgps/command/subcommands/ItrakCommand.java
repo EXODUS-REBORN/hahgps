@@ -14,6 +14,7 @@ import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TrackerColor;
 import ru.hahgps.model.TransportType;
 import ru.hahgps.service.LocatorCooldown;
+import ru.hahgps.service.MapService;
 import ru.hahgps.service.Pathfinder;
 import ru.hahgps.service.TrackerService;
 import ru.hahgps.util.LocationUtil;
@@ -38,7 +39,7 @@ public class ItrakCommand implements SubCommand {
 
     @Override
     public String usage() {
-        return "/gps itrak [give|give-locator|give-terminal|scan|list|info|route|take|remove|watch|unwatch]";
+        return "/gps itrak [give|give-locator|give-terminal|scan|find|list|info|route|take|remove|watch|unwatch]";
     }
 
     @Override
@@ -49,7 +50,7 @@ public class ItrakCommand implements SubCommand {
     @Override
     public List<SubCommand> children() {
         return List.of(new GiveCommand(), new GiveLocatorCommand(),
-                new GiveTerminalCommand(), new ScanCommand(), new ListCommand(),
+                new GiveTerminalCommand(), new ScanCommand(), new FindCommand(), new ListCommand(),
                 new InfoCommand(), new RouteCommand(), new TakeCommand(),
                 new RemoveCommand(), new WatchCommand(), new UnwatchCommand());
     }
@@ -289,6 +290,64 @@ public class ItrakCommand implements SubCommand {
         return tracker;
     }
 
+    /**
+     * Найти свой трекер по коду, имени или номеру. Чужие не находим вовсе:
+     * «find» — личный локатор, а не способ подсмотреть чужой маячок.
+     */
+    static Tracker requireMine(HahGpsPlugin plugin, Player player, String query) {
+        TrackerService service = plugin.getTrackerService();
+        if (service == null) {
+            player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
+            return null;
+        }
+        Tracker tracker = service.find(query);
+        if (tracker == null || !service.canManage(player, tracker)) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-not-found", "name", query));
+            return null;
+        }
+        return tracker;
+    }
+
+    /**
+     * Навести карту игрока на трекер и подсветить его. Используется командой
+     * «find» и кнопкой «показать на карте» в карточке.
+     */
+    public static void focusOnMap(HahGpsPlugin plugin, Player player, Tracker tracker) {
+        TrackerService service = plugin.getTrackerService();
+        if (service == null || tracker == null || player == null) {
+            return;
+        }
+        Location target = service.liveLocation(tracker);
+        if (target == null || target.getWorld() == null) {
+            player.sendMessage(plugin.getMessages().getPrefixed("world-not-found",
+                    "world", tracker.getWorld() == null ? "?" : tracker.getWorld()));
+            return;
+        }
+        if (!LocationUtil.sameWorld(player.getWorld(), target.getWorld())) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-other-world",
+                    "world", target.getWorld().getName()));
+            GuiTheme.deny(player);
+            return;
+        }
+        MapService maps = plugin.getMapService();
+        if (maps == null) {
+            player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
+            return;
+        }
+        maps.focus(player, target);
+        int seconds = plugin.getConfigManager().getItrakScanHighlightSeconds();
+        service.highlight(player, tracker, seconds);
+        player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-focused",
+                "name", tracker.getDisplayName(),
+                "id", String.valueOf(tracker.getId()),
+                "status", service.statusText(tracker),
+                "world", target.getWorld().getName(),
+                "x", TrackerService.formatCoord(target.getX()),
+                "y", TrackerService.formatCoord(target.getY()),
+                "z", TrackerService.formatCoord(target.getZ())));
+        GuiTheme.click(player);
+    }
+
     public static void sendInfo(HahGpsPlugin plugin, Player player, Tracker tracker) {
         TrackerService service = plugin.getTrackerService();
         long now = System.currentTimeMillis();
@@ -300,6 +359,7 @@ public class ItrakCommand implements SubCommand {
                 : plugin.getMessages().get("itrak-type-regular");
         String raw = plugin.getMessages().get("itrak-info",
                 "name", tracker.getDisplayName(),
+                "id", String.valueOf(tracker.getId()),
                 "code", tracker.getCode(),
                 "color", plugin.getMessages().get(tracker.getColor().messageKey()),
                 "type", type,
@@ -385,11 +445,15 @@ public class ItrakCommand implements SubCommand {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-list-header",
                     "count", String.valueOf(list.size())));
             for (Tracker tracker : list) {
-                Location location = tracker.getLocation();
+                Location location = service.liveLocation(tracker);
+                if (location == null) {
+                    location = tracker.getLocation();
+                }
                 double distance = location == null ? Double.MAX_VALUE
                         : LocationUtil.distance(player.getLocation(), location);
                 player.sendMessage(plugin.getMessages().getPrefixed("itrak-list-entry",
                         "name", tracker.getDisplayName(),
+                        "id", String.valueOf(tracker.getId()),
                         "code", tracker.getCode(),
                         "status", service.statusText(tracker),
                         "distance", LocationUtil.formatDistance(distance),
@@ -402,6 +466,85 @@ public class ItrakCommand implements SubCommand {
         @Override
         public List<String> tabComplete(Player player, String[] args) {
             return List.of();
+        }
+    }
+
+    /**
+     * «Мои трекеры» — личный локатор без радиуса и перезарядки: показывает все
+     * свои трекеры (в том числе офлайн на вышедшем игроке), а с аргументом
+     * наводит карту на выбранный. Принимает код, имя и номер в БД.
+     */
+    private static class FindCommand implements SubCommand {
+        @Override
+        public String name() {
+            return "find";
+        }
+
+        @Override
+        public String usage() {
+            return "/gps itrak find [код|имя|id]";
+        }
+
+        @Override
+        public String permission() {
+            return "gps.itrak";
+        }
+
+        @Override
+        public void execute(Player player, String[] args) {
+            HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+            TrackerService service = plugin.getTrackerService();
+            if (service == null) {
+                player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
+                return;
+            }
+            if (args.length > 0) {
+                // Имя может состоять из нескольких слов — склеиваем обратно.
+                String query = join(args, 0, args.length);
+                Tracker tracker = requireMine(plugin, player, query);
+                if (tracker != null) {
+                    focusOnMap(plugin, player, tracker);
+                }
+                return;
+            }
+            boolean admin = player.hasPermission("gps.itrak.admin");
+            List<Tracker> list = admin ? service.all() : service.byOwner(player.getUniqueId());
+            if (list.isEmpty()) {
+                player.sendMessage(plugin.getMessages().getPrefixed("itrak-no-trackers"));
+                return;
+            }
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-header",
+                    "count", String.valueOf(list.size())));
+            int seconds = plugin.getConfigManager().getItrakScanHighlightSeconds();
+            for (Tracker tracker : list) {
+                Location location = service.liveLocation(tracker);
+                if (location == null) {
+                    location = tracker.getLocation();
+                }
+                double distance = location == null ? Double.MAX_VALUE
+                        : LocationUtil.distance(player.getLocation(), location);
+                player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-entry",
+                        "name", tracker.getDisplayName(),
+                        "id", String.valueOf(tracker.getId()),
+                        "code", tracker.getCode(),
+                        "status", service.statusText(tracker),
+                        "distance", LocationUtil.formatDistance(distance),
+                        "x", TrackerService.formatCoord(tracker.getX()),
+                        "y", TrackerService.formatCoord(tracker.getY()),
+                        "z", TrackerService.formatCoord(tracker.getZ())));
+                sendTrackerAction(plugin, player, tracker);
+                player.sendMessage(plugin.getMessages().getComponent("itrak-find-map-button",
+                        "code", tracker.getCode()));
+                if (location != null && LocationUtil.sameWorld(player.getWorld(), location.getWorld())) {
+                    service.highlight(player, tracker, seconds);
+                }
+            }
+            GuiTheme.click(player);
+        }
+
+        @Override
+        public List<String> tabComplete(Player player, String[] args) {
+            return args.length == 1 ? trackerSuggestions(player, args[0]) : List.of();
         }
     }
 
@@ -942,7 +1085,7 @@ public class ItrakCommand implements SubCommand {
         return sb.toString().trim();
     }
 
-    /** Коды и имена всех трекеров — для tab-complete. */
+    /** Коды, имена и номера всех трекеров — для tab-complete. */
     static List<String> trackerSuggestions(Player player, String prefix) {
         TrackerService service = HahGpsPlugin.getInstance().getTrackerService();
         if (service == null) {
@@ -952,6 +1095,7 @@ public class ItrakCommand implements SubCommand {
         boolean admin = player.hasPermission("gps.itrak.admin");
         for (Tracker tracker : admin ? service.all() : service.byOwner(player.getUniqueId())) {
             out.add(tracker.getCode());
+            out.add(String.valueOf(tracker.getId()));
             if (tracker.getName() != null && !tracker.getName().isBlank()) {
                 out.add(tracker.getName());
             }

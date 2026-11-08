@@ -13,7 +13,7 @@ commands:
     aliases: [navigation, nav]
   itrak:
     description: iTrak GPS trackers (same as /gps itrak)
-    usage: /itrak [give|give-locator|scan|list|info|route|take|remove|watch|unwatch]
+    usage: /itrak [give|give-locator|scan|find|list|info|route|take|remove|watch|unwatch]
     aliases: [trk]
     permission: gps.itrak
 

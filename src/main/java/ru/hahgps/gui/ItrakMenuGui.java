@@ -2,6 +2,7 @@ package ru.hahgps.gui;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
@@ -128,6 +129,8 @@ public class ItrakMenuGui extends GuiScreen {
         if (page < pages - 1) {
             inventory.setItem(52, GuiTheme.navForward(getMsg("gui.next-page")));
         }
+        inventory.setItem(47, GuiUtil.item(Material.FILLED_MAP,
+                comp("gui.itrak-find"), lore("gui.lore-itrak-find"), ItemIds.MAP_ITEM));
         inventory.setItem(48, GuiUtil.item(Material.COMPASS,
                 comp("gui.itrak-scan"), lore("gui.lore-itrak-scan"), ItemIds.ITRAK_SCAN));
         inventory.setItem(49, GuiUtil.item(Material.BOOK,
@@ -179,7 +182,7 @@ public class ItrakMenuGui extends GuiScreen {
     }
 
     private double distance(Tracker tracker) {
-        org.bukkit.Location location = tracker.getLocation();
+        Location location = tracker.getLocation();
         return location == null ? Double.MAX_VALUE
                 : LocationUtil.distance(player.getLocation(), location);
     }
@@ -193,6 +196,31 @@ public class ItrakMenuGui extends GuiScreen {
         }
         if (slot == 45) {
             new MainMenuGui(player).open();
+            GuiTheme.click(player);
+            return;
+        }
+        if (slot == 47) {
+            // Свои трекеры видны прямо на карте (см. map.show-trackers):
+            // центрируем на ближайшем из них, иначе — на игроке.
+            player.closeInventory();
+            if (plugin.getMapService() != null) {
+                Location focus = null;
+                double nearest = Double.MAX_VALUE;
+                for (Tracker tracker : service.byOwner(player.getUniqueId())) {
+                    Location location = service.liveLocation(tracker);
+                    double distance = LocationUtil.distance(player.getLocation(), location);
+                    if (distance < nearest) {
+                        nearest = distance;
+                        focus = location;
+                    }
+                }
+                if (focus != null) {
+                    plugin.getMapService().focus(player, focus);
+                } else {
+                    plugin.getMapService().openMap(player);
+                }
+                player.sendMessage(plugin.getMessages().getPrefixed("map-open-hint"));
+            }
             GuiTheme.click(player);
             return;
         }

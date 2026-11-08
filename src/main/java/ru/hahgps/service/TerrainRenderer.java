@@ -75,12 +75,20 @@ public class TerrainRenderer {
         int colorAt(World world, int x, int z);
     }
 
+    /**
+     * Маячок трекера на карте: точка, цвет и признак «сигнала нет». Офлайн
+     * рисуется контуром, чтобы его не путали с живым трекером.
+     */
+    public record Blip(Location location, Color color, boolean offline) {
+    }
+
     public CompletableFuture<BufferedImage> render(World world, int centerX, int centerZ,
                                                    MapView.Scale scale, List<Poi> pois,
                                                    List<Location> route, Location playerLoc,
                                                    List<Location> others,
                                                    BooleanSupplier cancelled) {
-        return render(world, centerX, centerZ, scale, pois, route, playerLoc, others, cancelled, null);
+        return render(world, centerX, centerZ, scale, pois, route, playerLoc, others,
+                List.of(), cancelled, null);
     }
 
     /**
@@ -90,7 +98,7 @@ public class TerrainRenderer {
     public CompletableFuture<BufferedImage> render(World world, int centerX, int centerZ,
                                                    MapView.Scale scale, List<Poi> pois,
                                                    List<Location> route, Location playerLoc,
-                                                   List<Location> others,
+                                                   List<Location> others, List<Blip> trackers,
                                                    BooleanSupplier cancelled,
                                                    CachedColors cachedColors) {
         if (world == null) {
@@ -102,7 +110,7 @@ public class TerrainRenderer {
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     try {
                         render(world, centerX, centerZ, scale, pois, route, playerLoc, others,
-                                cancelled, cachedColors)
+                                trackers, cancelled, cachedColors)
                                 .whenComplete((image, error) -> {
                                     if (error != null) {
                                         out.completeExceptionally(error);
@@ -120,13 +128,14 @@ public class TerrainRenderer {
             return out;
         }
         return renderOnMain(world, centerX, centerZ, scale, pois, route, playerLoc, others,
-                cancelled, cachedColors);
+                trackers, cancelled, cachedColors);
     }
 
     private CompletableFuture<BufferedImage> renderOnMain(World world, int centerX, int centerZ,
                                                           MapView.Scale scale, List<Poi> pois,
                                                           List<Location> route, Location playerLoc,
                                                           List<Location> others,
+                                                          List<Blip> trackers,
                                                           BooleanSupplier cancelled,
                                                           CachedColors cachedColors) {
         double bpp = blocksPerPixel(scale);
@@ -187,7 +196,8 @@ public class TerrainRenderer {
 
         return sampled.thenApplyAsync(
                 colors -> colors == null ? null
-                        : drawImage(colors, centerX, centerZ, bpp, pois, route, playerLoc, others, world),
+                        : drawImage(colors, centerX, centerZ, bpp, pois, route, playerLoc, others,
+                                trackers, world),
                 drawExecutor);
     }
 
@@ -309,7 +319,7 @@ public class TerrainRenderer {
 
     private BufferedImage drawImage(int[] colors, int centerX, int centerZ, double bpp,
                                     List<Poi> pois, List<Location> route, Location playerLoc,
-                                    List<Location> others, World world) {
+                                    List<Location> others, List<Blip> trackers, World world) {
         BufferedImage image = new BufferedImage(MAP_SIZE, MAP_SIZE, BufferedImage.TYPE_INT_RGB);
         for (int pz = 0; pz < MAP_SIZE; pz++) {
             int row = pz * MAP_SIZE;
@@ -358,6 +368,20 @@ public class TerrainRenderer {
                 int pz = (int) ((other.getZ() - centerZ) / bpp) + MAP_SIZE / 2;
                 if (px >= 0 && px < MAP_SIZE && pz >= 0 && pz < MAP_SIZE) {
                     drawMarker(g, px, pz, new Color(79, 209, 224));
+                }
+            }
+        }
+
+        if (trackers != null) {
+            for (Blip blip : trackers) {
+                Location loc = blip == null ? null : blip.location();
+                if (loc == null || loc.getWorld() == null || !loc.getWorld().equals(world)) {
+                    continue;
+                }
+                int px = (int) ((loc.getX() - centerX) / bpp) + MAP_SIZE / 2;
+                int pz = (int) ((loc.getZ() - centerZ) / bpp) + MAP_SIZE / 2;
+                if (px >= 0 && px < MAP_SIZE && pz >= 0 && pz < MAP_SIZE) {
+                    drawBlip(g, px, pz, blip.color(), blip.offline());
                 }
             }
         }
@@ -431,6 +455,25 @@ public class TerrainRenderer {
         g.fillRect(x - 2, y - 2, 5, 5);
         g.setColor(color);
         g.fillRect(x - 1, y - 1, 3, 3);
+    }
+
+    /**
+     * Маячок трекера крупнее обычной точки: живой — залитый цветом трекера,
+     * офлайн (носитель не в сети) — тёмный контур с приглушённой заливкой.
+     */
+    private void drawBlip(Graphics2D g, int x, int y, Color color, boolean offline) {
+        Color base = color == null ? Color.WHITE : color;
+        g.setColor(new Color(8, 18, 43));
+        g.fillRect(x - 3, y - 3, 7, 7);
+        if (offline) {
+            g.setColor(new Color(base.getRed() / 2, base.getGreen() / 2, base.getBlue() / 2));
+            g.fillRect(x - 2, y - 2, 5, 5);
+            g.setColor(base);
+            g.drawRect(x - 2, y - 2, 5, 5);
+        } else {
+            g.setColor(base);
+            g.fillRect(x - 2, y - 2, 5, 5);
+        }
     }
 
     private void drawLine(Graphics2D g, int x0, int y0, int x1, int y1) {

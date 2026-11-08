@@ -127,6 +127,9 @@ public class TrackerService {
                 // сущность может быть в незагруженном чанке.
                 if (tracker.isAttached()) {
                     tracker.setSignal(false);
+                    // Игрок мог выйти до рестарта: тип носителя определяется
+                    // один раз, чтобы такой трекер не считался потерянным.
+                    tracker.setCarrierPlayer(isKnownPlayer(tracker.getEntityUuid()));
                 } else {
                     // Флаг «плывёт» в БД не хранится: восстанавливаем его по
                     // блоку под маркером — иначе после рестарта трекер на воде
@@ -151,6 +154,25 @@ public class TrackerService {
             return false;
         }
         return isWaterBody(world.getBlockAt(bx, floor(tracker.getY() - 0.02), bz));
+    }
+
+    /**
+     * UUID принадлежит игроку. Для мобов и транспорта всегда false: их UUID
+     * нет в списке игравших. Нужно, чтобы отличить «игрок вышел» от «моба
+     * больше нет» — первое не повод снимать трекер.
+     */
+    private static boolean isKnownPlayer(UUID uuid) {
+        if (uuid == null) {
+            return false;
+        }
+        try {
+            if (Bukkit.getPlayer(uuid) != null) {
+                return true;
+            }
+            return Bukkit.getOfflinePlayer(uuid).hasPlayedBefore();
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     public synchronized void start() {
@@ -304,6 +326,13 @@ public class TrackerService {
                 tracker.setSignal(false);
                 dirty.add(tracker.getId());
             }
+            // Игрок вышел, умер или ещё не загрузился после входа: трекер
+            // остаётся на нём, пока владелец не снимет его. Таймаут
+            // detach-after-minutes — только для мобов и транспорта.
+            if (isPlayerCarrier(tracker)) {
+                lostSince.remove(tracker.getId());
+                return;
+            }
             long lostMillis = plugin.getConfigManager().getItrakDetachAfterMillis();
             long since = lostSince.computeIfAbsent(tracker.getId(), id -> now);
             if (lostMillis > 0 && now - since >= lostMillis) {
@@ -316,6 +345,7 @@ public class TrackerService {
         if (world == null) {
             return;
         }
+        tracker.setCarrierPlayer(entity instanceof Player);
         tracker.setSignal(true);
         if (!world.getName().equals(tracker.getWorld())) {
             tracker.setWorld(world.getName());
@@ -328,6 +358,17 @@ public class TrackerService {
         } else {
             dirty.add(tracker.getId());
         }
+    }
+
+    /** Носитель трекера — игрок. Тип определяется один раз и кэшируется в трекере. */
+    private boolean isPlayerCarrier(Tracker tracker) {
+        if (!tracker.isAttached()) {
+            return false;
+        }
+        if (!tracker.isCarrierTypeKnown()) {
+            tracker.setCarrierPlayer(isKnownPlayer(tracker.getEntityUuid()));
+        }
+        return tracker.isCarrierPlayer();
     }
 
     /**
@@ -618,6 +659,7 @@ public class TrackerService {
                 player.getUniqueId(), player.getName(), location.getWorld().getName(),
                 location.getX(), location.getY(), location.getZ(),
                 target == null ? null : target.getUniqueId(), sunk, now, now, now, support);
+        candidate.setCarrierPlayer(target instanceof Player);
 
         return data.createTracker(candidate)
                 .whenComplete((created, error) -> placingCodes.remove(spec.code()))
@@ -776,7 +818,12 @@ public class TrackerService {
         return null;
     }
 
-    /** Поиск по коду или названию (регистр не важен). */
+    /**
+     * Поиск по коду, названию (регистр не важен) или номеру в БД.
+     *
+     * Номер принимается и как {@code 42}, и как {@code #42}: в интерфейсе
+     * трекеры подписаны коротким id, и вводить длинный код вручную неудобно.
+     */
     public Tracker find(String query) {
         if (query == null || query.isBlank()) {
             return null;
@@ -789,6 +836,17 @@ public class TrackerService {
         for (Tracker tracker : trackers.values()) {
             if (tracker.getName() != null && tracker.getName().equalsIgnoreCase(needle)) {
                 return tracker;
+            }
+        }
+        String numeric = needle.startsWith("#") ? needle.substring(1) : needle;
+        if (!numeric.isEmpty() && numeric.chars().allMatch(Character::isDigit)) {
+            try {
+                Tracker byId = byId(Integer.parseInt(numeric));
+                if (byId != null) {
+                    return byId;
+                }
+            } catch (NumberFormatException ignored) {
+                // Слишком длинное число — это уже не id, идём дальше по имени.
             }
         }
         for (Tracker tracker : trackers.values()) {
@@ -993,12 +1051,10 @@ public class TrackerService {
     }
 
     /**
-     * Сущность исчезла (смерть моба или игрока, выход игрока): трекеры
-     * слетают и выпадают предметами там, где были.
-     *
-     * Раньше здесь только гасился сигнал: запись оставалась привязанной к
-     * несуществующей сущности, и локатор продолжал показывать трекер «на
-     * игроке», которого уже нет, — а снять его можно было только командой.
+     * Сущность исчезла (смерть моба или игрока, выход игрока). С мобов и
+     * транспорта трекеры слетают и выпадают предметами там, где были; на
+     * игроке трекер остаётся — он просто становится офлайн до следующего
+     * входа носителя (см. {@link #onPlayerQuit}).
      */
     public void onEntityGone(Entity entity) {
         if (entity == null) {
@@ -1006,7 +1062,17 @@ public class TrackerService {
         }
         Location at = entity.getLocation();
         String entityName = entity.getName();
+        long now = System.currentTimeMillis();
         for (Tracker tracker : trackersOnEntity(entity.getUniqueId())) {
+            if (entity instanceof Player) {
+                // UUID игрока постоянный: трекер не слетает, а ждёт его.
+                tracker.setCarrierPlayer(true);
+                tracker.setSignal(false);
+                tracker.moveTo(at.getX(), at.getY(), at.getZ(), now);
+                lostSince.remove(tracker.getId());
+                dirty.add(tracker.getId());
+                continue;
+            }
             String name = tracker.getDisplayName();
             Player owner = tracker.getOwnerUuid() == null ? null
                     : Bukkit.getPlayer(tracker.getOwnerUuid());
@@ -1020,6 +1086,34 @@ public class TrackerService {
                         "y", formatCoord(at.getY()),
                         "z", formatCoord(at.getZ())));
             }
+        }
+    }
+
+    /**
+     * Игрок вышел: трекеры на нём остаются привязанными и переходят в
+     * «офлайн» на последних координатах. При следующем входе тик находит
+     * игрока по UUID и трекер снова цепляется к нему — снимается он только
+     * вручную, как и просили.
+     */
+    public void onPlayerQuit(Player player) {
+        if (player == null) {
+            return;
+        }
+        Location at = player.getLocation();
+        long now = System.currentTimeMillis();
+        for (Tracker tracker : trackersOnEntity(player.getUniqueId())) {
+            tracker.setCarrierPlayer(true);
+            tracker.moveTo(at.getX(), at.getY(), at.getZ(), now);
+            tracker.setSignal(false);
+            lostSince.remove(tracker.getId());
+            dirty.add(tracker.getId());
+            // Сохраняем сразу: после выхода игрока сервер может уйти в
+            // рестарт раньше, чем сработает периодическое сохранение.
+            data.updateTracker(tracker).exceptionally(error -> {
+                plugin.getLogger().log(Level.WARNING, "HahGps: не удалось сохранить трекер "
+                        + tracker.getCode() + " при выходе игрока", error);
+                return false;
+            });
         }
     }
 
@@ -1106,6 +1200,11 @@ public class TrackerService {
         // «затонул» звучало бы как поломка, поэтому статус — «под водой».
         if (tracker.isSunk() && tracker.isWaterproof()) {
             return messages.get("itrak-status-submerged");
+        }
+        // Трекер на игроке, которого нет в сети, — не «потерян»: он на нём,
+        // просто ждёт входа. Так и пишем, чтобы не путать с потерей сигнала.
+        if (tracker.isCarrierOffline()) {
+            return messages.get("itrak-status-offline");
         }
         return switch (tracker.status()) {
             case LIVE -> messages.get("itrak-status-live");

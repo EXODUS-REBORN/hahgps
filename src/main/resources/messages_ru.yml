@@ -189,7 +189,12 @@ itrak-player-not-found: "<#3f86ff>✖ Игрок <white><bold>{name}</bold></whi
 itrak-color-unknown: "<#3f86ff>✖ Неизвестный цвет <white><bold>{color}</bold></white>.</#3f86ff>"
 itrak-no-trackers: "<#3f86ff>✖ Трекеров пока нет — прицепи iTrak к поверхности.</#3f86ff>"
 itrak-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ ТРЕКЕРЫ ({count}) ═══</gradient></bold>"
-itrak-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff>"
+itrak-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>#{id}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff>"
+itrak-find-header: "<bold><gradient:#2464c8:#8fe9f5>═══ МОИ ТРЕКЕРЫ ({count}) ═══</gradient></bold>"
+itrak-find-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>#{id}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff>"
+itrak-find-map-button: "  <click:run_command:'/gps itrak find {code}'><#66aaff>[показать на карте]</#66aaff></click>"
+itrak-find-focused: "<#8fe9f5>✔</#8fe9f5> <gray>Карта наведена на трекер</gray> <white><bold>{name}</bold></white> <dark_gray>·</dark_gray> <gray>{status}</gray> <dark_gray>·</dark_gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
+itrak-find-other-world: "<#3f86ff>✖ Трекер в другом мире:</#3f86ff> <#8fc6ff>{world}</#8fc6ff> <gray>— карту там не открыть.</gray>"
 itrak-scan-header: "<bold><gradient:#2464c8:#8fe9f5>═══ ЛОКАТОР ({radius}): ТРЕКЕРЫ ({count}) ═══</gradient></bold>"
 itrak-scan-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff>"
 itrak-route-button: "  <click:run_command:'/gps itrak route {code}'><#66aaff>[построить маршрут]</#66aaff></click>"
@@ -211,6 +216,7 @@ itrak-detached: "<#66aaff>→</#66aaff> <gray>Трекер</gray> <white><bold>{
 itrak-info: |
   <bold><gradient:#2464c8:#8fe9f5>════════ iTrak ════════</gradient></bold>
   <gray>Название:</gray> <white><bold>{name}</bold></white>
+  <gray>Номер:</gray> <#8fc6ff>#{id}</#8fc6ff>
   <gray>Код:</gray> <#8fc6ff><bold>{code}</bold></#8fc6ff>
   <gray>Цвет:</gray> <white>{color}</white> <dark_gray>·</dark_gray> <gray>Тип:</gray> <white>{type}</white>
   <gray>Владелец:</gray> <white>{owner}</white>
@@ -231,6 +237,7 @@ itrak-type-regular: "обычный"
 itrak-type-waterproof: "водонепроницаемый"
 itrak-status-live: "в сети"
 itrak-status-no-signal: "нет сигнала"
+itrak-status-offline: "офлайн"
 itrak-status-sunk: "затонул"
 itrak-status-submerged: "под водой"
 itrak-state-moving: "в движении"
@@ -372,6 +379,8 @@ gui:
   itrak-take-far: "<#3f86ff>Далеко</#3f86ff>"
   itrak-delete: "<#3f86ff>✖ Удалить</#3f86ff>"
   itrak-scan: "<#8fc6ff>Сканировать</#8fc6ff>"
+  itrak-find: "<#8fc6ff>Мои трекеры на карте</#8fc6ff>"
+  itrak-map: "<#8fc6ff>Показать на карте</#8fc6ff>"
   itrak-give: "<#8fc6ff>Выдать трекер</#8fc6ff>"
   itrak-refresh: "<#8fc6ff>Обновить</#8fc6ff>"
   itrak-none: "<#3f86ff>Трекеров нет</#3f86ff>"
@@ -386,6 +395,8 @@ gui:
   lore-itrak-live: "<gray><italic>Обновляется в реальном времени</italic></gray>"
   lore-itrak-none: "<gray><italic>Прицепи iTrak к поверхности</italic></gray>"
   lore-itrak-scan: "<gray><italic>Найти трекеры поблизости</italic></gray>"
+  lore-itrak-find: "<gray><italic>Открыть карту со своими маячками</italic></gray>"
+  lore-itrak-map: "<gray><italic>Навести карту на этот трекер</italic></gray>"
   lore-itrak-give: "<gray><italic>Выдать iTrak себе</italic></gray>"
   lore-itrak-refresh: "<gray><italic>Обновить список</italic></gray>"
   lore-itrak-route: "<gray><italic>Маршрут в реальном времени</italic></gray>"

@@ -247,6 +247,11 @@ public class ConfigManager {
         return config.getBoolean("map.show-players", false);
     }
 
+    /** Свои трекеры iTrak на карте: цветные маячки, офлайн — контуром. */
+    public boolean isMapShowTrackers() {
+        return config.getBoolean("map.show-trackers", true);
+    }
+
     /** Мышь двигает карту в руке (панорама без ходьбы). */
     public boolean isMapMousePan() {
         return config.getBoolean("map.mouse-pan", true);

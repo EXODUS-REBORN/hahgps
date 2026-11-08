@@ -13,6 +13,7 @@ import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.config.ConfigManager;
 import ru.hahgps.model.NavigationSession;
 import ru.hahgps.model.Poi;
+import ru.hahgps.model.Tracker;
 import ru.hahgps.storage.DataService;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
@@ -97,6 +98,23 @@ public class MapService {
         giveMapItem(player, view);
         player.sendMap(view);
         renderAsync(player, view);
+    }
+
+    /**
+     * Навести карту на точку (трекер) и показать её в руке: так работает
+     * «find» — карта как в «Локаторе», только по своим маячкам.
+     */
+    public boolean focus(Player player, Location target) {
+        if (player == null || target == null || target.getWorld() == null) {
+            return false;
+        }
+        MapView view = getOrCreateMapView(player, target.getWorld());
+        view.setCenterX(clampCenter(target.getBlockX()));
+        view.setCenterZ(clampCenter(target.getBlockZ()));
+        player.sendMap(view);
+        renderAsync(player, view);
+        giveMapItem(player, view);
+        return true;
     }
 
     /** Масштаб карты игрока (null — карта ещё не открывалась). */
@@ -402,15 +420,36 @@ public class MapService {
             others = collected;
         }
 
+        // Свои трекеры на карте — как «Локатор» в телефоне: цвет маячка, а
+        // офлайн (игрок вышел) рисуется контуром без заливки.
+        List<TerrainRenderer.Blip> trackers = List.of();
+        if (config.isMapShowTrackers()) {
+            TrackerService trackerService = plugin.getTrackerService();
+            if (trackerService != null) {
+                List<TerrainRenderer.Blip> collected = new ArrayList<>();
+                for (Tracker tracker : trackerService.byOwner(id)) {
+                    Location location = tracker.liveLocation();
+                    if (location == null || location.getWorld() == null
+                            || !ru.hahgps.util.LocationUtil.sameWorld(location.getWorld(), world)) {
+                        continue;
+                    }
+                    collected.add(new TerrainRenderer.Blip(location,
+                            new java.awt.Color(tracker.getColor().getRgb()), !tracker.hasSignal()));
+                }
+                trackers = collected;
+            }
+        }
+
         List<Poi> finalPois = pois;
         List<Location> finalRoute = route;
         List<Location> finalOthers = others;
+        List<TerrainRenderer.Blip> finalTrackers = trackers;
 
         WorldMapCache cache = config.isMapWorldCache() ? plugin.getWorldMapCache() : null;
         TerrainRenderer.CachedColors cached = cache == null ? null
                 : (cachedWorld, x, z) -> cache.colorAt(cachedWorld, x, z);
         terrainRenderer.render(world, centerX, centerZ, scale, finalPois, finalRoute, playerLoc,
-                        finalOthers, cancelled, cached)
+                        finalOthers, finalTrackers, cancelled, cached)
                 .thenAccept(image -> {
                     if (image != null) {
                         applyRenderedImage(id, token, view, player, image);

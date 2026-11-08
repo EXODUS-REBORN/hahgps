@@ -49,7 +49,7 @@ ru.hahgps
 │   ├── GuiListener.java       — клики в GUI
 │   ├── TrackerListener.java   — установка/бросок/снятие iTrak, заряд, терминал
 │   ├── ItrakCraftingListener.java — крафты iTrak и подмена результата
-│   └── PlayerQuitListener.java— очистка при выходе
+│   └── PlayerQuitListener.java— очистка при выходе, трекеры игрока → офлайн
 ├── model/                     — модели данных
 │   ├── Category.java          — категория точек
 │   ├── GraphNode.java         — узел дорожного графа
@@ -124,7 +124,8 @@ ru.hahgps
 - **EdgeCommand** — управление рёбрами графа
 - **VisualCommand** — визуализация дорожной сети
 - **ItrakCommand** — трекеры iTrak: give, give-locator (радиус/long),
-  give-terminal, scan, list, info, route, take, remove, watch
+  give-terminal, scan, find (свои трекеры + карта), list, info, route,
+  take, remove, watch
 
 ### 3. Слой данных (Storage)
 

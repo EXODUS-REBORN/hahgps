@@ -108,6 +108,24 @@ class TrackerTest {
     }
 
     @Test
+    void playerCarrierCanBeOfflineWithTrackerStillAttached() {
+        UUID playerId = UUID.randomUUID();
+        Tracker tracker = new Tracker(3, "TRK-0003", "Маячок", TrackerColor.CYAN, false,
+                UUID.randomUUID(), "tester", "world", 5, 64, 5, playerId, false, 1L, 1L, 1L);
+        assertFalse(tracker.isCarrierTypeKnown(), "тип носителя ещё не определён");
+        tracker.setCarrierPlayer(true);
+        assertTrue(tracker.isCarrierPlayer());
+        assertTrue(tracker.isCarrierTypeKnown());
+        tracker.setSignal(false);
+        assertTrue(tracker.isCarrierOffline(), "игрок вышел — трекер на нём, но офлайн");
+        tracker.setSignal(true);
+        assertFalse(tracker.isCarrierOffline(), "игрок в сети — трекер не офлайн");
+        tracker.setCarrierPlayer(false);
+        tracker.setSignal(false);
+        assertFalse(tracker.isCarrierOffline(), "моб/транспорт офлайн-статус не получает");
+    }
+
+    @Test
     void sunkFlagWinsOverRestoredSignalForRegularTracker() {
         Tracker tracker = tracker(10L, true, false);
         tracker.setSignal(true);

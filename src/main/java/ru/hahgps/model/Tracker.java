@@ -53,6 +53,14 @@ public class Tracker {
     private transient boolean signal = true;
 
     /**
+     * Носитель — игрок. Такой трекер не слетает, когда игрок выходит или
+     * умирает: он ждёт его на последних координатах со статусом «офлайн» и
+     * снова цепляется при входе. {@code null} — тип носителя ещё не определён
+     * (только что загрузились из БД).
+     */
+    private transient Boolean carrierPlayer;
+
+    /**
      * Трекер в воде: держится на поверхности и дрейфует по течению. Состояние
      * не хранится в БД — при загрузке восстанавливается по блоку под маркером.
      * Утонувший трекер статичен, флаг ему не нужен.
@@ -159,6 +167,35 @@ public class Tracker {
 
     public boolean isAttached() {
         return entityUuid != null;
+    }
+
+    /** Носитель трекера — игрок (а не моб или транспорт). */
+    public boolean isCarrierPlayer() {
+        return Boolean.TRUE.equals(carrierPlayer);
+    }
+
+    /** Тип носителя уже известен: не нужно лишний раз лезть в OfflinePlayer. */
+    public boolean isCarrierTypeKnown() {
+        return carrierPlayer != null;
+    }
+
+    public void setCarrierPlayer(boolean carrierPlayer) {
+        this.carrierPlayer = carrierPlayer;
+    }
+
+    /**
+     * Трекер на игроке, который сейчас не в сети: сигнала нет, но запись
+     * остаётся привязанной к UUID игрока и ждёт его возвращения.
+     */
+    public boolean isCarrierOffline() {
+        if (entityUuid == null || !isCarrierPlayer() || hasSignal()) {
+            return false;
+        }
+        try {
+            return Bukkit.getPlayer(entityUuid) == null;
+        } catch (Throwable ignored) {
+            return true;
+        }
     }
 
     public SupportBlock getSupportBlock() {
@@ -282,7 +319,9 @@ public class Tracker {
 
     /**
      * Живая точка: сущность может быть в другом месте, чем последние
-     * сохранённые координаты, и её нужно спросить прямо сейчас.
+     * сохранённые координаты, и её нужно спросить прямо сейчас. Если сущности
+     * уже нет (игрок вышел, моб исчез), возвращаем последние координаты —
+     * локатор и карта должны показывать, где трекер видели в последний раз.
      */
     public Location liveLocation() {
         UUID entityId = entityUuid;
@@ -291,7 +330,6 @@ public class Tracker {
             if (entity != null && entity.isValid() && !entity.isDead()) {
                 return entity.getLocation();
             }
-            return null;
         }
         return getLocation();
     }

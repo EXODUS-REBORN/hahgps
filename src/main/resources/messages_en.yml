@@ -189,7 +189,12 @@ itrak-player-not-found: "<#3f86ff>✖ Player <white><bold>{name}</bold></white> 
 itrak-color-unknown: "<#3f86ff>✖ Unknown color <white><bold>{color}</bold></white>.</#3f86ff>"
 itrak-no-trackers: "<#3f86ff>✖ No trackers yet — attach an iTrak to a surface.</#3f86ff>"
 itrak-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ TRACKERS ({count}) ═══</gradient></bold>"
-itrak-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff>"
+itrak-list-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>#{id}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff>"
+itrak-find-header: "<bold><gradient:#2464c8:#8fe9f5>═══ MY TRACKERS ({count}) ═══</gradient></bold>"
+itrak-find-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>#{id}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff>"
+itrak-find-map-button: "  <click:run_command:'/gps itrak find {code}'><#66aaff>[show on map]</#66aaff></click>"
+itrak-find-focused: "<#8fe9f5>✔</#8fe9f5> <gray>Map focused on tracker</gray> <white><bold>{name}</bold></white> <dark_gray>·</dark_gray> <gray>{status}</gray> <dark_gray>·</dark_gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
+itrak-find-other-world: "<#3f86ff>✖ The tracker is in another world:</#3f86ff> <#8fc6ff>{world}</#8fc6ff> <gray>— the map cannot show it here.</gray>"
 itrak-scan-header: "<bold><gradient:#2464c8:#8fe9f5>═══ LOCATOR ({radius}): NEARBY TRACKERS ({count}) ═══</gradient></bold>"
 itrak-scan-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <gray>{status}</gray> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff>"
 itrak-route-button: "  <click:run_command:'/gps itrak route {code}'><#66aaff>[build route]</#66aaff></click>"
@@ -211,6 +216,7 @@ itrak-detached: "<#66aaff>→</#66aaff> <gray>Tracker</gray> <white><bold>{name}
 itrak-info: |
   <bold><gradient:#2464c8:#8fe9f5>════════ iTrak ════════</gradient></bold>
   <gray>Name:</gray> <white><bold>{name}</bold></white>
+  <gray>Number:</gray> <#8fc6ff>#{id}</#8fc6ff>
   <gray>Code:</gray> <#8fc6ff><bold>{code}</bold></#8fc6ff>
   <gray>Color:</gray> <white>{color}</white> <dark_gray>·</dark_gray> <gray>Type:</gray> <white>{type}</white>
   <gray>Owner:</gray> <white>{owner}</white>
@@ -231,6 +237,7 @@ itrak-type-regular: "regular"
 itrak-type-waterproof: "waterproof"
 itrak-status-live: "online"
 itrak-status-no-signal: "no signal"
+itrak-status-offline: "offline"
 itrak-status-sunk: "sunk"
 itrak-status-submerged: "submerged"
 itrak-state-moving: "moving"
@@ -372,6 +379,8 @@ gui:
   itrak-take-far: "<#3f86ff>Too far</#3f86ff>"
   itrak-delete: "<#3f86ff>✖ Delete</#3f86ff>"
   itrak-scan: "<#8fc6ff>Scan</#8fc6ff>"
+  itrak-find: "<#8fc6ff>My trackers on the map</#8fc6ff>"
+  itrak-map: "<#8fc6ff>Show on the map</#8fc6ff>"
   itrak-give: "<#8fc6ff>Give tracker</#8fc6ff>"
   itrak-refresh: "<#8fc6ff>Refresh</#8fc6ff>"
   itrak-none: "<#3f86ff>No trackers</#3f86ff>"
@@ -386,6 +395,8 @@ gui:
   lore-itrak-live: "<gray><italic>Updates in real time</italic></gray>"
   lore-itrak-none: "<gray><italic>Attach an iTrak to a surface</italic></gray>"
   lore-itrak-scan: "<gray><italic>Find nearby trackers</italic></gray>"
+  lore-itrak-find: "<gray><italic>Open the map with your beacons</italic></gray>"
+  lore-itrak-map: "<gray><italic>Focus the map on this tracker</italic></gray>"
   lore-itrak-give: "<gray><italic>Give yourself an iTrak</italic></gray>"
   lore-itrak-refresh: "<gray><italic>Refresh the list</italic></gray>"
   lore-itrak-route: "<gray><italic>Live route to the tracker</italic></gray>"

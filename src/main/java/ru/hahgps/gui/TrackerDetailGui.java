@@ -139,6 +139,11 @@ public class TrackerDetailGui extends GuiScreen {
                 List.of(comp(watching ? "gui.lore-itrak-watch-off" : "gui.lore-itrak-watch-on")),
                 ItemIds.ITRAK_WATCH));
 
+        inventory.setItem(13, GuiUtil.item(Material.FILLED_MAP,
+                comp("gui.itrak-map"),
+                List.of(comp("gui.lore-itrak-map")),
+                ItemIds.MAP_ITEM));
+
         boolean canTake = service.canManage(player, tracker) && service.canTake(player, tracker);
         inventory.setItem(14, GuiUtil.item(canTake ? Material.CHEST : Material.BARRIER,
                 comp(canTake ? "gui.itrak-take" : "gui.itrak-take-far"),
@@ -228,6 +233,10 @@ public class TrackerDetailGui extends GuiScreen {
                 }
                 GuiTheme.click(player);
                 refresh();
+            }
+            case 13 -> {
+                player.closeInventory();
+                ItrakCommand.focusOnMap(plugin, player, tracker);
             }
             case 14 -> {
                 if (!service.canManage(player, tracker) || !service.canTake(player, tracker)) {
