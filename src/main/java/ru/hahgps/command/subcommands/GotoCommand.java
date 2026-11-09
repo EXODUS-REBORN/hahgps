@@ -5,9 +5,34 @@ import ru.hahgps.command.SubCommand;
 import ru.hahgps.model.Poi;
 import ru.hahgps.model.TransportType;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class GotoCommand implements SubCommand {
+
+    /**
+     * Разобранные аргументы: имя точки может состоять из нескольких слов
+     * («Хайсовская 10»), поэтому транспорт — это отдельный последний токен,
+     * а не «второй аргумент». Без него маршрут пешком.
+     */
+    record RouteArgs(String name, TransportType transport, boolean explicitTransport) {
+    }
+
+    static RouteArgs parseArgs(String[] args) {
+        TransportType transport = TransportType.FOOT;
+        int end = args.length;
+        boolean explicit = false;
+        if (args.length >= 2) {
+            TransportType parsed = SubCommand.parseTransport(args[args.length - 1]);
+            if (parsed != null) {
+                transport = parsed;
+                explicit = true;
+                end = args.length - 1;
+            }
+        }
+        String name = String.join(" ", Arrays.copyOfRange(args, 0, end)).trim();
+        return new RouteArgs(name, transport, explicit);
+    }
 
     @Override
     public String name() {
@@ -31,21 +56,18 @@ public class GotoCommand implements SubCommand {
             player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
             return;
         }
-        String name = args[0];
-        TransportType transport = TransportType.FOOT;
-        if (args.length >= 2) {
-            transport = ru.hahgps.command.SubCommand.parseTransport(args[1]);
-            if (transport == null) {
-
-                player.sendMessage(plugin.getMessages().getPrefixed("invalid-args",
-                        "usage", usage()));
-                return;
-            }
-            if (!plugin.getConfigManager().isTransportAvailable(transport.getKey())) {
-                player.sendMessage(plugin.getMessages().getPrefixed("transport-disabled",
-                        "transport", transport.getKey()));
-                return;
-            }
+        GotoCommand.RouteArgs route = parseArgs(args);
+        if (route.name().isEmpty()) {
+            player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
+            return;
+        }
+        String name = route.name();
+        TransportType transport = route.transport();
+        if (route.explicitTransport()
+                && !plugin.getConfigManager().isTransportAvailable(transport.getKey())) {
+            player.sendMessage(plugin.getMessages().getPrefixed("transport-disabled",
+                    "transport", transport.getKey()));
+            return;
         }
         final TransportType finalTransport = transport;
         plugin.getPoiService().loadPoiWithRating(name).whenComplete((poi, error) -> {

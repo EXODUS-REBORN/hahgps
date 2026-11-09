@@ -1,21 +1,27 @@
 package ru.hahgps.command.subcommands;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import org.bukkit.entity.Player;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.SubCommand;
+import ru.hahgps.config.MessagesManager;
 import ru.hahgps.service.SearchService;
 import ru.hahgps.service.TrackerService;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 /**
  * Поиск мест в чате.
  *
- * Процент совпадения больше не печатается: в списке — название, координаты и
- * сколько игроков искали это место, а сам процент виден в подсказке при
- * наведении в меню поиска. Сколько мест выводить, задаётся ключом
- * {@code -n 1..25} (без ключа — настройка игрока или значение из конфига).
+ * В строке — только название, под ним кнопка «построить маршрут». Показания
+ * (полное название, координаты, число искавших и процент совпадения) живут
+ * в подсказке при наведении: список не забивается цифрами, но всё видно, если
+ * навести курсор. Сколько мест выводить, задаётся ключом {@code -n 1..25}
+ * (без ключа — настройка игрока или значение из конфига).
  */
 public class SearchCommand implements SubCommand {
 
@@ -79,21 +85,47 @@ public class SearchCommand implements SubCommand {
                         player.sendMessage(messages.getPrefixed("search-header",
                                 "count", String.valueOf(list.size())));
                         for (SearchService.SearchResult result : list) {
-                            String x = "?";
-                            String y = "?";
-                            String z = "?";
+                            player.sendMessage(resultLine(messages, result));
                             if (result.poi != null) {
-                                x = TrackerService.formatCoord(result.poi.getX());
-                                y = TrackerService.formatCoord(result.poi.getY());
-                                z = TrackerService.formatCoord(result.poi.getZ());
+                                player.sendMessage(messages.getComponent("search-route-button")
+                                        .clickEvent(ClickEvent.runCommand(routeCommand(result.name))));
                             }
-                            player.sendMessage(messages.getPrefixed("search-entry",
-                                    "name", result.name,
-                                    "x", x, "y", y, "z", z,
-                                    "players", String.valueOf(result.searchers)));
                         }
                     });
                 });
+    }
+
+    /**
+     * Строка результата: название плюс подсказка при наведении со всеми
+     * показаниями (полное название, координаты, число искавших, совпадение).
+     */
+    private static Component resultLine(MessagesManager messages, SearchService.SearchResult result) {
+        List<Component> lines = new ArrayList<>();
+        lines.add(messages.getComponent("gui.lore-search-full-name", "full", result.name));
+        if (result.poi != null) {
+            lines.add(messages.getComponent("gui.lore-search-coords",
+                    "x", TrackerService.formatCoord(result.poi.getX()),
+                    "y", TrackerService.formatCoord(result.poi.getY()),
+                    "z", TrackerService.formatCoord(result.poi.getZ())));
+        }
+        lines.add(messages.getComponent("gui.lore-search-searchers",
+                "count", String.valueOf(result.searchers)));
+        lines.add(messages.getComponent("gui.lore-search-result",
+                "percent", String.valueOf(result.percent())));
+        Component hover = Component.empty();
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) {
+                hover = hover.append(Component.newline());
+            }
+            hover = hover.append(lines.get(i));
+        }
+        return messages.getComponent("search-entry", "name", result.name)
+                .hoverEvent(HoverEvent.showText(hover));
+    }
+
+    /** Команда кнопки: имя может быть из нескольких слов — goto склеивает их сам. */
+    private static String routeCommand(String name) {
+        return "/gps goto " + name;
     }
 
     @Override

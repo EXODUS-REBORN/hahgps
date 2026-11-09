@@ -219,6 +219,9 @@ public class SearchGui extends GuiScreen {
                 "count", String.valueOf(result.searchers)));
         lines.addAll(lore("gui.lore-search-result",
                 "percent", String.valueOf(result.percent())));
+        if (result.poi != null) {
+            lines.addAll(lore("gui.lore-search-action"));
+        }
         return GuiUtil.item(Material.COMPASS,
                 GuiUtil.tonedName(9, result.name), lines, ru.hahgps.item.ItemIds.SEARCH_RESULT);
     }

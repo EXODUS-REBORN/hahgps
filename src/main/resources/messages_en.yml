@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Palette schema version: a mismatch replaces the file with the bundled one (old -> .bak)
-palette-version: 9
+palette-version: 10
 
 no-permission: "<#3f86ff>✖ You don't have permission to run this command.</#3f86ff>"
 player-only: "<#3f86ff>✖ This command is for players only.</#3f86ff>"
@@ -106,7 +106,8 @@ log-disabled: "<#8fe9f5>✔</#8fe9f5> <gray>Chat hints disabled.</gray>"
 # --- Search ---
 search-header: "<bold><gradient:#2464c8:#8fe9f5>═══ SEARCH ({count}) ═══</gradient></bold>"
 search-no-results: "<#3f86ff>✖ Nothing found for <white><bold>{query}</bold></white>.</#3f86ff>"
-search-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff> <dark_gray>|</dark_gray> <gray>searched by:</gray> <#8fc6ff>{players}</#8fc6ff>"
+search-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white>"
+search-route-button: "  <#66aaff>[build route]</#66aaff>"
 
 # --- Map ---
 map-open-hint: "<#66aaff>→</#66aaff> <gray>The map follows you: Shift+mouse — pan, RMB — center, Shift+RMB — menu.</gray>"
@@ -371,6 +372,7 @@ gui:
   lore-search-start: "<gray><italic>Click to start a search</italic></gray>"
   lore-search-name: "<gray><italic>Search by point name</italic></gray>"
   lore-search-result: "<gray>Match: <white><bold>{percent}%</bold></white></gray>"
+  lore-search-action: "<gray><italic>Click — build route</italic></gray>"
   lore-search-full-name: "<gray>Name: <white>{full}</white></gray>"
   lore-search-coords: "<gray>Coords: <#8fc6ff>{x}, {y}, {z}</#8fc6ff></gray>"
   lore-search-searchers: "<gray>Players searching: <#8fc6ff><bold>{count}</bold></#8fc6ff></gray>"

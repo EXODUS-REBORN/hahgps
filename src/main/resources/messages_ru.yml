@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Версия схемы палитры: при несовпадении файл заменяется эталоном (старый — в .bak)
-palette-version: 9
+palette-version: 10
 
 no-permission: "<#3f86ff>✖ У вас нет прав для выполнения этой команды.</#3f86ff>"
 player-only: "<#3f86ff>✖ Эта команда доступна только игрокам.</#3f86ff>"
@@ -106,7 +106,8 @@ log-disabled: "<#8fe9f5>✔</#8fe9f5> <gray>Подсказки в чате вы�
 # --- Поиск ---
 search-header: "<bold><gradient:#2464c8:#8fe9f5>═══ ПОИСК ({count}) ═══</gradient></bold>"
 search-no-results: "<#3f86ff>✖ По запросу <white><bold>{query}</bold></white> ничего не найдено.</#3f86ff>"
-search-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff> <dark_gray>|</dark_gray> <gray>ищут:</gray> <#8fc6ff>{players}</#8fc6ff>"
+search-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white>"
+search-route-button: "  <#66aaff>[построить маршрут]</#66aaff>"
 
 # --- Карта ---
 map-open-hint: "<#66aaff>→</#66aaff> <gray>Карта в руке идёт за тобой: Shift+мышь — сдвинуть, ПКМ — центр, Shift+ПКМ — меню.</gray>"
@@ -371,6 +372,7 @@ gui:
   lore-search-start: "<gray><italic>Нажмите, чтобы начать поиск</italic></gray>"
   lore-search-name: "<gray><italic>По названию точки</italic></gray>"
   lore-search-result: "<gray>Совпадение: <white><bold>{percent}%</bold></white></gray>"
+  lore-search-action: "<gray><italic>Нажмите — построить маршрут</italic></gray>"
   lore-search-full-name: "<gray>Название: <white>{full}</white></gray>"
   lore-search-coords: "<gray>Координаты: <#8fc6ff>{x}, {y}, {z}</#8fc6ff></gray>"
   lore-search-searchers: "<gray>Ищут игроков: <#8fc6ff><bold>{count}</bold></#8fc6ff></gray>"

@@ -1,6 +1,7 @@
 package ru.hahgps.listener;
 
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -19,6 +20,7 @@ import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import io.papermc.paper.event.player.PlayerPickBlockEvent;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.subcommands.ItrakCommand;
 import ru.hahgps.item.ItemFactory;
@@ -33,6 +35,7 @@ import ru.hahgps.util.EntityNames;
  *   <li>ПКМ трекером по блоку — прицепить, ПКМ в воздух — бросить (Shift — аккуратно);</li>
  *   <li>ПКМ пустой рукой по блоку с трекером — снять; Shift+ПКМ по существу — снять с него;</li>
  *   <li>ПКМ по терминалу — координаты трекеров рядом и подсветка;</li>
+ *   <li>средний клик по терминалу в креативе — скопировать сам терминал;</li>
  *   <li>поломка блока/терминала — предмет возвращается в мир.</li>
  * </ul>
  * События отменяются: трекер — предмет-устройство, а не блок и не инструмент.
@@ -337,6 +340,35 @@ public class TrackerListener implements Listener {
     // ------------------------------------------------------------------
     // Терминал
     // ------------------------------------------------------------------
+
+    /**
+     * Средний клик (pick block) по установленному терминалу в креативе копирует
+     * не лодестоун, а сам предмет терминала: в мире это обычный лодестоун, и
+     * ваниль знает только его. Событие отменяем и кладём предмет сами, иначе
+     * ваниль успевает подставить лодестоун и предмет терминала не вернуть.
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPickBlock(PlayerPickBlockEvent event) {
+        if (!plugin.getConfigManager().isItrakEnabled()) {
+            return;
+        }
+        ItrakTerminalService terminals = plugin.getTerminalService();
+        if (terminals == null || !terminals.isTerminal(event.getBlock())) {
+            return;
+        }
+        Player player = event.getPlayer();
+        if (player.getGameMode() != GameMode.CREATIVE || !player.hasPermission("gps.itrak")) {
+            return;
+        }
+        event.setCancelled(true);
+        int slot = event.getTargetSlot();
+        if (slot < 0 || slot > 8) {
+            slot = player.getInventory().getHeldItemSlot();
+        }
+        player.getInventory().setItem(slot, ItemFactory.terminalItem());
+        player.getInventory().setHeldItemSlot(slot);
+        player.updateInventory();
+    }
 
     private void placeTerminal(Player player, Block clicked, BlockFace face) {
         ItrakTerminalService terminals = plugin.getTerminalService();
