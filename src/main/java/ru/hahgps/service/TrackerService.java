@@ -5,6 +5,7 @@ import io.papermc.paper.block.fluid.type.FallingFluidData;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -1468,6 +1469,37 @@ public class TrackerService {
         return tracker.isStationary(now, threshold)
                 ? messages.get("itrak-state-stationary")
                 : messages.get("itrak-state-moving");
+    }
+
+    /**
+     * Ник игрока-носителя. Для трекера на мобе, транспорте или блоке — null:
+     * ника там нет, а название существа уже стоит в строке трекера.
+     */
+    public String carrierName(Tracker tracker) {
+        if (!isPlayerCarrier(tracker)) {
+            return null;
+        }
+        UUID id = tracker.getEntityUuid();
+        Player online = Bukkit.getPlayer(id);
+        if (online != null) {
+            return online.getName();
+        }
+        try {
+            OfflinePlayer offline = Bukkit.getOfflinePlayer(id);
+            return offline == null ? null : offline.getName();
+        } catch (Throwable ignored) {
+            // Сервер выключается или профиль недоступен — подсказку просто не рисуем.
+            return null;
+        }
+    }
+
+    /** Игрок-носитель сейчас в сети: для подсказки «в сети»/«офлайн». */
+    public boolean isCarrierOnline(Tracker tracker) {
+        if (!isPlayerCarrier(tracker)) {
+            return false;
+        }
+        Player online = Bukkit.getPlayer(tracker.getEntityUuid());
+        return online != null && online.isOnline();
     }
 
     /**

@@ -1,5 +1,7 @@
 package ru.hahgps.command.subcommands;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.HoverEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
@@ -7,6 +9,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.SubCommand;
+import ru.hahgps.config.MessagesManager;
 import ru.hahgps.gui.GuiTheme;
 import ru.hahgps.gui.ItrakMenuGui;
 import ru.hahgps.item.ItemFactory;
@@ -113,7 +116,7 @@ public class ItrakCommand implements SubCommand {
             if (live == null) {
                 live = tracker.getLocation();
             }
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-scan-entry",
+            player.sendMessage(withCarrierHover(plugin, plugin.getMessages().getPrefixed("itrak-scan-entry",
                     "name", tracker.getDisplayName(),
                     "code", tracker.getCode(),
                     "distance", LocationUtil.formatDistance(nearby.distance()),
@@ -123,7 +126,7 @@ public class ItrakCommand implements SubCommand {
                             : TrackerService.formatCoord(live.getY()),
                     "z", live == null ? TrackerService.formatCoord(tracker.getZ())
                             : TrackerService.formatCoord(live.getZ()),
-                    "status", service.statusText(player, tracker)));
+                    "status", service.statusText(player, tracker)), tracker));
             sendTrackerAction(plugin, player, tracker);
             service.highlight(player, tracker, seconds);
         }
@@ -209,6 +212,29 @@ public class ItrakCommand implements SubCommand {
     }
 
     /**
+     * Подсказка при наведении на строку трекера, который сидит на игроке:
+     * ник носителя и его живой статус. Трекер на лодке или мобе подсказки не
+     * получает — там ника нет, а название существа уже есть в строке.
+     */
+    public static Component withCarrierHover(HahGpsPlugin plugin, Component line, Tracker tracker) {
+        TrackerService service = plugin.getTrackerService();
+        if (service == null || tracker == null) {
+            return line;
+        }
+        String carrier = service.carrierName(tracker);
+        if (carrier == null) {
+            return line;
+        }
+        MessagesManager messages = plugin.getMessages();
+        Component hover = messages.getComponent("itrak-hover-carrier", "name", carrier)
+                .append(Component.newline())
+                .append(messages.getComponent("itrak-hover-status",
+                        "status", messages.get(service.isCarrierOnline(tracker)
+                                ? "itrak-status-live" : "itrak-status-offline")));
+        return line.hoverEvent(HoverEvent.showText(hover));
+    }
+
+    /**
      * Нажатие на терминал: координаты трекеров в радиусе и подсветка.
      * Тот же путь использует сам блок-терминал из слушателя.
      */
@@ -231,14 +257,14 @@ public class ItrakCommand implements SubCommand {
         int seconds = plugin.getConfigManager().getItrakTerminalHighlightSeconds();
         for (TrackerService.Nearby nearby : found) {
             Tracker tracker = nearby.tracker();
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-entry",
+            player.sendMessage(withCarrierHover(plugin, plugin.getMessages().getPrefixed("itrak-terminal-entry",
                     "name", tracker.getDisplayName(),
                     "code", tracker.getCode(),
                     "x", TrackerService.formatCoord(tracker.getX()),
                     "y", TrackerService.formatCoord(tracker.getY()),
                     "z", TrackerService.formatCoord(tracker.getZ()),
                     "distance", LocationUtil.formatDistance(nearby.distance()),
-                    "status", service.statusText(player, tracker)));
+                    "status", service.statusText(player, tracker)), tracker));
             sendTrackerAction(plugin, player, tracker);
             service.highlight(player, tracker, seconds);
         }
@@ -442,6 +468,13 @@ public class ItrakCommand implements SubCommand {
         for (String line : raw.split("\n")) {
             player.sendMessage(plugin.getMessages().getComponentRaw(line));
         }
+        String carrier = service == null ? null : service.carrierName(tracker);
+        if (carrier != null) {
+            player.sendMessage(plugin.getMessages().getComponent("itrak-info-carrier",
+                    "name", carrier,
+                    "status", plugin.getMessages().get(service.isCarrierOnline(tracker)
+                            ? "itrak-status-live" : "itrak-status-offline")));
+        }
     }
 
     // ------------------------------------------------------------------
@@ -516,7 +549,7 @@ public class ItrakCommand implements SubCommand {
                 double distance = signal.inRange()
                         ? LocationUtil.distance(player.getLocation(), signal.exact())
                         : Double.MAX_VALUE;
-                player.sendMessage(plugin.getMessages().getPrefixed("itrak-list-entry",
+                player.sendMessage(withCarrierHover(plugin, plugin.getMessages().getPrefixed("itrak-list-entry",
                         "name", tracker.getDisplayName(),
                         "id", String.valueOf(tracker.getId()),
                         "code", tracker.getCode(),
@@ -524,7 +557,7 @@ public class ItrakCommand implements SubCommand {
                         "distance", LocationUtil.formatDistance(distance),
                         "x", TrackerService.formatCoord(tracker.getX()),
                         "y", TrackerService.formatCoord(tracker.getY()),
-                        "z", TrackerService.formatCoord(tracker.getZ())));
+                        "z", TrackerService.formatCoord(tracker.getZ())), tracker));
             }
         }
 
@@ -586,7 +619,7 @@ public class ItrakCommand implements SubCommand {
                 Location location = signal.inRange() ? signal.exact() : null;
                 double distance = location == null ? Double.MAX_VALUE
                         : LocationUtil.distance(player.getLocation(), location);
-                player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-entry",
+                player.sendMessage(withCarrierHover(plugin, plugin.getMessages().getPrefixed("itrak-find-entry",
                         "name", tracker.getDisplayName(),
                         "id", String.valueOf(tracker.getId()),
                         "code", tracker.getCode(),
@@ -594,7 +627,7 @@ public class ItrakCommand implements SubCommand {
                         "distance", LocationUtil.formatDistance(distance),
                         "x", TrackerService.formatCoord(tracker.getX()),
                         "y", TrackerService.formatCoord(tracker.getY()),
-                        "z", TrackerService.formatCoord(tracker.getZ())));
+                        "z", TrackerService.formatCoord(tracker.getZ())), tracker));
                 if (!signal.inRange()) {
                     player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-far-entry",
                             "region", signal.region(),

@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Версия схемы палитры: при несовпадении файл заменяется эталоном (старый — в .bak)
-palette-version: 10
+palette-version: 11
 
 no-permission: "<#3f86ff>✖ У вас нет прав для выполнения этой команды.</#3f86ff>"
 player-only: "<#3f86ff>✖ Эта команда доступна только игрокам.</#3f86ff>"
@@ -262,6 +262,9 @@ itrak-signal-far: "вне зоны связи · последнее: {last}"
 itrak-signal-far-none: "вне зоны связи · последних данных нет"
 itrak-status-no-signal: "нет сигнала"
 itrak-status-offline: "офлайн"
+itrak-hover-carrier: "<gray>Игрок: <white><bold>{name}</bold></white></gray>"
+itrak-hover-status: "<gray>Статус: <#8fc6ff>{status}</#8fc6ff></gray>"
+itrak-info-carrier: "<gray>Носитель:</gray> <white>{name}</white> <dark_gray>·</dark_gray> <#8fc6ff>{status}</#8fc6ff>"
 itrak-status-sunk: "затонул"
 itrak-status-submerged: "под водой"
 itrak-state-moving: "в движении"
@@ -420,6 +423,7 @@ gui:
   itrak-none: "<#3f86ff>Трекеров нет</#3f86ff>"
   lore-itrak-menu: "<gray><italic>GPS-трекеры и локатор</italic></gray>"
   lore-itrak-status: "<gray>Состояние: <white>{status}</white></gray>"
+  lore-itrak-carrier: "<gray>Игрок: <white>{name}</white></gray>"
   lore-itrak-state: "<gray>Движение: <#8fc6ff>{state}</#8fc6ff></gray>"
   lore-itrak-coords: "<gray>Координаты: <white>{x}, {y}, {z}</white></gray>"
   lore-itrak-world: "<gray>Мир: <white>{world}</white></gray>"

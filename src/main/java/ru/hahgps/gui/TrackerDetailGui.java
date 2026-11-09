@@ -175,6 +175,10 @@ public class TrackerDetailGui extends GuiScreen {
                     + "</color></bold>"));
             List<Component> lines = new ArrayList<>();
             TrackerService.Signal signal = service.signal(player, tracker);
+            String carrier = service.carrierName(tracker);
+            if (carrier != null) {
+                lines.add(comp("gui.lore-itrak-carrier", "name", carrier));
+            }
             lines.add(comp("gui.lore-itrak-code", "code", tracker.getCode()));
             lines.add(comp("gui.lore-itrak-status", "status", service.statusText(player, tracker)));
             lines.add(comp("gui.lore-itrak-state", "state", service.stateText(player, tracker, now)));
