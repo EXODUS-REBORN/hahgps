@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Palette schema version: a mismatch replaces the file with the bundled one (old -> .bak)
-palette-version: 11
+palette-version: 12
 
 no-permission: "<#3f86ff>✖ You don't have permission to run this command.</#3f86ff>"
 player-only: "<#3f86ff>✖ This command is for players only.</#3f86ff>"
@@ -176,8 +176,8 @@ itrak-disabled: "<#3f86ff>✖ iTrak trackers are disabled in the config.</#3f86f
 itrak-place-air: "<#66aaff>→</#66aaff> <gray>Attach the tracker to a block or an entity.</gray>"
 itrak-place-failed: "<#3f86ff>✖ Could not place the tracker.</#3f86ff>"
 itrak-placed: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>placed:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
-itrak-placed-sunk: "<#66aaff>→</#66aaff> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>sank and lost its signal — pick it up:</gray> <white>/gps itrak take {code}</white>"
-itrak-placed-submerged: "<#66aaff>→</#66aaff> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>was sunk to the bottom — it is waterproof, so the signal stays. Pick it up:</gray> <white>/gps itrak take {code}</white>"
+itrak-placed-sunk: "<#66aaff>→</#66aaff> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>sank and lost its signal — pick it up:</gray>"
+itrak-placed-submerged: "<#66aaff>→</#66aaff> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>was sunk to the bottom — it is waterproof, so the signal stays. Pick it up:</gray>"
 itrak-attached: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>attached to</gray> <#8fc6ff>{entity}</#8fc6ff>"
 itrak-attach-players-off: "<#3f86ff>✖ Attaching trackers to players is disabled in the config.</#3f86ff>"
 itrak-attach-unsupported: "<#3f86ff>✖ The tracker cannot be attached to this entity.</#3f86ff>"
@@ -225,7 +225,6 @@ itrak-watch-on: "<#8fe9f5>✔</#8fe9f5> <gray>Now watching tracker</gray> <white
 itrak-watch-off: "<#8fe9f5>✔</#8fe9f5> <gray>Stopped watching</gray> <white><bold>{name}</bold></white>"
 itrak-watch-update: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <gray>{status}</gray>"
 itrak-stationary: "<#66aaff>→</#66aaff> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>has been still for</gray> <#8fc6ff><bold>{time}</bold></#8fc6ff>"
-itrak-stationary-route: "<#66aaff>→</#66aaff> <gray>Build a route:</gray> <white>/gps itrak route {code}</white>"
 itrak-signal-lost: "<#66aaff>→</#66aaff> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>lost its attachment and signal.</gray>"
 itrak-detached: "<#66aaff>→</#66aaff> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>is no longer attached to an entity — it stays at its last coordinates:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-info: |

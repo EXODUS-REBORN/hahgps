@@ -640,7 +640,7 @@ public class TrackerService {
             player.sendMessage(messages.getPrefixed("itrak-stationary",
                     "name", tracker.getDisplayName(),
                     "time", formatDuration(tracker.stationaryMillis(now))));
-            player.sendMessage(messages.getPrefixed("itrak-stationary-route",
+            player.sendMessage(messages.getComponent("itrak-route-button",
                     "code", tracker.getCode()));
         }
         dirty.add(tracker.getId());

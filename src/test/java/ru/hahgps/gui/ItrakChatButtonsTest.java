@@ -14,6 +14,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -70,6 +71,32 @@ class ItrakChatButtonsTest {
         for (String language : List.of("ru", "en")) {
             assertRouteButton(language);
             assertCancelButton(language);
+        }
+    }
+
+    private static final Pattern ITRAK_ENTRY =
+            Pattern.compile("(?m)^(itrak-[a-z0-9-]+):\\s*\"(.*)\"\\s*$");
+
+    private static final Pattern CLICK_BLOCK =
+            Pattern.compile("<click:run_command:'[^']*'>.*?</click>");
+
+    /**
+     * Действие в чате — всегда кнопка, а не текст команды. Раньше
+     * «трекер неподвижен» печатал {@code /gps itrak route TRK-…} строкой:
+     * игрок видел команду там, где везде остальном была кнопка.
+     */
+    @Test
+    void itrakMessagesShowButtonsInsteadOfRawCommands() throws IOException {
+        for (String language : List.of("ru", "en")) {
+            String text = Files.readString(RESOURCES.resolve("messages_" + language + ".yml"),
+                    StandardCharsets.UTF_8);
+            Matcher entries = ITRAK_ENTRY.matcher(text);
+            while (entries.find()) {
+                String key = entries.group(1);
+                String withoutButtons = CLICK_BLOCK.matcher(entries.group(2)).replaceAll("");
+                assertFalse(withoutButtons.contains("/gps "), language + " " + key
+                        + ": в чате сырая команда вместо кнопки: " + entries.group(2));
+            }
         }
     }
 }

@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Версия схемы палитры: при несовпадении файл заменяется эталоном (старый — в .bak)
-palette-version: 11
+palette-version: 12
 
 no-permission: "<#3f86ff>✖ У вас нет прав для выполнения этой команды.</#3f86ff>"
 player-only: "<#3f86ff>✖ Эта команда доступна только игрокам.</#3f86ff>"
@@ -176,8 +176,8 @@ itrak-disabled: "<#3f86ff>✖ Трекеры iTrak выключены в кон�
 itrak-place-air: "<#66aaff>→</#66aaff> <gray>Прицепи трекер к блоку или существу.</gray>"
 itrak-place-failed: "<#3f86ff>✖ Не удалось установить трекер.</#3f86ff>"
 itrak-placed: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>установлен:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
-itrak-placed-sunk: "<#66aaff>→</#66aaff> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>утонул и потерял сигнал — подбери его:</gray> <white>/gps itrak take {code}</white>"
-itrak-placed-submerged: "<#66aaff>→</#66aaff> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>утоплен и лежит на дне — водонепроницаемый, сигнал сохраняется. Подобрать:</gray> <white>/gps itrak take {code}</white>"
+itrak-placed-sunk: "<#66aaff>→</#66aaff> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>утонул и потерял сигнал — подбери его:</gray>"
+itrak-placed-submerged: "<#66aaff>→</#66aaff> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>утоплен и лежит на дне — водонепроницаемый, сигнал сохраняется. Подобрать:</gray>"
 itrak-attached: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>прицеплен:</gray> <#8fc6ff>{entity}</#8fc6ff>"
 itrak-attach-players-off: "<#3f86ff>✖ Привязка трекеров к игрокам выключена в конфиге.</#3f86ff>"
 itrak-attach-unsupported: "<#3f86ff>✖ К этому существу трекер не прицепить.</#3f86ff>"
@@ -225,7 +225,6 @@ itrak-watch-on: "<#8fe9f5>✔</#8fe9f5> <gray>Следим за трекером
 itrak-watch-off: "<#8fe9f5>✔</#8fe9f5> <gray>Больше не следим за</gray> <white><bold>{name}</bold></white>"
 itrak-watch-update: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <gray>{status}</gray>"
 itrak-stationary: "<#66aaff>→</#66aaff> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>неподвижен</gray> <#8fc6ff><bold>{time}</bold></#8fc6ff>"
-itrak-stationary-route: "<#66aaff>→</#66aaff> <gray>Построить маршрут:</gray> <white>/gps itrak route {code}</white>"
 itrak-signal-lost: "<#66aaff>→</#66aaff> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>потерял привязку и сигнал.</gray>"
 itrak-detached: "<#66aaff>→</#66aaff> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>больше не привязан к существу — остался на последних координатах:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-info: |

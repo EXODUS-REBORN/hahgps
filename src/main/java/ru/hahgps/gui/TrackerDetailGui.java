@@ -67,7 +67,7 @@ public class TrackerDetailGui extends GuiScreen {
                 player.sendMessage(plugin.getMessages().getPrefixed("itrak-stationary",
                         "name", tracker.getDisplayName(),
                         "time", plugin.getTrackerService().formatDuration(tracker.stationaryMillis(now))));
-                player.sendMessage(plugin.getMessages().getPrefixed("itrak-stationary-route",
+                player.sendMessage(plugin.getMessages().getComponent("itrak-route-button",
                         "code", tracker.getCode()));
             }
         }

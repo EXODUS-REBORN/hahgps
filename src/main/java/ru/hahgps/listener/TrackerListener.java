@@ -532,6 +532,8 @@ public class TrackerListener implements Listener {
             player.sendMessage(plugin.getMessages().getPrefixed(
                     tracker.isWaterproof() ? "itrak-placed-submerged" : "itrak-placed-sunk",
                     "name", tracker.getDisplayName(), "code", tracker.getCode()));
+            player.sendMessage(plugin.getMessages().getComponent("itrak-take-button",
+                    "code", tracker.getCode()));
         } else if (tracker.isAttached()) {
             player.sendMessage(plugin.getMessages().getPrefixed("itrak-attached",
                     "name", tracker.getDisplayName(),
