@@ -2,6 +2,8 @@ package ru.hahgps.service;
 
 import io.papermc.paper.block.fluid.FluidData;
 import io.papermc.paper.block.fluid.type.FallingFluidData;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.HoverEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -164,6 +166,9 @@ public class TrackerService {
                     // Игрок мог выйти до рестарта: тип носителя определяется
                     // один раз, чтобы такой трекер не считался потерянным.
                     tracker.setCarrierPlayer(isKnownPlayer(tracker.getEntityUuid()));
+                    // Трекеры, поставленные до 1.3.6, назывались «Игрок»:
+                    // подставляем ник носителя, пока он не в сети.
+                    repairCarrierLabel(tracker);
                 } else {
                     // Флаг «плывёт» в БД не хранится: восстанавливаем его по
                     // блоку под маркером — иначе после рестарта трекер на воде
@@ -390,6 +395,9 @@ public class TrackerService {
         }
         tracker.setCarrierPlayer(entity instanceof Player);
         tracker.setSignal(true);
+        // Носитель в сети — самый надёжный источник ника: заодно чиним
+        // подпись «Игрок» у трекеров, поставленных до 1.3.6.
+        repairCarrierLabel(tracker);
         if (!world.getName().equals(tracker.getWorld())) {
             tracker.setWorld(world.getName());
             dirty.add(tracker.getId());
@@ -637,9 +645,9 @@ public class TrackerService {
             if (player == null || !player.isOnline()) {
                 continue;
             }
-            player.sendMessage(messages.getPrefixed("itrak-stationary",
+            player.sendMessage(withCarrierHover(messages.getPrefixed("itrak-stationary",
                     "name", tracker.getDisplayName(),
-                    "time", formatDuration(tracker.stationaryMillis(now))));
+                    "time", formatDuration(tracker.stationaryMillis(now))), tracker));
             player.sendMessage(messages.getComponent("itrak-route-button",
                     "code", tracker.getCode()));
         }
@@ -718,10 +726,12 @@ public class TrackerService {
         if (target != null) {
             EntityType carrierType = target.getType();
             // Без своего имени трекер называется по-русски: «Лодка», «Лошадь»,
-            // «Свинья». Ванильное EntityType#getName() — английское, поэтому
-            // подпись берём из EntityNames.
+            // «Свинья», а на игроке — ником носителя. Ванильное
+            // EntityType#getName() — английское, поэтому подпись берём из
+            // EntityNames.
             if (label.isEmpty()) {
-                label = EntityNames.name(carrierType);
+                label = EntityNames.autoLabel(carrierType,
+                        target instanceof Player carrier ? carrier.getName() : null);
             }
             // Цвет по типу носителя: на карте и в локаторе сразу видно, что
             // за маячок (лодка — синий, лошадь — жёлтый, монстр — красный).
@@ -1479,7 +1489,14 @@ public class TrackerService {
         if (!isPlayerCarrier(tracker)) {
             return null;
         }
-        UUID id = tracker.getEntityUuid();
+        return playerNick(tracker.getEntityUuid());
+    }
+
+    /** Ник игрока по UUID: онлайн или из профиля; null — игрок серверу неизвестен. */
+    private static String playerNick(UUID id) {
+        if (id == null) {
+            return null;
+        }
         Player online = Bukkit.getPlayer(id);
         if (online != null) {
             return online.getName();
@@ -1488,9 +1505,52 @@ public class TrackerService {
             OfflinePlayer offline = Bukkit.getOfflinePlayer(id);
             return offline == null ? null : offline.getName();
         } catch (Throwable ignored) {
-            // Сервер выключается или профиль недоступен — подсказку просто не рисуем.
+            // Сервер выключается или профиль недоступен — ника просто нет.
             return null;
         }
+    }
+
+    /**
+     * Подпись трекера на игроке — ник носителя. Безликое «Игрок» (так
+     * назывались трекеры до 1.3.6) и пустую подпись заменяем ником; имя,
+     * которое владелец дал трекеру в наковальне, не трогаем.
+     */
+    private void repairCarrierLabel(Tracker tracker) {
+        if (tracker == null || !isPlayerCarrier(tracker)) {
+            return;
+        }
+        String name = tracker.getName() == null ? "" : tracker.getName().trim();
+        if (!name.isEmpty() && !EntityNames.isPlayerLabel(name)) {
+            return;
+        }
+        String nick = playerNick(tracker.getEntityUuid());
+        if (nick == null || nick.isBlank() || nick.equals(name)) {
+            return;
+        }
+        tracker.setName(nick);
+        dirty.add(tracker.getId());
+    }
+
+    /**
+     * Подсказка при наведении на строку трекера, прицепленного к игроку:
+     * ник носителя и его живой статус. У трекера на мобе или транспорте
+     * подсказки нет — ника там нет, а название существа уже есть в строке.
+     */
+    public Component withCarrierHover(Component line, Tracker tracker) {
+        if (line == null || tracker == null) {
+            return line;
+        }
+        String carrier = carrierName(tracker);
+        if (carrier == null) {
+            return line;
+        }
+        MessagesManager messages = plugin.getMessages();
+        Component hover = messages.getComponent("itrak-hover-carrier", "name", carrier)
+                .append(Component.newline())
+                .append(messages.getComponent("itrak-hover-status",
+                        "status", messages.get(isCarrierOnline(tracker)
+                                ? "itrak-status-live" : "itrak-status-offline")));
+        return line.hoverEvent(HoverEvent.showText(hover));
     }
 
     /** Игрок-носитель сейчас в сети: для подсказки «в сети»/«офлайн». */

@@ -58,4 +58,29 @@ class EntityNamesTest {
         assertNull(EntityNames.color(EntityType.ITEM_FRAME));
         assertNull(EntityNames.color(null));
     }
+
+    /**
+     * Трекер на игроке называется ником носителя: безликое «Игрок» не
+     * отвечает на вопрос, за кем именно следит трекер.
+     */
+    @Test
+    void playerCarrierIsNamedByNick() {
+        assertEquals("Steve", EntityNames.autoLabel(EntityType.PLAYER, "Steve"));
+        assertEquals("Steve", EntityNames.autoLabel(EntityType.PLAYER, "  Steve "));
+        assertEquals(EntityNames.PLAYER, EntityNames.autoLabel(EntityType.PLAYER, null));
+        assertEquals(EntityNames.PLAYER, EntityNames.autoLabel(EntityType.PLAYER, " "));
+        // У остальных носителей ника нет — подпись по типу.
+        assertEquals("Лошадь", EntityNames.autoLabel(EntityType.HORSE, "Steve"));
+        assertEquals(EntityNames.FALLBACK, EntityNames.autoLabel(EntityType.UNKNOWN, null));
+    }
+
+    @Test
+    void oldGenericPlayerLabelIsRecognised() {
+        assertTrue(EntityNames.isPlayerLabel("Игрок"));
+        assertTrue(EntityNames.isPlayerLabel(" игрок "));
+        assertFalse(EntityNames.isPlayerLabel("Лошадь"));
+        assertFalse(EntityNames.isPlayerLabel("Steve"));
+        assertFalse(EntityNames.isPlayerLabel(""));
+        assertFalse(EntityNames.isPlayerLabel(null));
+    }
 }

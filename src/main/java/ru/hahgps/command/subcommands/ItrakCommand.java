@@ -1,7 +1,6 @@
 package ru.hahgps.command.subcommands;
 
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.HoverEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
@@ -9,7 +8,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.SubCommand;
-import ru.hahgps.config.MessagesManager;
 import ru.hahgps.gui.GuiTheme;
 import ru.hahgps.gui.ItrakMenuGui;
 import ru.hahgps.item.ItemFactory;
@@ -221,17 +219,7 @@ public class ItrakCommand implements SubCommand {
         if (service == null || tracker == null) {
             return line;
         }
-        String carrier = service.carrierName(tracker);
-        if (carrier == null) {
-            return line;
-        }
-        MessagesManager messages = plugin.getMessages();
-        Component hover = messages.getComponent("itrak-hover-carrier", "name", carrier)
-                .append(Component.newline())
-                .append(messages.getComponent("itrak-hover-status",
-                        "status", messages.get(service.isCarrierOnline(tracker)
-                                ? "itrak-status-live" : "itrak-status-offline")));
-        return line.hoverEvent(HoverEvent.showText(hover));
+        return service.withCarrierHover(line, tracker);
     }
 
     /**

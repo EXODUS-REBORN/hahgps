@@ -64,9 +64,12 @@ public class TrackerDetailGui extends GuiScreen {
             if (tracker.isStationary(now, plugin.getConfigManager().getItrakStationaryMillis())
                     && !stationaryHintSent) {
                 stationaryHintSent = true;
-                player.sendMessage(plugin.getMessages().getPrefixed("itrak-stationary",
-                        "name", tracker.getDisplayName(),
-                        "time", plugin.getTrackerService().formatDuration(tracker.stationaryMillis(now))));
+                TrackerService service = plugin.getTrackerService();
+                player.sendMessage(service.withCarrierHover(
+                        plugin.getMessages().getPrefixed("itrak-stationary",
+                                "name", tracker.getDisplayName(),
+                                "time", service.formatDuration(tracker.stationaryMillis(now))),
+                        tracker));
                 player.sendMessage(plugin.getMessages().getComponent("itrak-route-button",
                         "code", tracker.getCode()));
             }

@@ -21,7 +21,30 @@ public final class EntityNames {
     /** Подпись для типа, которого нет в таблице (новый тип после обновления API). */
     public static final String FALLBACK = "Существо";
 
+    /**
+     * Безликая подпись игрока: так назывался трекер на игроке, пока ник не
+     * подставлялся. Такие трекеры (из базы) правим на ник носителя.
+     */
+    public static final String PLAYER = "Игрок";
+
     private EntityNames() {
+    }
+
+    /**
+     * Подпись трекера, у которого нет своего имени: для игрока — ник
+     * носителя, для остальных — русское название типа. «Игрок» без ника не
+     * отвечает на главный вопрос — за кем следит трекер.
+     */
+    public static String autoLabel(EntityType type, String playerNick) {
+        if (type == EntityType.PLAYER && playerNick != null && !playerNick.isBlank()) {
+            return playerNick.trim();
+        }
+        return name(type);
+    }
+
+    /** Это безликое «Игрок» — подпись, которую нужно заменить ником. */
+    public static boolean isPlayerLabel(String label) {
+        return label != null && PLAYER.equalsIgnoreCase(label.trim());
     }
 
     /**
@@ -151,7 +174,7 @@ public final class EntityNames {
             case ZOGLIN -> "Зоглин";
 
             // --- игрок ---
-            case PLAYER -> "Игрок";
+            case PLAYER -> PLAYER;
 
             // --- техника и декорации ---
             case ARMOR_STAND -> "Стойка для брони";
