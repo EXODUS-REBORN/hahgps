@@ -10,10 +10,18 @@ import ru.hahgps.model.Poi;
 public class PoiActionsGui extends GuiScreen {
 
     private final Poi poi;
+    private final Integer categoryId;
+    private final int listPage;
 
     public PoiActionsGui(Player player, Poi poi) {
+        this(player, poi, null, 0);
+    }
+
+    public PoiActionsGui(Player player, Poi poi, Integer categoryId, int listPage) {
         super(player);
         this.poi = poi;
+        this.categoryId = categoryId;
+        this.listPage = Math.max(0, listPage);
     }
 
     @Override
@@ -69,8 +77,12 @@ public class PoiActionsGui extends GuiScreen {
                         return;
                     }
                     if (loaded == null) {
-                        player.sendMessage(plugin.getMessages().getPrefixed("point-not-found",
-                                "name", poi.getName()));
+                        plugin.getDataService().runSync(() -> {
+                            if (player.isOnline()) {
+                                player.sendMessage(plugin.getMessages().getPrefixed("point-not-found",
+                                        "name", poi.getName()));
+                            }
+                        });
                         return;
                     }
                     plugin.getDataService().runSync(() -> {
@@ -89,8 +101,12 @@ public class PoiActionsGui extends GuiScreen {
                         return;
                     }
                     if (loaded == null) {
-                        player.sendMessage(plugin.getMessages().getPrefixed("point-not-found",
-                                "name", poi.getName()));
+                        plugin.getDataService().runSync(() -> {
+                            if (player.isOnline()) {
+                                player.sendMessage(plugin.getMessages().getPrefixed("point-not-found",
+                                        "name", poi.getName()));
+                            }
+                        });
                         return;
                     }
                     plugin.getDataService().runSync(() -> {
@@ -150,11 +166,11 @@ public class PoiActionsGui extends GuiScreen {
                             }
                             player.sendMessage(plugin.getMessages().getPrefixed("point-deleted",
                                     "name", poi.getName()));
-                            new PointsListGui(player, null).open();
+                            new PointsListGui(player, categoryId, listPage).open();
                         }));
             }
             case 22 -> {
-                new PointsListGui(player, null).open();
+                new PointsListGui(player, categoryId, listPage).open();
                 GuiTheme.click(player);
             }
         }

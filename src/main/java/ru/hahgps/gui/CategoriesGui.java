@@ -12,11 +12,20 @@ public class CategoriesGui extends GuiScreen {
 
 
     private static final int CONTENT_SLOTS = 44;
+    private static final int PREV_PAGE_SLOT = 48;
+    private static final int PAGE_INFO_SLOT = 49;
+    private static final int NEXT_PAGE_SLOT = 50;
 
     private List<Category> categories = new java.util.ArrayList<>();
+    private int page;
 
     public CategoriesGui(Player player) {
+        this(player, 0);
+    }
+
+    public CategoriesGui(Player player, int page) {
         super(player);
+        this.page = Math.max(0, page);
     }
 
     @Override
@@ -40,6 +49,15 @@ public class CategoriesGui extends GuiScreen {
         plugin.getCategoryService().listCategories().whenComplete((cats, error) -> {
             if (error != null) {
                 reportError(error);
+                // Даже при сбое загрузки экран не должен оставлять игрока без
+                // выхода: ставим кнопки закрытия/назад в главный поток.
+                plugin.getDataService().runSync(() -> {
+                    if (inventory == null || GuiManager.getInstance().get(player) != this) {
+                        return;
+                    }
+                    inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));
+                    inventory.setItem(53, GuiTheme.navBack(getMsg("gui.back")));
+                });
                 return;
             }
             this.categories = cats == null ? List.of() : cats;
@@ -50,15 +68,27 @@ public class CategoriesGui extends GuiScreen {
                 }
                 inventory.clear();
                 java.util.Map<Integer, Integer> counts = countPoisByCategory(plugin);
-                int slot = 0;
-                for (int i = 0; i < categories.size() && slot < CONTENT_SLOTS; i++) {
+                int pages = Math.max(1, (categories.size() + CONTENT_SLOTS - 1) / CONTENT_SLOTS);
+                page = Math.max(0, Math.min(page, pages - 1));
+                int from = page * CONTENT_SLOTS;
+                int to = Math.min(from + CONTENT_SLOTS, categories.size());
+                for (int i = from; i < to; i++) {
                     Category category = categories.get(i);
                     int count = counts.getOrDefault(category.getId(), 0);
-                    inventory.setItem(slot++, GuiUtil.item(Material.BOOK,
+                    inventory.setItem(i - from, GuiUtil.item(Material.BOOK,
                             GuiUtil.tonedName(9, category.getName()),
                             lore("gui.lore-category-count", "count", String.valueOf(count)),
                             ItemIds.CATEGORY_ENTRY));
                 }
+                if (page > 0) {
+                    inventory.setItem(PREV_PAGE_SLOT, GuiTheme.navBack(getMsg("gui.prev-page")));
+                }
+                if (page < pages - 1) {
+                    inventory.setItem(NEXT_PAGE_SLOT, GuiTheme.navForward(getMsg("gui.next-page")));
+                }
+                inventory.setItem(PAGE_INFO_SLOT, GuiUtil.item(Material.BOOK,
+                        comp("gui.page-info", "page", String.valueOf(page + 1),
+                                "pages", String.valueOf(pages)), null, ItemIds.PAGE_INFO));
 
                 if (player.hasPermission("gps.category.create")) {
                     inventory.setItem(45, GuiUtil.item(Material.EMERALD,
@@ -91,6 +121,19 @@ public class CategoriesGui extends GuiScreen {
         if (slot == 53) {
             new MainMenuGui(player).open();
             GuiTheme.click(player);
+            return;
+        }
+        if (slot == PREV_PAGE_SLOT && page > 0) {
+            page--;
+            new CategoriesGui(player, page).open();
+            GuiTheme.page(player);
+            return;
+        }
+        int pages = Math.max(1, (categories.size() + CONTENT_SLOTS - 1) / CONTENT_SLOTS);
+        if (slot == NEXT_PAGE_SLOT && page < pages - 1) {
+            page++;
+            new CategoriesGui(player, page).open();
+            GuiTheme.page(player);
             return;
         }
         if (slot == 45 && player.hasPermission("gps.category.create")) {
@@ -157,8 +200,9 @@ public class CategoriesGui extends GuiScreen {
         }
 
 
-        if (slot >= 0 && slot < CONTENT_SLOTS && slot < categories.size()) {
-            Category category = categories.get(slot);
+        int index = page * CONTENT_SLOTS + slot;
+        if (slot >= 0 && slot < CONTENT_SLOTS && index < categories.size()) {
+            Category category = categories.get(index);
             new PointsListGui(player, category.getId()).open();
             GuiTheme.click(player);
         }

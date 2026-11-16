@@ -22,8 +22,13 @@ public class PointsListGui extends GuiScreen {
     private int page = 0;
 
     public PointsListGui(Player player, Integer categoryId) {
+        this(player, categoryId, 0);
+    }
+
+    public PointsListGui(Player player, Integer categoryId, int page) {
         super(player);
         this.categoryId = categoryId;
+        this.page = Math.max(0, page);
     }
 
     @Override
@@ -81,14 +86,17 @@ public class PointsListGui extends GuiScreen {
         int navRow = 45;
         if (page > 0) {
             inventory.setItem(navRow, GuiTheme.navBack(getMsg("gui.prev-page")));
+        } else {
+            // На первой странице слот 45 — выход назад: в категорию, из которой
+            // пришли, или в главное меню. Раньше здесь не было предмета, а клик
+            // по невидимому filler'у на 49 уводил в меню.
+            inventory.setItem(navRow, GuiTheme.navBack(getMsg("gui.back")));
         }
         if (page < pages - 1) {
             inventory.setItem(navRow + 8, GuiTheme.navForward(getMsg("gui.next-page")));
         }
-        // Индикатор страницы — на slot 50. Раньше он стоял на 49, который
-        // onClick обрабатывает как «в главное меню»: подпись «Страница 1/3»
-        // на кнопке, уводящей в меню, — обман.
-        inventory.setItem(navRow + 5, GuiUtil.item(Material.BOOK,
+        // Индикатор страницы — на slot 49 (сетка навигации из docs/gui.md).
+        inventory.setItem(navRow + 4, GuiUtil.item(Material.BOOK,
                 comp("gui.page-info",
                         "page", String.valueOf(page + 1), "pages", String.valueOf(pages)),
                 null, ItemIds.PAGE_INFO));
@@ -143,16 +151,22 @@ public class PointsListGui extends GuiScreen {
     public void onClick(int slot, ClickType clickType) {
         if (slot >= 45) {
             int pages = Math.max(1, (pois.size() + PER_PAGE - 1) / PER_PAGE);
-            if (slot == 45 && page > 0) {
-                page--;
-                buildPage();
-                GuiTheme.page(player);
+            if (slot == 45) {
+                if (page > 0) {
+                    page--;
+                    buildPage();
+                    GuiTheme.page(player);
+                } else if (categoryId != null) {
+                    new CategoriesGui(player).open();
+                    GuiTheme.click(player);
+                } else {
+                    new MainMenuGui(player).open();
+                    GuiTheme.click(player);
+                }
             } else if (slot == 53 && page < pages - 1) {
                 page++;
                 buildPage();
                 GuiTheme.page(player);
-            } else if (slot == 49) {
-                new MainMenuGui(player).open();
             } else if (slot == 52) {
                 player.closeInventory();
             }
@@ -163,7 +177,7 @@ public class PointsListGui extends GuiScreen {
         int start = page * PER_PAGE;
         int shown = Math.max(0, Math.min(PER_PAGE, pois.size() - start));
         if (slot >= 0 && slot < shown) {
-            new PoiActionsGui(player, pois.get(start + slot)).open();
+            new PoiActionsGui(player, pois.get(start + slot), categoryId, page).open();
             GuiTheme.click(player);
         }
     }

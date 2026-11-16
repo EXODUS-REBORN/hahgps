@@ -52,7 +52,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             // целиком отбивался сообщением «только для игроков».
             if (args.length >= 1 && args[0].equalsIgnoreCase("reload")) {
                 if (!sender.hasPermission("gps.reload")) {
-                    sender.sendMessage("HahGps: нужна права gps.reload.");
+                    sender.sendMessage("HahGps: нужно право gps.reload.");
                     return true;
                 }
                 plugin.getConfigManager().reload();
@@ -132,21 +132,20 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
             return;
         }
-        String pointName = args[0];
+        // Имя точки может быть из нескольких слов: последний аргумент — это
+        // транспорт, только если он распознаётся; иначе всё имя целиком.
         TransportType transport = TransportType.FOOT;
-        if (args.length >= 2) {
-            transport = SubCommand.parseTransport(args[1]);
-            if (transport == null) {
-                player.sendMessage(plugin.getMessages().getPrefixed("invalid-args",
-                        "usage", new GotoCommand().usage()));
-                return;
-            }
-            // Транспорт, выключенный в config.yml, не должен включаться в обход GUI.
+        String pointName;
+        if (args.length >= 2 && SubCommand.parseTransport(args[args.length - 1]) != null) {
+            transport = SubCommand.parseTransport(args[args.length - 1]);
+            pointName = String.join(" ", java.util.Arrays.copyOfRange(args, 0, args.length - 1));
             if (!plugin.getConfigManager().isTransportAvailable(transport.getKey())) {
                 player.sendMessage(plugin.getMessages().getPrefixed("transport-disabled",
                         "transport", transport.getKey()));
                 return;
             }
+        } else {
+            pointName = String.join(" ", args);
         }
         final TransportType finalTransport = transport;
         plugin.getPoiService().loadPoiWithRating(pointName).whenComplete((poi, error) ->
@@ -209,6 +208,17 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             }
             names.add("off");
             return filter(names, args.length > 0 ? args[0] : "");
+        }
+        // Точное имя корневой подкоманды с args.length == 1 (набрано
+        // «/gps point» и Tab): подсказываем её детей без фильтра по «point».
+        if (node != null && args.length == 1 && !node.isLeaf()) {
+            List<String> children = new ArrayList<>();
+            for (SubCommand child : node.children()) {
+                if (hasPermission(player, child)) {
+                    children.add(child.name());
+                }
+            }
+            return children;
         }
 
         if (node.isLeaf()) {

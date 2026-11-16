@@ -77,7 +77,12 @@ public class GraphService {
                         loading = false;
                         throw new CompletionException(error);
                     }
-                    publish(built.graph(), built.nextId());
+                    // Публикуем под монитором: handle(...) идёт на потоке БД,
+                    // и правка под монитором (addNode/connectNodes) могла быть
+                    // затёрта снимком, собранным раньше.
+                    synchronized (this) {
+                        publish(built.graph(), built.nextId());
+                    }
                     log().log(Level.INFO, "HahGps: граф дорог собран — узлов " + built.graph().size()
                             + ", маршрутов " + built.routesUsed()
                             + (built.routesSkipped() > 0
@@ -187,7 +192,9 @@ public class GraphService {
 
     private void publish(RoadGraph graph, int nextId) {
         roadGraph = graph;
-        nextNodeId = nextId;
+        // Счётчик id только растёт: снимок из БД не должен откатывать его назад,
+        // иначе новые узлы получат уже занятые id и склеятся с чужими.
+        nextNodeId = Math.max(nextNodeId, nextId);
         revision++;
         loading = false;
     }

@@ -222,7 +222,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                     "PRIMARY KEY (poi_id, player_uuid, query_text))");
 
             st.execute("CREATE TABLE IF NOT EXISTS meta (" +
-                    "key VARCHAR(32) PRIMARY KEY, " +
+                    "`key` VARCHAR(32) PRIMARY KEY, " +
                     "value VARCHAR(64) NOT NULL)");
         }
     }
@@ -387,7 +387,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 return 0;
             }
             try (Statement st = connection.createStatement();
-                 ResultSet rs = st.executeQuery("SELECT value FROM meta WHERE key = 'schema_version'")) {
+                 ResultSet rs = st.executeQuery("SELECT value FROM meta WHERE `key` = 'schema_version'")) {
                 if (rs.next()) {
                     try {
                         return Integer.parseInt(rs.getString("value"));
@@ -410,11 +410,11 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
 
     protected String upsertMetaSql() {
         if (mysql) {
-            return "INSERT INTO meta (key, value) VALUES ('schema_version', '" + SCHEMA_VERSION + "') " +
+            return "INSERT INTO meta (`key`, value) VALUES ('schema_version', '" + SCHEMA_VERSION + "') " +
                     "ON DUPLICATE KEY UPDATE value = VALUES(value)";
         }
-        return "INSERT INTO meta (key, value) VALUES ('schema_version', '" + SCHEMA_VERSION + "') " +
-                "ON CONFLICT(key) DO UPDATE SET value = excluded.value";
+        return "INSERT INTO meta (`key`, value) VALUES ('schema_version', '" + SCHEMA_VERSION + "') " +
+                "ON CONFLICT(`key`) DO UPDATE SET value = excluded.value";
     }
 
     /** Версия схемы в БД: будущие миграции сверяются с ней. */
@@ -422,7 +422,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         try {
             ensureConnected();
             try (Statement st = connection.createStatement();
-                 ResultSet rs = st.executeQuery("SELECT value FROM meta WHERE key = 'schema_version'")) {
+                 ResultSet rs = st.executeQuery("SELECT value FROM meta WHERE `key` = 'schema_version'")) {
                 if (rs.next()) {
                     try {
                         return Integer.parseInt(rs.getString("value"));
@@ -507,7 +507,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
 
     /** Значение из таблицы meta как число; 0, если ключа нет или он битый. */
     private long readMetaLong(String key, long fallback) throws SQLException {
-        try (PreparedStatement ps = connection.prepareStatement("SELECT value FROM meta WHERE key = ?")) {
+        try (PreparedStatement ps = connection.prepareStatement("SELECT value FROM meta WHERE `key` = ?")) {
             ps.setString(1, key);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
@@ -524,8 +524,8 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
 
     private void writeMeta(String key, String value) throws SQLException {
         String sql = mysql
-                ? "INSERT INTO meta (key, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = ?"
-                : "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value";
+                ? "INSERT INTO meta (`key`, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = ?"
+                : "INSERT INTO meta (`key`, value) VALUES (?, ?) ON CONFLICT(`key`) DO UPDATE SET value = excluded.value";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, key);
             ps.setString(2, value);

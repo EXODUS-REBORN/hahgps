@@ -77,7 +77,11 @@ public abstract class GuiScreen implements InventoryHolder {
     protected void putBrand() {
         if (inventory == null) return;
         int slot = size() >= 54 ? 44 : 26;
-        if (inventory.getItem(slot) == null) {
+        org.bukkit.inventory.ItemStack current = inventory.getItem(slot);
+        // Экран заполняет все слоты панелями ДО вызова putBrand: раньше бренд
+        // поэтому не появлялся нигде. Перекрываем только нашу панель, а не
+        // реальный контент (в списках слот 44 может быть занят элементом).
+        if (current == null || current.getType() == GuiTheme.FILLER) {
             inventory.setItem(slot, GuiTheme.brand(brandLore()));
         }
     }

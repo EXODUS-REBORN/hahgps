@@ -172,6 +172,9 @@ public class TrackerListener implements Listener {
         if (upgraded == null) {
             return;
         }
+        // Локаторы одинаковые и стакаются: без setAmount стек из N штук
+        // схлопнулся бы в один предмет.
+        upgraded.setAmount(Math.max(1, item.getAmount()));
         player.getInventory().setItemInMainHand(upgraded);
         player.sendMessage(legacy
                 ? plugin.getMessages().getPrefixed("itrak-locator-upgraded")
@@ -188,6 +191,7 @@ public class TrackerListener implements Listener {
         ItemStack hand = player.getInventory().getItemInMainHand();
         ItemStack healed = ItemFactory.healedTrackerItem(hand);
         if (healed != null) {
+            healed.setAmount(Math.max(1, hand.getAmount()));
             player.getInventory().setItemInMainHand(healed);
         }
     }

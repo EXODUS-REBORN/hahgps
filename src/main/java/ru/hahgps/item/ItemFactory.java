@@ -201,10 +201,13 @@ public final class ItemFactory {
         if (item == null || item.getType().isAir() || !isLocator(item)) {
             return null;
         }
-        if (isLegacyLocator(item)) {
+        int radius = readLocatorRadius(item);
+        // Радиус важнее материала: до 1.3.1 компасом были ОБА локатора — и на
+        // 10, и на 15 блоков. Раньше проверка материала срабатывала первой, и
+        // старый дальний локатор молча превращался в обычный.
+        if (radius <= 0 && isLegacyLocator(item)) {
             return locatorItem(normalRadius);
         }
-        int radius = readLocatorRadius(item);
         if (radius <= 0) {
             return locatorItem(normalRadius);
         }

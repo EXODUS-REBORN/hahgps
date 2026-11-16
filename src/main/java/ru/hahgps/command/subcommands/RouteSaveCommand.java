@@ -58,6 +58,13 @@ public class RouteSaveCommand implements SubCommand {
                 return;
             }
         }
+        // Транспорт, выключенный в config.yml, не должен попасть в граф в обход
+        // проверок /gps goto и /gps route start.
+        if (!plugin.getConfigManager().isTransportAvailable(transport.getKey())) {
+            player.sendMessage(plugin.getMessages().getPrefixed("transport-disabled",
+                    "transport", transport.getKey()));
+            return;
+        }
 
         List<Location> points = recording.pending(player);
         if (points.size() < 2) {

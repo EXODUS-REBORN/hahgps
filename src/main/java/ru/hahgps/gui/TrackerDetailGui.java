@@ -27,12 +27,18 @@ import java.util.List;
 public class TrackerDetailGui extends GuiScreen {
 
     private final int trackerId;
+    private final int listPage;
     private BukkitTask refreshTask;
     private boolean stationaryHintSent;
 
     public TrackerDetailGui(Player player, int trackerId) {
+        this(player, trackerId, 0);
+    }
+
+    public TrackerDetailGui(Player player, int trackerId, int listPage) {
         super(player);
         this.trackerId = trackerId;
+        this.listPage = Math.max(0, listPage);
     }
 
     @Override
@@ -296,7 +302,8 @@ public class TrackerDetailGui extends GuiScreen {
                         }));
             }
             case 22 -> {
-                new ItrakMenuGui(player).open();
+                // Возврат туда, откуда пришли: страница списка не сбрасывается.
+                new ItrakMenuGui(player, listPage).open();
                 GuiTheme.click(player);
             }
             default -> {
