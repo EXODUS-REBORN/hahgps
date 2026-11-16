@@ -52,6 +52,11 @@ public class SearchGui extends GuiScreen {
 
     @Override
     public void open() {
+        if (!player.hasPermission("gps.search")) {
+            player.sendMessage(HahGpsPlugin.getInstance().getMessages().getPrefixed("no-permission"));
+            GuiTheme.deny(player);
+            return;
+        }
         super.open();
 
         if (initialResults != null) {
@@ -89,7 +94,9 @@ public class SearchGui extends GuiScreen {
             return;
         }
 
-        if (slot == LIMIT_SLOT || slot == LIMIT_SLOT_PLAIN) {
+        // В режиме результатов слот 24 — это 25-й результат (лимит до 25 мест),
+        // поэтому кнопка лимита стоит только в стартовом окне поиска.
+        if (slot == LIMIT_SLOT) {
             changeLimit(clickType);
             return;
         }
@@ -121,6 +128,10 @@ public class SearchGui extends GuiScreen {
         if (slot == 22) {
             new MainMenuGui(player).open();
             GuiTheme.click(player);
+            return;
+        }
+        if (slot == LIMIT_SLOT_PLAIN) {
+            changeLimit(clickType);
             return;
         }
         if (slot == 11 || slot == 15) {

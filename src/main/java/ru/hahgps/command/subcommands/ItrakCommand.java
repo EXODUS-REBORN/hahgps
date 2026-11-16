@@ -660,7 +660,7 @@ public class ItrakCommand implements SubCommand {
                 player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
                 return;
             }
-            Tracker tracker = requireTracker(plugin, player, args[0]);
+            Tracker tracker = requireTracker(plugin, player, join(args, 0, args.length));
             if (tracker != null) {
                 sendInfo(plugin, player, tracker);
             }
@@ -695,13 +695,22 @@ public class ItrakCommand implements SubCommand {
                 player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
                 return;
             }
-            Tracker tracker = requireTracker(plugin, player, args[0]);
+            // Имя трекера может состоять из нескольких слов: транспорт — это
+            // только ПОСЛЕДНИЙ аргумент, если он вообще распознаётся.
+            TransportType transport = TransportType.FOOT;
+            String query;
+            if (args.length >= 2 && SubCommand.parseTransport(args[args.length - 1]) != null) {
+                transport = SubCommand.parseTransport(args[args.length - 1]);
+                query = join(args, 0, args.length - 1);
+            } else {
+                query = join(args, 0, args.length);
+            }
+            Tracker tracker = requireTracker(plugin, player, query);
             if (tracker == null) {
                 return;
             }
-            TransportType transport = TransportType.FOOT;
             if (args.length >= 2) {
-                TransportType parsed = SubCommand.parseTransport(args[1]);
+                TransportType parsed = SubCommand.parseTransport(args[args.length - 1]);
                 if (parsed == null) {
                     player.sendMessage(plugin.getMessages().getPrefixed("invalid-args",
                             "usage", usage()));
@@ -758,7 +767,7 @@ public class ItrakCommand implements SubCommand {
                 player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
                 return;
             }
-            Tracker tracker = requireOwned(plugin, player, args[0]);
+            Tracker tracker = requireOwned(plugin, player, join(args, 0, args.length));
             if (tracker == null) {
                 return;
             }
@@ -815,7 +824,7 @@ public class ItrakCommand implements SubCommand {
                 player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
                 return;
             }
-            Tracker tracker = requireTracker(plugin, player, args[0]);
+            Tracker tracker = requireTracker(plugin, player, join(args, 0, args.length));
             if (tracker == null) {
                 return;
             }
@@ -858,7 +867,8 @@ public class ItrakCommand implements SubCommand {
         @Override
         public void execute(Player player, String[] args) {
             HahGpsPlugin plugin = HahGpsPlugin.getInstance();
-            Tracker tracker = args.length == 0 ? null : requireTracker(plugin, player, args[0]);
+            Tracker tracker = args.length == 0 ? null
+                    : requireTracker(plugin, player, join(args, 0, args.length));
             if (tracker == null) {
                 if (args.length == 0) {
                     player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
@@ -895,7 +905,8 @@ public class ItrakCommand implements SubCommand {
         @Override
         public void execute(Player player, String[] args) {
             HahGpsPlugin plugin = HahGpsPlugin.getInstance();
-            Tracker tracker = args.length == 0 ? null : requireTracker(plugin, player, args[0]);
+            Tracker tracker = args.length == 0 ? null
+                    : requireTracker(plugin, player, join(args, 0, args.length));
             if (tracker == null) {
                 if (args.length == 0) {
                     player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));

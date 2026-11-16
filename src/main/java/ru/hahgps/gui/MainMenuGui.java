@@ -64,7 +64,14 @@ public class MainMenuGui extends GuiScreen {
             case 10 -> new PointsListGui(player, null).open();
             case 12 -> new CategoriesGui(player).open();
             case 14 -> new MapGui(player).open();
-            case 16 -> new SearchGui(player).open();
+            case 16 -> {
+                if (!player.hasPermission("gps.search")) {
+                    player.sendMessage(HahGpsPlugin.getInstance().getMessages().getPrefixed("no-permission"));
+                    GuiTheme.deny(player);
+                    return;
+                }
+                new SearchGui(player).open();
+            }
             case 22 -> new SettingsGui(player).open();
             case 24 -> {
                 if (player.hasPermission("gps.itrak")) {

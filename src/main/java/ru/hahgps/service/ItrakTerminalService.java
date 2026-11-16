@@ -99,6 +99,9 @@ public class ItrakTerminalService {
             data.deleteTerminal(existing.world(), existing.x(), existing.y(), existing.z())
                     .exceptionally(error -> false);
         }
+        // Запоминаем исходное состояние: при сбое БД возвращаем его, а не
+        // AIR — иначе снег/трава/цветок под терминалом терялись навсегда.
+        org.bukkit.block.data.BlockData previous = block.getBlockData();
         block.setType(Material.LODESTONE, false);
         long now = System.currentTimeMillis();
         TrackerTerminal candidate = new TrackerTerminal(0, world.getName(),
@@ -106,7 +109,7 @@ public class ItrakTerminalService {
                 player.getUniqueId(), player.getName(), now);
         return data.createTerminal(candidate).thenApply(created -> {
             if (created == null) {
-                block.setType(Material.AIR, false);
+                block.setBlockData(previous, false);
                 return new Outcome(null, PlaceResult.FAILED);
             }
             terminals.put(created.key(), created);

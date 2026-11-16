@@ -272,7 +272,19 @@ public class NavigationService {
         }
         Location live = trackerService.liveLocation(tracker);
         if (live != null && live.getWorld() != null) {
-            session.setTarget(live);
+            // Вне зоны связи цель — район, а не точные координаты: раньше тик
+            // каждый раз подставлял сюда live и обнулял дальность сигнала.
+            Location goal = live;
+            TrackerService.Signal signal = trackerService.signal(player, tracker);
+            if (signal != null && !signal.inRange()) {
+                Location region = trackerService.targetLocation(player, tracker);
+                if (region != null) {
+                    goal = region;
+                }
+            }
+            if (goal.getWorld() != null) {
+                session.setTarget(goal);
+            }
         }
         Location current = session.getTarget();
         if (current == null || session.isRebuildInFlight()) {

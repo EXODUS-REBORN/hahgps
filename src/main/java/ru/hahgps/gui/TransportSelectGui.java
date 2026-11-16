@@ -50,10 +50,6 @@ public class TransportSelectGui extends GuiScreen {
                 list.add(type);
             }
         }
-        if (list.isEmpty()) {
-            list.add(TransportType.FOOT);
-            list.add(TransportType.CAR);
-        }
         return list;
     }
 

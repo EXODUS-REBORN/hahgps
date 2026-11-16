@@ -33,7 +33,12 @@ public class ItrakMenuGui extends GuiScreen {
     private BukkitTask refreshTask;
 
     public ItrakMenuGui(Player player) {
+        this(player, 0);
+    }
+
+    public ItrakMenuGui(Player player, int page) {
         super(player);
+        this.page = Math.max(0, page);
     }
 
     @Override
@@ -97,7 +102,6 @@ public class ItrakMenuGui extends GuiScreen {
         }
         boolean admin = player.hasPermission("gps.itrak.admin");
         trackers = admin ? service.all() : service.byOwner(player.getUniqueId());
-        page = 0;
         buildPage();
     }
 
@@ -280,7 +284,7 @@ public class ItrakMenuGui extends GuiScreen {
         int start = page * PER_PAGE;
         int shown = Math.max(0, Math.min(PER_PAGE, trackers.size() - start));
         if (slot >= 0 && slot < shown) {
-            new TrackerDetailGui(player, trackers.get(start + slot).getId()).open();
+            new TrackerDetailGui(player, trackers.get(start + slot).getId(), page).open();
             GuiTheme.click(player);
         }
     }

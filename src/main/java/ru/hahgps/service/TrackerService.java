@@ -242,6 +242,7 @@ public class TrackerService {
         lastWatchMessage.clear();
         scanCooldownEnd.clear();
         scanAttempts.clear();
+        highlights.clear();
         lastKnown.clear();
         stationaryNotified.clear();
         dirty.clear();
@@ -405,8 +406,6 @@ public class TrackerService {
         Location location = entity.getLocation();
         if (tracker.moveTo(location.getX(), location.getY(), location.getZ(), now)) {
             stationaryNotified.remove(tracker.getId());
-            dirty.add(tracker.getId());
-        } else {
             dirty.add(tracker.getId());
         }
     }
@@ -625,17 +624,35 @@ public class TrackerService {
         }
         lastSaveAt = now;
         for (Integer id : new ArrayList<>(dirty)) {
-            Tracker tracker = trackers.get(id);
-            dirty.remove(id);
-            if (tracker == null) {
+            Tracker live = trackers.get(id);
+            if (live == null) {
+                dirty.remove(id);
                 continue;
             }
-            data.updateTracker(tracker).exceptionally(error -> {
-                plugin.getLogger().log(Level.WARNING, "HahGps: не удалось сохранить трекер "
-                        + tracker.getCode(), error);
-                return false;
+            // В БД уходит снимок значений: тик продолжает двигать живой объект,
+            // и поток записи иначе мог прочитать новый x со старым y.
+            Tracker snapshot = snapshotOf(live);
+            dirty.remove(id);
+            data.updateTracker(snapshot).whenComplete((ok, error) -> {
+                if (error != null) {
+                    // Запись не прошла — вернём трекер в очередь, иначе позиция
+                    // потеряется до следующего движения.
+                    dirty.add(id);
+                    plugin.getLogger().log(Level.WARNING, "HahGps: не удалось сохранить трекер "
+                            + snapshot.getCode(), error);
+                }
             });
         }
+    }
+
+    /** Неизменяемый снимок состояния трекера для фоновой записи в БД. */
+    private static Tracker snapshotOf(Tracker tracker) {
+        Tracker copy = new Tracker(tracker.getId(), tracker.getCode(), tracker.getName(),
+                tracker.getColor(), tracker.isWaterproof(), tracker.getOwnerUuid(),
+                tracker.getOwnerName(), tracker.getWorld(), tracker.getX(), tracker.getY(),
+                tracker.getZ(), tracker.getEntityUuid(), tracker.isSunk(), tracker.getPlacedAt(),
+                tracker.getMovedAt(), tracker.getUpdatedAt(), tracker.getSupportBlock());
+        return copy;
     }
 
     private void notifyStationary(Tracker tracker, long now) {
@@ -779,23 +796,32 @@ public class TrackerService {
         return distance <= plugin.getConfigManager().getItrakTakeRadius();
     }
 
-    /** Подобрать трекер: удалить из мира и вернуть предмет владельцу. */
+    /**
+     * Подобрать трекер: удалить из мира и вернуть предмет владельцу.
+     *
+     * Порядок важен: сначала запись уходит из БД, и только при успехе трекер
+     * исчезает из памяти и игрок получает предмет. Иначе сбой БД оставлял
+     * трекер в таблице, и после рестарта он «воскресал» вместе с предметом.
+     */
     public CompletableFuture<Boolean> take(Player player, Tracker tracker) {
         if (tracker == null) {
             return CompletableFuture.completedFuture(false);
         }
-        unwatchAll(tracker.getId());
-        stationaryNotified.remove(tracker.getId());
-        lostSince.remove(tracker.getId());
-        clearHighlights(tracker.getId());
-        trackers.remove(tracker.getId());
-        ItemStack item = ItemFactory.trackerItem(new ItemFactory.TrackerSpec(tracker.getCode(),
-                tracker.getName(), tracker.getColor(), tracker.isWaterproof()));
-        Map<Integer, ItemStack> leftover = player.getInventory().addItem(item);
-        for (ItemStack drop : leftover.values()) {
-            player.getWorld().dropItemNaturally(player.getLocation(), drop);
-        }
-        return data.deleteTracker(tracker.getId()).thenApply(ok -> true);
+        return data.deleteTracker(tracker.getId()).thenApply(ok -> {
+            if (!ok) {
+                return false;
+            }
+            runMain(() -> {
+                forgetTracker(tracker);
+                ItemStack item = ItemFactory.trackerItem(new ItemFactory.TrackerSpec(tracker.getCode(),
+                        tracker.getName(), tracker.getColor(), tracker.isWaterproof()));
+                Map<Integer, ItemStack> leftover = player.getInventory().addItem(item);
+                for (ItemStack drop : leftover.values()) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), drop);
+                }
+            });
+            return true;
+        });
     }
 
     /** Снять трекер и выронить предмет: сломали блок, на котором он держался. */
@@ -803,18 +829,21 @@ public class TrackerService {
         if (tracker == null) {
             return CompletableFuture.completedFuture(false);
         }
-        unwatchAll(tracker.getId());
-        stationaryNotified.remove(tracker.getId());
-        lostSince.remove(tracker.getId());
-        clearHighlights(tracker.getId());
-        trackers.remove(tracker.getId());
-        ItemStack item = ItemFactory.trackerItem(new ItemFactory.TrackerSpec(tracker.getCode(),
-                tracker.getName(), tracker.getColor(), tracker.isWaterproof()));
-        Location where = dropAt != null ? dropAt : tracker.getLocation();
-        if (where != null && where.getWorld() != null) {
-            where.getWorld().dropItemNaturally(where, item);
-        }
-        return data.deleteTracker(tracker.getId());
+        return data.deleteTracker(tracker.getId()).thenApply(ok -> {
+            if (!ok) {
+                return false;
+            }
+            runMain(() -> {
+                forgetTracker(tracker);
+                ItemStack item = ItemFactory.trackerItem(new ItemFactory.TrackerSpec(tracker.getCode(),
+                        tracker.getName(), tracker.getColor(), tracker.isWaterproof()));
+                Location where = dropAt != null ? dropAt : tracker.getLocation();
+                if (where != null && where.getWorld() != null) {
+                    where.getWorld().dropItemNaturally(where, item);
+                }
+            });
+            return true;
+        });
     }
 
     /**
@@ -874,12 +903,31 @@ public class TrackerService {
         if (tracker == null) {
             return CompletableFuture.completedFuture(false);
         }
+        return data.deleteTracker(tracker.getId()).thenApply(ok -> {
+            if (!ok) {
+                return false;
+            }
+            runMain(() -> forgetTracker(tracker));
+            return true;
+        });
+    }
+
+    /** Снять трекер со всех подписок и убрать из памяти (только главный поток). */
+    private void forgetTracker(Tracker tracker) {
         unwatchAll(tracker.getId());
         stationaryNotified.remove(tracker.getId());
         lostSince.remove(tracker.getId());
         clearHighlights(tracker.getId());
         trackers.remove(tracker.getId());
-        return data.deleteTracker(tracker.getId());
+    }
+
+    /** Выполнить действие в главном потоке: предметы игроку и карты — только там. */
+    private void runMain(Runnable action) {
+        if (Bukkit.isPrimaryThread()) {
+            action.run();
+        } else {
+            Bukkit.getScheduler().runTask(plugin, action);
+        }
     }
 
     // ------------------------------------------------------------------
