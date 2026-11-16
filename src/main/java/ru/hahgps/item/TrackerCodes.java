@@ -29,12 +29,16 @@ public final class TrackerCodes {
 
     public static final String PREFIX = "TRK-";
 
+    /** Цифр в порядковом номере: до 9 999 999 кодов в одном формате. */
+    public static final int DIGITS = 7;
+
     /**
-     * Цифр в порядковом номере: 8 знаков — до 99 999 999 кодов в одном
-     * формате. При 7 знаках BLOCK=1 000 000 давал бы 8-значный номер уже с
-     * одиннадцатого блока, и {@link #baseOf(String)} перестал бы его понимать.
+     * Потолок порядковых номеров. Резерв в БД идёт блоками, и последний блок
+     * мог выйти за 7-значный формат — тогда номер печатался 8 цифрами, а
+     * {@link #baseOf(String)} его уже не узнавал. Блок обрезается по потолку,
+     * а дальше {@link #next()} отдаёт резервные коды.
      */
-    public static final int DIGITS = 8;
+    public static final long MAX_SEQUENTIAL = 9_999_999L;
 
     /** Случайных знаков в хвосте кода. */
     public static final int SUFFIX = 4;
@@ -55,8 +59,15 @@ public final class TrackerCodes {
      * Вызывается в главном потоке, когда хранилище уже выдало блок.
      */
     public static synchronized void initialize(long first, int count) {
-        next.set(Math.max(0L, first));
-        limit.set(Math.max(0L, first) + Math.max(1, count));
+        long start = Math.max(0L, first);
+        next.set(start);
+        limit.set(sequentialEnd(start, count));
+    }
+
+    /** Конец диапазона (не включая), обрезанный по {@link #MAX_SEQUENTIAL}. */
+    private static long sequentialEnd(long start, int count) {
+        long end = start + Math.max(1, count);
+        return Math.min(end, MAX_SEQUENTIAL + 1);
     }
 
     /**
@@ -109,14 +120,30 @@ public final class TrackerCodes {
         return String.format(Locale.ROOT, "%s%0" + DIGITS + "d", PREFIX, value);
     }
 
-    /** Порядковая часть кода без случайного хвоста. */
+    /**
+     * Порядковая часть кода без случайного хвоста. Цифр может быть и больше
+     * {@link #DIGITS}: старые/переполненные номера тоже должны распознаваться,
+     * иначе проверка занятости через {@link #used} пропускала бы их.
+     */
     static String baseOf(String code) {
         String value = code.trim().toUpperCase(Locale.ROOT);
-        int dash = value.indexOf('-', PREFIX.length());
-        if (value.startsWith(PREFIX) && dash == PREFIX.length() + DIGITS) {
-            return value.substring(0, dash);
+        if (!value.startsWith(PREFIX)) {
+            return value;
         }
-        return value;
+        int dash = value.indexOf('-', PREFIX.length());
+        if (dash < 0) {
+            return value;
+        }
+        String digits = value.substring(PREFIX.length(), dash);
+        if (digits.isEmpty()) {
+            return value;
+        }
+        for (int i = 0; i < digits.length(); i++) {
+            if (!Character.isDigit(digits.charAt(i))) {
+                return value;
+            }
+        }
+        return value.substring(0, dash);
     }
 
     private static String suffix() {
@@ -136,11 +163,11 @@ public final class TrackerCodes {
         } catch (Throwable error) {
             return false;
         }
-        if (start <= 0) {
+        if (start <= 0 || start > MAX_SEQUENTIAL) {
             return false;
         }
         next.set(start);
-        limit.set(start + BLOCK);
+        limit.set(sequentialEnd(start, BLOCK));
         return true;
     }
 
