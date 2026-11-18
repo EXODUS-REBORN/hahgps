@@ -124,8 +124,8 @@ ru.hahgps
 - **EdgeCommand** — управление рёбрами графа
 - **VisualCommand** — визуализация дорожной сети
 - **ItrakCommand** — трекеры iTrak: give, give-locator (радиус/long),
-  give-terminal, scan, find (свои трекеры + карта), list, info, route,
-  take, remove, watch
+  give-terminal, scan, find (свои трекеры + карта), list, info, route, name
+  (переименование), take, remove, watch
 
 ### 3. Слой данных (Storage)
 

@@ -304,6 +304,11 @@ public class TrackerListener implements Listener {
     @EventHandler
     public void onProjectileHit(ProjectileHitEvent event) {
         Projectile projectile = event.getEntity();
+        TrackerService thrownService = plugin.getTrackerService();
+        if (thrownService != null) {
+            // Убираем летящий предмет сразу, не дожидаясь тика анимации.
+            thrownService.finishThrow(projectile);
+        }
         ItemFactory.TrackerSpec spec = ItemFactory.readSpec(projectile);
         if (spec == null) {
             return;
@@ -412,6 +417,53 @@ public class TrackerListener implements Listener {
                             "y", String.valueOf(target.getY()),
                             "z", String.valueOf(target.getZ())));
                 }));
+    }
+
+    // ------------------------------------------------------------------
+    // Наковальня: имя трекера до установки
+    // ------------------------------------------------------------------
+
+    /**
+     * Переименование трекера в наковальне. Ванильный результат потерял бы
+     * подпись: метка в PDC осталась бы прежней, и после установки трекер
+     * назывался бы по-старому. Поэтому результат собираем сами — тот же
+     * предмет, но с новым именем и без стоимости починки.
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onAnvil(org.bukkit.event.inventory.PrepareAnvilEvent event) {
+        org.bukkit.inventory.AnvilInventory anvil = event.getInventory();
+        ItemStack first = anvil.getItem(0);
+        ItemFactory.TrackerSpec spec = ItemFactory.readTracker(first);
+        if (spec == null) {
+            return;
+        }
+        ItemStack second = anvil.getItem(1);
+        if (second != null && !second.getType().isAir()) {
+            // Второй предмет — это уже починка/склейка, а не переименование.
+            return;
+        }
+        String rename = anvil.getRenameText();
+        if (rename == null || rename.isBlank()) {
+            return;
+        }
+        // Пока игрок ничего не менял, в поле лежит текущая подпись предмета:
+        // её нельзя принимать за новое имя, иначе любой заход в наковальню
+        // «переименовывал» трекер в «iTrak голубой».
+        String current = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+                .plainText().serialize(first.displayName()).trim();
+        if (rename.trim().equals(current)) {
+            return;
+        }
+        String name = TrackerService.sanitizeName(rename);
+        if (spec.name().trim().equals(name)) {
+            return;
+        }
+        ItemStack result = ItemFactory.renamedTracker(first, name);
+        if (result == null) {
+            return;
+        }
+        anvil.setRepairCost(0);
+        event.setResult(result);
     }
 
     // ------------------------------------------------------------------

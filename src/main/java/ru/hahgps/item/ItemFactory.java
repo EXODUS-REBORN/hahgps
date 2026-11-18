@@ -72,30 +72,36 @@ public final class ItemFactory {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             String colorName = message(color.messageKey(), color.getKey());
+            String label = spec.name() == null ? "" : GuiTheme.clipPlain(spec.name(), GuiTheme.NAME_MAX);
             StringBuilder display = new StringBuilder();
             display.append("<bold><color:").append(color.hex()).append(">iTrak</color></bold>");
             display.append(" <color:").append(color.hex()).append(">").append(GuiTheme.escapeForMini(colorName))
                     .append("</color>");
-            if (spec.name() != null && !spec.name().isBlank()) {
+            if (!label.isBlank()) {
                 display.append(" <dark_gray>·</dark_gray> <white>")
-                        .append(GuiTheme.escapeForMini(spec.name().trim())).append("</white>");
+                        .append(GuiTheme.escapeForMini(label)).append("</white>");
             }
             meta.displayName(GuiTheme.mm(display.toString()));
 
             String type = spec.waterproof()
                     ? message("itrak-type-waterproof", "водонепроницаемый")
                     : message("itrak-type-regular", "обычный");
+            // Компактно: код и тип в одной строке, дальше — по одной подсказке
+            // на действие. Длинная строка «ПКМ по блоку …, ПКМ в воздух …»
+            // разваливалась на два переноса и читалась хуже.
             List<Component> lore = new ArrayList<>();
-            lore.add(GuiTheme.mm("<gray>" + GuiTheme.escapeForMini(message("itrak-item-code", "Код"))
-                    + ": <white><bold>" + spec.code() + "</bold></white></gray>"));
-            lore.add(GuiTheme.mm("<gray>" + GuiTheme.escapeForMini(message("itrak-item-type", "Тип"))
-                    + ": <white>" + GuiTheme.escapeForMini(type) + "</white></gray>"));
-            lore.add(GuiTheme.mm("<#66aaff>→</#66aaff> <gray>"
-                    + GuiTheme.escapeForMini(message("itrak-item-hint",
-                    "ПКМ по блоку — прицепить, ПКМ в воздух — бросить")) + "</gray>"));
-            lore.add(GuiTheme.mm("<gray><italic>"
-                    + GuiTheme.escapeForMini(message("itrak-item-remove-hint",
-                    "ПКМ пустой рукой — снять")) + "</italic></gray>"));
+            lore.add(GuiTheme.mm("<dark_gray>" + GuiTheme.escapeForMini(message("itrak-item-code", "Код"))
+                    + "</dark_gray> <white>" + GuiTheme.escapeForMini(spec.code()) + "</white>"
+                    + " <dark_gray>·</dark_gray> <#8fc6ff>" + GuiTheme.escapeForMini(type) + "</#8fc6ff>"));
+            lore.add(GuiTheme.mm("<#66aaff>▸</#66aaff> <gray>"
+                    + GuiTheme.escapeForMini(message("itrak-item-hint-attach",
+                    "ПКМ по блоку — прицепить")) + "</gray>"));
+            lore.add(GuiTheme.mm("<#66aaff>▸</#66aaff> <gray>"
+                    + GuiTheme.escapeForMini(message("itrak-item-hint-throw",
+                    "ПКМ в воздух — бросить")) + "</gray>"));
+            lore.add(GuiTheme.mm("<#66aaff>▸</#66aaff> <gray>"
+                    + GuiTheme.escapeForMini(message("itrak-item-hint-remove",
+                    "ПКМ пустой рукой — снять")) + "</gray>"));
             meta.lore(lore);
 
             meta.setCustomModelData(ItemIds.tracker(color, spec.waterproof()));
@@ -103,8 +109,8 @@ public final class ItemFactory {
             data.set(TRACKER_CODE, PersistentDataType.STRING, spec.code());
             data.set(TRACKER_COLOR, PersistentDataType.STRING, color.getKey());
             data.set(TRACKER_WATERPROOF, PersistentDataType.BYTE, (byte) (spec.waterproof() ? 1 : 0));
-            if (spec.name() != null && !spec.name().isBlank()) {
-                data.set(TRACKER_LABEL, PersistentDataType.STRING, spec.name().trim());
+            if (!label.isBlank()) {
+                data.set(TRACKER_LABEL, PersistentDataType.STRING, label);
             }
             item.setItemMeta(meta);
         }
@@ -112,6 +118,20 @@ public final class ItemFactory {
             GuiTheme.glow(item);
         }
         return item;
+    }
+
+    /**
+     * Переименовать предмет-трекер, не меняя код, цвет и водозащиту.
+     * Пустое имя убирает подпись: трекер снова называется кодом.
+     *
+     * @return новый предмет или null, если предмет — не трекер
+     */
+    public static ItemStack renamedTracker(ItemStack item, String name) {
+        TrackerSpec spec = readTracker(item);
+        if (spec == null) {
+            return null;
+        }
+        return trackerItem(new TrackerSpec(spec.code(), name, spec.color(), spec.waterproof()));
     }
 
     /** Локатор со стандартным радиусом из конфига. */

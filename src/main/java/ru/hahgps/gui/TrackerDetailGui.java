@@ -160,6 +160,10 @@ public class TrackerDetailGui extends GuiScreen {
                 ItemIds.ITRAK_TAKE));
 
         if (service.canManage(player, tracker)) {
+            inventory.setItem(15, GuiUtil.item(Material.NAME_TAG,
+                    comp("gui.itrak-rename"),
+                    List.of(comp("gui.lore-itrak-rename")),
+                    ItemIds.ITRAK_RENAME));
             inventory.setItem(16, GuiUtil.item(Material.LAVA_BUCKET,
                     comp("gui.itrak-delete"),
                     List.of(comp("gui.lore-itrak-delete")),
@@ -275,6 +279,23 @@ public class TrackerDetailGui extends GuiScreen {
                             }
                             player.sendMessage(plugin.getMessages().getPrefixed("itrak-taken", "name", name));
                         }));
+            }
+            case 15 -> {
+                if (!service.canManage(player, tracker)) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
+                    GuiTheme.deny(player);
+                    return;
+                }
+                int id = tracker.getId();
+                player.closeInventory();
+                InputManager.getInstance().request(player,
+                        plugin.getMessages().getPrefixed("input-itrak-rename",
+                                "name", tracker.getDisplayName()),
+                        input -> {
+                            ItrakCommand.renameFromMenu(plugin, player, id, input);
+                            new TrackerDetailGui(player, id, listPage).open();
+                        });
+                GuiTheme.click(player);
             }
             case 16 -> {
                 if (!service.canManage(player, tracker)) {

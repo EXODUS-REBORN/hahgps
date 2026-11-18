@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Версия схемы палитры: при несовпадении файл заменяется эталоном (старый — в .bak)
-palette-version: 12
+palette-version: 13
 
 no-permission: "<#3f86ff>✖ У вас нет прав для выполнения этой команды.</#3f86ff>"
 player-only: "<#3f86ff>✖ Эта команда доступна только игрокам.</#3f86ff>"
@@ -189,8 +189,9 @@ itrak-taken: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{nam
 itrak-take-far: "<#3f86ff>✖ Слишком далеко:</#3f86ff> <#8fc6ff>{distance}</#8fc6ff> <gray>при радиусе</gray> <white>{radius}</white>"
 itrak-removed: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>удалён.</gray>"
 itrak-delete-hint: "<#66aaff>→</#66aaff> <gray>Шифт-клик по кнопке удаления удаляет трекер.</gray>"
-itrak-given: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white><bold>{name}</bold></white> <gray>выдан:</gray> <#8fc6ff>{color}, код {code}</#8fc6ff> <gray>для</gray> <white>{player}</white>"
-itrak-received: "<#8fe9f5>✔</#8fe9f5> <gray>Ты получил iTrak:</gray> <#8fc6ff>{code}</#8fc6ff>"
+itrak-given: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak</gray> <white><bold>{name}</bold></white> <dark_gray>·</dark_gray> <gray>{code}</gray> <dark_gray>·</dark_gray> <#8fc6ff>{color}</#8fc6ff> <dark_gray>→</dark_gray> <white>{player}</white>"
+itrak-given-code: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak</gray> <white><bold>{code}</bold></white> <dark_gray>·</dark_gray> <#8fc6ff>{color}</#8fc6ff> <dark_gray>→</dark_gray> <white>{player}</white>"
+itrak-received: "<#8fe9f5>✔</#8fe9f5> <gray>Получен iTrak</gray> <white><bold>{code}</bold></white> <dark_gray>·</dark_gray> <#8fc6ff>{color}</#8fc6ff>"
 itrak-locator-given: "<#8fe9f5>✔</#8fe9f5> <gray>Локатор iTrak ({radius} блоков) выдан:</gray> <white>{player}</white>"
 itrak-player-not-found: "<#3f86ff>✖ Игрок <white><bold>{name}</bold></white> не в сети.</#3f86ff>"
 itrak-color-unknown: "<#3f86ff>✖ Неизвестный цвет <white><bold>{color}</bold></white>.</#3f86ff>"
@@ -273,13 +274,20 @@ itrak-duration-seconds: "{seconds} с"
 itrak-duration-minutes: "{minutes} мин"
 itrak-duration-hours: "{hours} ч {minutes} мин"
 itrak-item-code: "Код"
-itrak-item-type: "Тип"
-itrak-item-hint: "ПКМ по блоку — прицепить, ПКМ в воздух — бросить"
+itrak-item-hint-attach: "ПКМ по блоку — прицепить"
+itrak-item-hint-throw: "ПКМ в воздух — бросить"
+itrak-item-hint-remove: "ПКМ пустой рукой — снять"
 itrak-locator-name: "Локатор"
 itrak-locator-lore: "Ищет трекеры iTrak поблизости"
 itrak-locator-radius: "Радиус поиска: {radius} блоков"
 itrak-locator-hint: "ПКМ — просканировать"
 itrak-locator-upgraded: "<#66aaff>→</#66aaff> <gray>Старый локатор-компас заменён на новый: компас — навигационная палочка WorldEdit, клик им телепортировал игрока.</gray>"
+itrak-renamed: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер</gray> <white>{code}</white> <dark_gray>→</dark_gray> <white><bold>{name}</bold></white>"
+itrak-rename-same: "<#66aaff>→</#66aaff> <gray>У трекера</gray> <white>{code}</white> <gray>уже такое название.</gray>"
+itrak-rename-cancel: "<#66aaff>→</#66aaff> <gray>Переименование отменено.</gray>"
+itrak-rename-need-item: "<#3f86ff>✖ Возьми трекер в руку или укажи код установленного.</#3f86ff>"
+itrak-item-renamed: "<#8fe9f5>✔</#8fe9f5> <gray>Название трекера:</gray> <white><bold>{name}</bold></white>"
+input-itrak-rename: "<#66aaff>→</#66aaff> <gray>Напиши новое название для</gray> <white><bold>{name}</bold></white> <dark_gray>·</dark_gray> <gray>дефис снимает название</gray>"
 input-itrak-give: "<#66aaff>→</#66aaff> <gray>Напиши: цвет, признак waterproof и имя — например</gray> <white>red waterproof Мой</white>"
 help-itrak: "Трекеры iTrak, локатор и слежение"
 
@@ -413,6 +421,7 @@ gui:
   itrak-unwatch: "<#8fc6ff>Не следить</#8fc6ff>"
   itrak-take: "<#8fc6ff>Подобрать</#8fc6ff>"
   itrak-take-far: "<#3f86ff>Далеко</#3f86ff>"
+  itrak-rename: "<#8fc6ff>Переименовать</#8fc6ff>"
   itrak-delete: "<#3f86ff>✖ Удалить</#3f86ff>"
   itrak-scan: "<#8fc6ff>Сканировать</#8fc6ff>"
   itrak-find: "<#8fc6ff>Мои трекеры на карте</#8fc6ff>"
@@ -444,6 +453,7 @@ gui:
   lore-itrak-watch-off: "<gray><italic>Прекратить слежение</italic></gray>"
   lore-itrak-take: "<gray><italic>Забрать трекер с собой</italic></gray>"
   lore-itrak-take-far: "<gray><italic>Нужно подойти ближе</italic></gray>"
+  lore-itrak-rename: "<gray><italic>Задать своё название трекера</italic></gray>"
   lore-itrak-delete: "<gray><italic>Шифт-клик — удалить</italic></gray>"
 
 

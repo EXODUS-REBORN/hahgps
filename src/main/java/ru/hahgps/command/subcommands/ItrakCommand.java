@@ -40,7 +40,7 @@ public class ItrakCommand implements SubCommand {
 
     @Override
     public String usage() {
-        return "/gps itrak [give|give-locator|give-terminal|scan|find|list|info|route|take|remove|watch|unwatch]";
+        return "/gps itrak [give|give-locator|give-terminal|scan|find|list|info|route|name|take|remove|watch|unwatch]";
     }
 
     @Override
@@ -52,7 +52,7 @@ public class ItrakCommand implements SubCommand {
     public List<SubCommand> children() {
         return List.of(new GiveCommand(), new GiveLocatorCommand(),
                 new GiveTerminalCommand(), new ScanCommand(), new FindCommand(), new ListCommand(),
-                new InfoCommand(), new RouteCommand(), new TakeCommand(),
+                new InfoCommand(), new RouteCommand(), new NameCommand(), new TakeCommand(),
                 new RemoveCommand(), new WatchCommand(), new UnwatchCommand());
     }
 
@@ -672,8 +672,67 @@ public class ItrakCommand implements SubCommand {
         }
     }
 
-    private static class RouteCommand implements SubCommand {
+    /**
+     * Переименование: установленного трекера по коду/номеру/старому имени или
+     * трекера в руке. Имя можно ввести и в наковальне, и в меню трекеров —
+     * все пути ведут в {@link #renameTracker}.
+     */
+    private static class NameCommand implements SubCommand {
         @Override
+        public String name() {
+            return "name";
+        }
+
+        @Override
+        public String usage() {
+            return "/gps itrak name <код|id> <новое имя> — или /gps itrak name <имя> для трекера в руке";
+        }
+
+        @Override
+        public String permission() {
+            return "gps.itrak";
+        }
+
+        @Override
+        public void execute(Player player, String[] args) {
+            HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+            if (args.length == 0) {
+                player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
+                return;
+            }
+            TrackerService service = plugin.getTrackerService();
+            if (service == null) {
+                player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
+                return;
+            }
+            // Первый токен — код, номер или имя установленного трекера:
+            // остальное считаем новым названием (в нём бывают пробелы).
+            Tracker tracker = service.find(args[0]);
+            if (tracker != null) {
+                if (args.length == 1) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
+                    return;
+                }
+                if (!service.canManage(player, tracker)) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
+                    return;
+                }
+                renameTracker(plugin, player, tracker, join(args, 1, args.length));
+                return;
+            }
+            renameHeldItem(plugin, player, join(args, 0, args.length));
+        }
+
+        @Override
+        public List<String> tabComplete(Player player, String[] args) {
+            if (args.length == 1) {
+                return trackerSuggestions(player, args[0]);
+            }
+            return List.of();
+        }
+    }
+
+    private static class RouteCommand implements SubCommand {        @Override
         public String name() {
             return "route";
         }
@@ -1109,18 +1168,98 @@ public class ItrakCommand implements SubCommand {
     private static void giveTracker(HahGpsPlugin plugin, Player sender, Player target,
                                     TrackerColor color, boolean waterproof, String label) {
         String code = ItemFactory.newCode();
-        ItemFactory.TrackerSpec spec = new ItemFactory.TrackerSpec(code, label == null ? "" : label,
-                color, waterproof);
+        String clean = TrackerService.sanitizeName(label);
+        ItemFactory.TrackerSpec spec = new ItemFactory.TrackerSpec(code, clean, color, waterproof);
         target.getInventory().addItem(ItemFactory.trackerItem(spec)).values()
                 .forEach(drop -> target.getWorld().dropItemNaturally(target.getLocation(), drop));
-        sender.sendMessage(plugin.getMessages().getPrefixed("itrak-given",
-                "name", label == null || label.isBlank() ? code : label,
+        String colorName = plugin.getMessages().get(color.messageKey());
+        // Без имени трекер называется кодом — в старом тексте код печатался
+        // дважды («Трекер TRK-… выдан: голубой, код TRK-…»).
+        sender.sendMessage(plugin.getMessages().getPrefixed(
+                clean.isBlank() ? "itrak-given-code" : "itrak-given",
+                "name", clean,
                 "code", code,
-                "color", plugin.getMessages().get(color.messageKey()),
+                "color", colorName,
                 "player", target.getName()));
         if (!target.equals(sender)) {
-            target.sendMessage(plugin.getMessages().getPrefixed("itrak-received", "code", code));
+            target.sendMessage(plugin.getMessages().getPrefixed("itrak-received",
+                    "code", code,
+                    "color", colorName));
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Название трекера
+    // ------------------------------------------------------------------
+
+    /**
+     * Переименовать установленный трекер. Пустой ввод отменяет действие,
+     * одиночный {@code -} снимает название (трекер снова называется кодом).
+     */
+    public static void renameTracker(HahGpsPlugin plugin, Player player, Tracker tracker, String input) {
+        TrackerService service = plugin.getTrackerService();
+        if (service == null || tracker == null) {
+            player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
+            return;
+        }
+        if (!service.canManage(player, tracker)) {
+            player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
+            return;
+        }
+        String raw = input == null ? "" : input.trim();
+        if (raw.isEmpty()) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-rename-cancel"));
+            return;
+        }
+        if (raw.equals("-") || raw.equalsIgnoreCase("reset") || raw.equalsIgnoreCase("сброс")) {
+            raw = "";
+        }
+        String code = tracker.getCode();
+        if (!service.rename(tracker, raw)) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-rename-same", "code", code));
+            return;
+        }
+        player.sendMessage(plugin.getMessages().getPrefixed("itrak-renamed",
+                "code", code,
+                "name", tracker.getDisplayName()));
+    }
+
+    /** Переименовать трекер из карточки в меню: трекер ищем заново по id. */
+    public static void renameFromMenu(HahGpsPlugin plugin, Player player, int trackerId, String input) {
+        TrackerService service = plugin.getTrackerService();
+        Tracker tracker = service == null ? null : service.byId(trackerId);
+        if (tracker == null) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-not-found", "name", "iTrak"));
+            return;
+        }
+        renameTracker(plugin, player, tracker, input);
+    }
+
+    /**
+     * Переименовать трекер в руке — до установки, как в наковальне. Код, цвет
+     * и водозащита остаются прежними, меняется только подпись.
+     */
+    private static void renameHeldItem(HahGpsPlugin plugin, Player player, String input) {
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        if (ItemFactory.readTracker(hand) == null) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-rename-need-item"));
+            return;
+        }
+        String raw = input == null ? "" : input.trim();
+        if (raw.equals("-") || raw.equalsIgnoreCase("reset") || raw.equalsIgnoreCase("сброс")) {
+            raw = "";
+        }
+        ItemStack renamed = ItemFactory.renamedTracker(hand, TrackerService.sanitizeName(raw));
+        if (renamed == null) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-rename-need-item"));
+            return;
+        }
+        renamed.setAmount(Math.max(1, hand.getAmount()));
+        player.getInventory().setItemInMainHand(renamed);
+        ItemFactory.TrackerSpec spec = ItemFactory.readTracker(renamed);
+        String shown = spec == null || spec.name().isBlank()
+                ? (spec == null ? "iTrak" : spec.code()) : spec.name();
+        player.sendMessage(plugin.getMessages().getPrefixed("itrak-item-renamed", "name", shown));
     }
 
     /**

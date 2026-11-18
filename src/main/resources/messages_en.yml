@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Palette schema version: a mismatch replaces the file with the bundled one (old -> .bak)
-palette-version: 12
+palette-version: 13
 
 no-permission: "<#3f86ff>✖ You don't have permission to run this command.</#3f86ff>"
 player-only: "<#3f86ff>✖ This command is for players only.</#3f86ff>"
@@ -189,8 +189,9 @@ itrak-taken: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker</gray> <white><bold>{name}</b
 itrak-take-far: "<#3f86ff>✖ Too far:</#3f86ff> <#8fc6ff>{distance}</#8fc6ff> <gray>with radius</gray> <white>{radius}</white>"
 itrak-removed: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>removed.</gray>"
 itrak-delete-hint: "<#66aaff>→</#66aaff> <gray>Shift-click the delete button to remove the tracker.</gray>"
-itrak-given: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker</gray> <white><bold>{name}</bold></white> <gray>given:</gray> <#8fc6ff>{color}, code {code}</#8fc6ff> <gray>to</gray> <white>{player}</white>"
-itrak-received: "<#8fe9f5>✔</#8fe9f5> <gray>You received an iTrak:</gray> <#8fc6ff>{code}</#8fc6ff>"
+itrak-given: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak</gray> <white><bold>{name}</bold></white> <dark_gray>·</dark_gray> <gray>{code}</gray> <dark_gray>·</dark_gray> <#8fc6ff>{color}</#8fc6ff> <dark_gray>→</dark_gray> <white>{player}</white>"
+itrak-given-code: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak</gray> <white><bold>{code}</bold></white> <dark_gray>·</dark_gray> <#8fc6ff>{color}</#8fc6ff> <dark_gray>→</dark_gray> <white>{player}</white>"
+itrak-received: "<#8fe9f5>✔</#8fe9f5> <gray>Received iTrak</gray> <white><bold>{code}</bold></white> <dark_gray>·</dark_gray> <#8fc6ff>{color}</#8fc6ff>"
 itrak-locator-given: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak locator ({radius} blocks) given to</gray> <white>{player}</white>"
 itrak-player-not-found: "<#3f86ff>✖ Player <white><bold>{name}</bold></white> is offline.</#3f86ff>"
 itrak-color-unknown: "<#3f86ff>✖ Unknown color <white><bold>{color}</bold></white>.</#3f86ff>"
@@ -273,13 +274,20 @@ itrak-duration-seconds: "{seconds} s"
 itrak-duration-minutes: "{minutes} min"
 itrak-duration-hours: "{hours} h {minutes} min"
 itrak-item-code: "Code"
-itrak-item-type: "Type"
-itrak-item-hint: "Right-click a block to attach, right-click the air to throw"
+itrak-item-hint-attach: "Right-click a block to attach"
+itrak-item-hint-throw: "Right-click the air to throw"
+itrak-item-hint-remove: "Right-click with an empty hand to pick it up"
 itrak-locator-name: "Locator"
 itrak-locator-lore: "Finds nearby iTrak trackers"
 itrak-locator-radius: "Search radius: {radius} blocks"
 itrak-locator-hint: "Right-click to scan"
 itrak-locator-upgraded: "<#66aaff>→</#66aaff> <gray>The old compass locator was replaced: a compass is WorldEdit's navigation wand, clicking it teleported the player.</gray>"
+itrak-renamed: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker</gray> <white>{code}</white> <dark_gray>→</dark_gray> <white><bold>{name}</bold></white>"
+itrak-rename-same: "<#66aaff>→</#66aaff> <gray>Tracker</gray> <white>{code}</white> <gray>already has this name.</gray>"
+itrak-rename-cancel: "<#66aaff>→</#66aaff> <gray>Rename cancelled.</gray>"
+itrak-rename-need-item: "<#3f86ff>✖ Hold a tracker or specify a placed one by code.</#3f86ff>"
+itrak-item-renamed: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker name:</gray> <white><bold>{name}</bold></white>"
+input-itrak-rename: "<#66aaff>→</#66aaff> <gray>Type a new name for</gray> <white><bold>{name}</bold></white> <dark_gray>·</dark_gray> <gray>a dash clears the name</gray>"
 input-itrak-give: "<#66aaff>→</#66aaff> <gray>Type: color, waterproof flag and name — e.g.</gray> <white>red waterproof Mine</white>"
 help-itrak: "iTrak trackers, locator and live tracking"
 
@@ -413,6 +421,7 @@ gui:
   itrak-unwatch: "<#8fc6ff>Stop watching</#8fc6ff>"
   itrak-take: "<#8fc6ff>Pick up</#8fc6ff>"
   itrak-take-far: "<#3f86ff>Too far</#3f86ff>"
+  itrak-rename: "<#8fc6ff>Rename</#8fc6ff>"
   itrak-delete: "<#3f86ff>✖ Delete</#3f86ff>"
   itrak-scan: "<#8fc6ff>Scan</#8fc6ff>"
   itrak-find: "<#8fc6ff>My trackers on the map</#8fc6ff>"
@@ -444,6 +453,7 @@ gui:
   lore-itrak-watch-off: "<gray><italic>Stop tracking updates</italic></gray>"
   lore-itrak-take: "<gray><italic>Take the tracker with you</italic></gray>"
   lore-itrak-take-far: "<gray><italic>Come closer first</italic></gray>"
+  lore-itrak-rename: "<gray><italic>Give the tracker a custom name</italic></gray>"
   lore-itrak-delete: "<gray><italic>Shift-click to delete</italic></gray>"
 
 

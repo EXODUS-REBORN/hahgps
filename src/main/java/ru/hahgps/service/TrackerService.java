@@ -126,10 +126,13 @@ public class TrackerService {
 
     private volatile BukkitTask task;
     private volatile long lastSaveAt;
+    /** Летящий брошенный трекер: физика у снаряда, вид — у предмета. */
+    private final ThrownTrackerVisuals thrownVisuals;
 
     public TrackerService(HahGpsPlugin plugin, DataService data) {
         this.plugin = plugin;
         this.data = data;
+        this.thrownVisuals = new ThrownTrackerVisuals(plugin);
     }
 
     // ------------------------------------------------------------------
@@ -230,6 +233,7 @@ public class TrackerService {
 
     public synchronized void stop() {
         stopTask();
+        thrownVisuals.dispose();
         // Досохраняем всё, что успело сдвинуться: иначе после рестарта трекер
         // окажется там, где был при прошлом сохранении.
         for (Tracker tracker : trackers.values()) {
@@ -1029,6 +1033,60 @@ public class TrackerService {
                 || (tracker.getOwnerUuid() != null && tracker.getOwnerUuid().equals(player.getUniqueId())));
     }
 
+    // ------------------------------------------------------------------
+    // Название трекера
+    // ------------------------------------------------------------------
+
+    /** Сколько символов допускается в названии трекера (как и в подписях GUI). */
+    public static final int NAME_LIMIT = 30;
+
+    /**
+     * Название трекера в том виде, в каком оно попадёт в БД и в подписи.
+     * MiniMessage-теги вырезаются: имя приходит от игрока и не должно
+     * раскрашивать меню и чат. Переводы строк, управляющие символы и
+     * двойные пробелы схлопываются, длина ограничена {@link #NAME_LIMIT}.
+     */
+    public static String sanitizeName(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String plain = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().stripTags(raw);
+        // Легаси-код цвета (§c) и управляющие символы в имени не нужны: в чате
+        // и меню они не рендерятся, а буква кода осталась бы в названии.
+        plain = plain.replaceAll("(?i)§[0-9a-fk-or]", "").replace('§', ' ')
+                .replaceAll("\\p{Cntrl}", " ").replaceAll("\\s+", " ").trim();
+        if (plain.codePointCount(0, plain.length()) > NAME_LIMIT) {
+            plain = plain.substring(0, plain.offsetByCodePoints(0, NAME_LIMIT)).trim();
+        }
+        return plain;
+    }
+
+    /**
+     * Переименовать установленный трекер. Пишем в БД сразу: имя не должно
+     * теряться, если сервер уйдёт в рестарт раньше периодического сохранения.
+     *
+     * @return true, если название действительно изменилось
+     */
+    public boolean rename(Tracker tracker, String rawName) {
+        if (tracker == null) {
+            return false;
+        }
+        String name = sanitizeName(rawName);
+        String current = sanitizeName(tracker.getName());
+        if (name.equals(current)) {
+            return false;
+        }
+        tracker.setName(name);
+        dirty.add(tracker.getId());
+        data.updateTracker(snapshotOf(tracker)).exceptionally(error -> {
+            plugin.getLogger().log(Level.WARNING, "HahGps: не удалось сохранить имя трекера "
+                    + tracker.getCode(), error);
+            dirty.add(tracker.getId());
+            return false;
+        });
+        return true;
+    }
+
     /** Трекеры в этом мире в радиусе точки, ближние первыми. */
     public List<Nearby> scanAround(Location origin, double radius) {
         List<Nearby> out = new ArrayList<>();
@@ -1427,8 +1485,11 @@ public class TrackerService {
     // ------------------------------------------------------------------
 
     /**
-     * Бросить трекер: он летит как снежок и цепляется к тому, во что попал
-     * (блок, существо или игрок). Предмет расходуется вызывающей стороной.
+     * Бросить трекер: он летит и цепляется к тому, во что попал (блок,
+     * существо или игрок). Предмет расходуется вызывающей стороной.
+     *
+     * Вид — сам предмет, а не снежок: физику считает скрытый снаряд, а рядом
+     * с ним каждый тик стоит {@link ItemDisplay} с тем же трекером.
      * @param gentle аккуратный бросок под ноги (Shift+ПКМ)
      */
     public boolean throwTracker(Player player, ItemFactory.TrackerSpec spec, boolean gentle) {
@@ -1452,7 +1513,13 @@ public class TrackerService {
         // Shift-бросок — намеренно утопить водонепроницаемый трекер: попадёт
         // в воду, ляжет на дно и продолжит передавать сигнал.
         ItemFactory.writeSink(snowball, gentle);
+        thrownVisuals.show(snowball, ItemFactory.trackerItem(spec));
         return true;
+    }
+
+    /** Снаряд броска закончился (попадание): убрать летящий предмет. */
+    public void finishThrow(Projectile projectile) {
+        thrownVisuals.finish(projectile);
     }
 
     /** Попадание брошенного трекера: к существу, к блоку или на землю. */
