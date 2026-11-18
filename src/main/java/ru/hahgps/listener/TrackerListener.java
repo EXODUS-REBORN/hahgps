@@ -296,9 +296,7 @@ public class TrackerListener implements Listener {
             return;
         }
         ItemFactory.consumeTrackerItem(player, actual.code());
-        player.sendMessage(plugin.getMessages().getPrefixed("itrak-thrown",
-                "name", actual.name() == null || actual.name().isBlank() ? actual.code() : actual.name(),
-                "code", actual.code()));
+        player.sendMessage(service.specLine("itrak-thrown", actual));
     }
 
     @EventHandler
@@ -491,11 +489,22 @@ public class TrackerListener implements Listener {
             return;
         }
         String name = tracker.getDisplayName();
+        String code = tracker.getCode();
+        int id = tracker.getId();
+        String world = tracker.getWorld();
+        double x = tracker.getX();
+        double y = tracker.getY();
+        double z = tracker.getZ();
         service.removeDropping(tracker, block.getLocation().add(0.5, 0.5, 0.5));
-        player.sendMessage(plugin.getMessages().getPrefixed("itrak-tracker-fell", "name", name));
+        player.sendMessage(plugin.getMessages().getPrefixed("itrak-tracker-fell",
+                "name", name, "code", code, "id", String.valueOf(id)));
         Player owner = tracker.getOwnerUuid() == null ? null : Bukkit.getPlayer(tracker.getOwnerUuid());
         if (owner != null && owner.isOnline() && !owner.getUniqueId().equals(player.getUniqueId())) {
-            owner.sendMessage(plugin.getMessages().getPrefixed("itrak-tracker-fell-owner", "name", name));
+            owner.sendMessage(plugin.getMessages().getPrefixed("itrak-tracker-fell-owner",
+                    "name", name, "code", code, "world", world == null ? "?" : world,
+                    "x", TrackerService.formatCoord(x),
+                    "y", TrackerService.formatCoord(y),
+                    "z", TrackerService.formatCoord(z)));
         }
     }
 
@@ -577,22 +586,18 @@ public class TrackerListener implements Listener {
         if (!refundOnFailure) {
             ItemFactory.consumeTrackerItem(player, spec.code());
         }
-        player.sendMessage(plugin.getMessages().getPrefixed("itrak-placed",
-                "name", tracker.getDisplayName(),
-                "code", tracker.getCode(),
-                "world", tracker.getWorld(),
+        player.sendMessage(plugin.getTrackerService().trackerLine("itrak-placed", tracker,
+                "world", tracker.getWorld() == null ? "?" : tracker.getWorld(),
                 "x", TrackerService.formatCoord(tracker.getX()),
                 "y", TrackerService.formatCoord(tracker.getY()),
                 "z", TrackerService.formatCoord(tracker.getZ())));
         if (tracker.isSunk()) {
-            player.sendMessage(plugin.getMessages().getPrefixed(
-                    tracker.isWaterproof() ? "itrak-placed-submerged" : "itrak-placed-sunk",
-                    "name", tracker.getDisplayName(), "code", tracker.getCode()));
+            player.sendMessage(plugin.getTrackerService().trackerLine(
+                    tracker.isWaterproof() ? "itrak-placed-submerged" : "itrak-placed-sunk", tracker));
             player.sendMessage(plugin.getMessages().getComponent("itrak-take-button",
                     "code", tracker.getCode()));
         } else if (tracker.isAttached()) {
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-attached",
-                    "name", tracker.getDisplayName(),
+            player.sendMessage(plugin.getTrackerService().trackerLine("itrak-attached", tracker,
                     "entity", target == null ? "?" : EntityNames.name(target.getType())));
         }
     }
@@ -623,6 +628,8 @@ public class TrackerListener implements Listener {
                                 "HahGps: не удалось снять iTrak", error);
                         return;
                     }
+                    // Строка-карточка: клик по ней откроет меню, даже если
+                    // трекер уже снят — там видно, что это был за трекер.
                     player.sendMessage(plugin.getMessages().getPrefixed("itrak-taken", "name", name));
                 }));
     }

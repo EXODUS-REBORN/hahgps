@@ -36,6 +36,22 @@ class TrackerTest {
     }
 
     @Test
+    void ruinedTrackerLosesSignalButKeepsItsPlace() {
+        long now = 200_000L;
+        Tracker tracker = tracker(now - 10_000L, false, false);
+        assertTrue(tracker.hasSignal());
+
+        tracker.ruin(now);
+        assertTrue(tracker.isRuined());
+        assertEquals(now, tracker.getRuinedAt());
+        assertFalse(tracker.hasSignal(), "промокший трекер сигнала не даёт");
+        assertEquals(Tracker.Status.RUINED, tracker.status());
+        assertFalse(tracker.isStationary(now + 600_000L, 60_000L),
+                "у промокшего трекера нет живого состояния «неподвижен»");
+        assertEquals(10.0, tracker.getX(), "последнее место не съезжает");
+    }
+
+    @Test
     void movementResetsTheStationaryClock() {
         long now = 200_000L;
         Tracker tracker = tracker(now - 60_000L, false);

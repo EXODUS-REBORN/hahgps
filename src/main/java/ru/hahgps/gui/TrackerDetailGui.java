@@ -2,6 +2,7 @@ package ru.hahgps.gui;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
@@ -138,8 +139,9 @@ public class TrackerDetailGui extends GuiScreen {
 
         inventory.setItem(10, GuiUtil.item(Material.COMPASS,
                 comp("gui.itrak-route"),
-                List.of(comp(tracker.isStationary(now, plugin.getConfigManager().getItrakStationaryMillis())
-                                ? "gui.lore-itrak-route-stationary" : "gui.lore-itrak-route")),
+                List.of(comp(tracker.isRuined() ? "gui.lore-itrak-route-last"
+                        : tracker.isStationary(now, plugin.getConfigManager().getItrakStationaryMillis())
+                        ? "gui.lore-itrak-route-stationary" : "gui.lore-itrak-route")),
                 ItemIds.ITRAK_ROUTE));
 
         boolean watching = service.isWatching(player, tracker);
@@ -148,10 +150,14 @@ public class TrackerDetailGui extends GuiScreen {
                 List.of(comp(watching ? "gui.lore-itrak-watch-off" : "gui.lore-itrak-watch-on")),
                 ItemIds.ITRAK_WATCH));
 
-        inventory.setItem(13, GuiUtil.item(Material.FILLED_MAP,
-                comp("gui.itrak-map"),
-                List.of(comp("gui.lore-itrak-map")),
-                ItemIds.MAP_ITEM));
+        if (service.canManage(player, tracker)) {
+            // Карта из карточки убрана: маршрут, переименование и удаление —
+            // всё, что нужно от трекера, находится здесь же.
+            inventory.setItem(13, GuiUtil.item(Material.NAME_TAG,
+                    comp("gui.itrak-rename"),
+                    List.of(comp("gui.lore-itrak-rename")),
+                    ItemIds.ITRAK_RENAME));
+        }
 
         boolean canTake = service.canManage(player, tracker) && service.canTake(player, tracker);
         inventory.setItem(14, GuiUtil.item(canTake ? Material.CHEST : Material.BARRIER,
@@ -160,10 +166,6 @@ public class TrackerDetailGui extends GuiScreen {
                 ItemIds.ITRAK_TAKE));
 
         if (service.canManage(player, tracker)) {
-            inventory.setItem(15, GuiUtil.item(Material.NAME_TAG,
-                    comp("gui.itrak-rename"),
-                    List.of(comp("gui.lore-itrak-rename")),
-                    ItemIds.ITRAK_RENAME));
             inventory.setItem(16, GuiUtil.item(Material.LAVA_BUCKET,
                     comp("gui.itrak-delete"),
                     List.of(comp("gui.lore-itrak-delete")),
@@ -195,7 +197,20 @@ public class TrackerDetailGui extends GuiScreen {
             lines.add(comp("gui.lore-itrak-code", "code", tracker.getCode()));
             lines.add(comp("gui.lore-itrak-status", "status", service.statusText(player, tracker)));
             lines.add(comp("gui.lore-itrak-state", "state", service.stateText(player, tracker, now)));
-            if (signal.inRange()) {
+            if (tracker.isRuined()) {
+                // Промок: показываем, когда трекер был в сети и где, — по этой
+                // отметке строится маршрут и его можно забрать.
+                lines.add(comp("gui.lore-itrak-ruined"));
+                lines.add(comp("gui.lore-itrak-last-seen",
+                        "time", service.formatDuration(now - tracker.getRuinedAt())));
+                Location last = tracker.getLocation();
+                if (last != null) {
+                    lines.add(comp("gui.lore-itrak-coords",
+                            "x", TrackerService.formatCoord(last.getX()),
+                            "y", TrackerService.formatCoord(last.getY()),
+                            "z", TrackerService.formatCoord(last.getZ())));
+                }
+            } else if (signal.inRange()) {
                 lines.add(comp("gui.lore-itrak-coords",
                         "x", TrackerService.formatCoord(signal.exact().getX()),
                         "y", TrackerService.formatCoord(signal.exact().getY()),
@@ -214,7 +229,9 @@ public class TrackerDetailGui extends GuiScreen {
                 lines.add(comp("gui.lore-itrak-time",
                         "time", service.formatDuration(tracker.stationaryMillis(now))));
             }
-            lines.add(comp("gui.lore-itrak-live"));
+            if (!tracker.isRuined()) {
+                lines.add(comp("gui.lore-itrak-live"));
+            }
             meta.lore(lines);
             meta.setCustomModelData(ItemIds.ITRAK_DETAIL);
             icon.setItemMeta(meta);
@@ -258,8 +275,21 @@ public class TrackerDetailGui extends GuiScreen {
                 refresh();
             }
             case 13 -> {
+                if (!service.canManage(player, tracker)) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
+                    GuiTheme.deny(player);
+                    return;
+                }
+                int id = tracker.getId();
                 player.closeInventory();
-                ItrakCommand.focusOnMap(plugin, player, tracker);
+                InputManager.getInstance().request(player,
+                        plugin.getMessages().getPrefixed("input-itrak-rename",
+                                "name", tracker.getDisplayName()),
+                        input -> {
+                            ItrakCommand.renameFromMenu(plugin, player, id, input);
+                            new TrackerDetailGui(player, id, listPage).open();
+                        });
+                GuiTheme.click(player);
             }
             case 14 -> {
                 if (!service.canManage(player, tracker) || !service.canTake(player, tracker)) {
@@ -279,23 +309,6 @@ public class TrackerDetailGui extends GuiScreen {
                             }
                             player.sendMessage(plugin.getMessages().getPrefixed("itrak-taken", "name", name));
                         }));
-            }
-            case 15 -> {
-                if (!service.canManage(player, tracker)) {
-                    player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
-                    GuiTheme.deny(player);
-                    return;
-                }
-                int id = tracker.getId();
-                player.closeInventory();
-                InputManager.getInstance().request(player,
-                        plugin.getMessages().getPrefixed("input-itrak-rename",
-                                "name", tracker.getDisplayName()),
-                        input -> {
-                            ItrakCommand.renameFromMenu(plugin, player, id, input);
-                            new TrackerDetailGui(player, id, listPage).open();
-                        });
-                GuiTheme.click(player);
             }
             case 16 -> {
                 if (!service.canManage(player, tracker)) {

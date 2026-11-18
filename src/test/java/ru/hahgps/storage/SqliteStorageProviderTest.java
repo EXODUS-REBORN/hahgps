@@ -224,6 +224,31 @@ class SqliteStorageProviderTest {
     }
 
     @Test
+    void ruinedTrackerKeepsItsFlagAndLastSeenTime() {
+        long now = 1_700_000_000_000L;
+        Tracker tracker = new Tracker(0, "TRK-RUIN", "Мокрый", TrackerColor.BLUE, false,
+                UUID.randomUUID(), "tester", "world", 1.5, 70.0, 2.5, null, false,
+                now, now, now);
+        Tracker created = provider.createTracker(tracker);
+        assertNotNull(created);
+        assertFalse(created.isRuined());
+
+        // Промок: сигнала нет, время запоминается — по нему считается
+        // «последний раз в сети».
+        created.ruin(now + 60_000L);
+        assertTrue(provider.updateTracker(created));
+
+        Tracker saved = provider.getTrackers().get(0);
+        assertTrue(saved.isRuined());
+        assertEquals(now + 60_000L, saved.getRuinedAt());
+        assertFalse(saved.hasSignal());
+        assertEquals(Tracker.Status.RUINED, saved.status());
+        // Координаты последнего места остались теми же.
+        assertEquals(1.5, saved.getX(), 0.0001);
+        assertEquals(2.5, saved.getZ(), 0.0001);
+    }
+
+    @Test
     void trackerCodeBlocksNeverOverlap() {
         long first = provider.reserveTrackerCodeBlock(1000);
         long second = provider.reserveTrackerCodeBlock(1000);

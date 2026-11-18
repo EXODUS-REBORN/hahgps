@@ -133,8 +133,6 @@ public class ItrakMenuGui extends GuiScreen {
         if (page < pages - 1) {
             inventory.setItem(52, GuiTheme.navForward(getMsg("gui.next-page")));
         }
-        inventory.setItem(47, GuiUtil.item(Material.FILLED_MAP,
-                comp("gui.itrak-find"), lore("gui.lore-itrak-find"), ItemIds.MAP_ITEM));
         inventory.setItem(48, GuiUtil.item(Material.COMPASS,
                 comp("gui.itrak-scan"), lore("gui.lore-itrak-scan"), ItemIds.ITRAK_SCAN));
         inventory.setItem(49, GuiUtil.item(Material.BOOK,
@@ -213,34 +211,6 @@ public class ItrakMenuGui extends GuiScreen {
         }
         if (slot == 45) {
             new MainMenuGui(player).open();
-            GuiTheme.click(player);
-            return;
-        }
-        if (slot == 47) {
-            // Свои трекеры видны прямо на карте (см. map.show-trackers):
-            // центрируем на ближайшем из них, иначе — на игроке. Вне зоны
-            // связи наводим на район, а не на точку.
-            player.closeInventory();
-            if (plugin.getMapService() != null) {
-                Location focus = null;
-                double nearest = Double.MAX_VALUE;
-                for (Tracker tracker : service.byOwner(player.getUniqueId())) {
-                    TrackerService.Signal signal = service.signal(player, tracker);
-                    Location location = signal.inRange() ? signal.exact()
-                            : service.targetLocation(player, tracker);
-                    double distance = LocationUtil.distance(player.getLocation(), location);
-                    if (distance < nearest) {
-                        nearest = distance;
-                        focus = location;
-                    }
-                }
-                if (focus != null) {
-                    plugin.getMapService().focus(player, focus);
-                } else {
-                    plugin.getMapService().openMap(player);
-                }
-                player.sendMessage(plugin.getMessages().getPrefixed("map-open-hint"));
-            }
             GuiTheme.click(player);
             return;
         }

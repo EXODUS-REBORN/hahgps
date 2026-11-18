@@ -113,6 +113,12 @@ public class TrackerService {
      */
     private final Map<UUID, Map<Integer, LastKnown>> lastKnown = new ConcurrentHashMap<>();
     private final Set<Integer> stationaryNotified = ConcurrentHashMap.newKeySet();
+    /**
+     * С какого момента трекер мокнет под дождём. Живёт только в памяти:
+     * после рестарта счётчик начинается заново, иначе трекер «промокал» бы
+     * мгновенно сразу после включения сервера в дождь.
+     */
+    private final Map<Integer, Long> wetSince = new ConcurrentHashMap<>();
     private final Set<Integer> dirty = ConcurrentHashMap.newKeySet();
     /** Коды, которые прямо сейчас вставляются в БД: двойной клик не создаст два трекера. */
     private final Set<String> placingCodes = ConcurrentHashMap.newKeySet();
@@ -249,6 +255,7 @@ public class TrackerService {
         highlights.clear();
         lastKnown.clear();
         stationaryNotified.clear();
+        wetSince.clear();
         dirty.clear();
         lostSince.clear();
         placingCodes.clear();
@@ -277,8 +284,14 @@ public class TrackerService {
         long stationaryMillis = plugin.getConfigManager().getItrakStationaryMillis();
 
         for (Tracker tracker : trackers.values()) {
+            // Промокший трекер замер: ни за носителем не ходит, ни по воде не
+            // плывёт, ни сохнет. Его место — последнее, где был сигнал.
+            if (tracker.isRuined()) {
+                continue;
+            }
             updateFromEntity(tracker, now);
             updateWater(tracker, now);
+            updateRain(tracker, now);
             if (stationaryMillis > 0 && tracker.isStationary(now, stationaryMillis)) {
                 if (stationaryNotified.add(tracker.getId())
                         && plugin.getConfigManager().isItrakStationaryNotify()) {
@@ -499,6 +512,113 @@ public class TrackerService {
         dirty.add(tracker.getId());
     }
 
+    // ------------------------------------------------------------------
+    // Дождь: намокание обычного трекера
+    // ------------------------------------------------------------------
+
+    /**
+     * Обычный трекер под открытым небом в дождь мокнет и через
+     * {@code itrak.rain-ruin-seconds} теряет сигнал навсегда (до снятия).
+     * Водонепроницаемый не мокнет вообще, под крышей и в воде счётчик
+     * сбрасывается — как только дождь кончился, трекер снова сухой.
+     */
+    private void updateRain(Tracker tracker, long now) {
+        long limit = plugin.getConfigManager().getItrakRainRuinMillis();
+        if (limit <= 0 || tracker.isWaterproof() || !tracker.hasSignal()) {
+            wetSince.remove(tracker.getId());
+            return;
+        }
+        if (!isExposedToRain(tracker)) {
+            wetSince.remove(tracker.getId());
+            return;
+        }
+        long since = wetSince.computeIfAbsent(tracker.getId(), id -> now);
+        if (now - since < limit) {
+            return;
+        }
+        ruinTracker(tracker, now);
+    }
+
+    /** Мокнет ли трекер: гроза в мире и над ним открытое небо. */
+    private boolean isExposedToRain(Tracker tracker) {
+        Location at = physicalLocation(tracker);
+        if (at == null || at.getWorld() == null) {
+            return false;
+        }
+        World world = at.getWorld();
+        if (!world.hasStorm()) {
+            return false;
+        }
+        int x = floor(at.getX());
+        int z = floor(at.getZ());
+        if (!world.isChunkLoaded(x >> 4, z >> 4)) {
+            return false;
+        }
+        // Крыша и листва над трекером закрывают дождь так же, как игрока:
+        // выше трекера есть непустой блок — значит, он под укрытием.
+        return at.getY() >= world.getHighestBlockYAt(x, z);
+    }
+
+    /**
+     * Где трекер физически: у привязанного к существу — у существа прямо
+     * сейчас, даже если сигнал потерян. Нужно для «снять»: промокший трекер
+     * на игроке снимается там, где носитель стоит, а не там, где замолчал.
+     */
+    public Location physicalLocation(Tracker tracker) {
+        if (tracker == null) {
+            return null;
+        }
+        UUID entityId = tracker.getEntityUuid();
+        if (entityId != null) {
+            Entity entity = Bukkit.getEntity(entityId);
+            if (entity != null && entity.isValid() && !entity.isDead()) {
+                return entity.getLocation();
+            }
+        }
+        return tracker.getLocation();
+    }
+
+    /** Промок окончательно: сигнал пропадает, точка замирает, владельцу — сообщение. */
+    private void ruinTracker(Tracker tracker, long now) {
+        if (tracker.isRuined()) {
+            return;
+        }
+        // Последняя точка — живая точка носителя: иначе «последним местом»
+        // окажется место, где трекер сохранялся в БД.
+        Location last = physicalLocation(tracker);
+        if (last != null) {
+            tracker.moveTo(last.getX(), last.getY(), last.getZ(), now);
+        }
+        tracker.ruin(now);
+        wetSince.remove(tracker.getId());
+        stationaryNotified.remove(tracker.getId());
+        dirty.add(tracker.getId());
+        data.updateTracker(snapshotOf(tracker)).exceptionally(error -> {
+            plugin.getLogger().log(Level.WARNING, "HahGps: не удалось сохранить намокший трекер "
+                    + tracker.getCode(), error);
+            dirty.add(tracker.getId());
+            return false;
+        });
+        MessagesManager messages = plugin.getMessages();
+        for (UUID id : recipientsOf(tracker)) {
+            Player player = Bukkit.getPlayer(id);
+            if (player == null || !player.isOnline()) {
+                continue;
+            }
+            player.sendMessage(trackerLine("itrak-ruined", tracker,
+                    "world", tracker.getWorld() == null ? "?" : tracker.getWorld(),
+                    "x", formatCoord(tracker.getX()),
+                    "y", formatCoord(tracker.getY()),
+                    "z", formatCoord(tracker.getZ())));
+            // Слежение за промокшим трекером бессмысленно: живых координат
+            // больше не будет, дальше только последняя отметка.
+            Set<Integer> watched = watchedByPlayer.get(id);
+            if (watched != null) {
+                watched.remove(tracker.getId());
+            }
+        }
+    }
+
     /**
      * Маркер трекера в мире. По умолчанию его видит только тот, кто трекер
      * поставил: чужой игрок не должен замечать слежку, но локатор её находит
@@ -558,8 +678,7 @@ public class TrackerService {
         dirty.add(tracker.getId());
         Player owner = tracker.getOwnerUuid() == null ? null : Bukkit.getPlayer(tracker.getOwnerUuid());
         if (owner != null && owner.isOnline()) {
-            owner.sendMessage(plugin.getMessages().getPrefixed("itrak-detached",
-                    "name", tracker.getDisplayName(),
+            owner.sendMessage(trackerLine("itrak-detached", tracker,
                     "world", tracker.getWorld() == null ? "?" : tracker.getWorld(),
                     "x", formatCoord(tracker.getX()),
                     "y", formatCoord(tracker.getY()),
@@ -586,6 +705,18 @@ public class TrackerService {
             for (Integer id : new ArrayList<>(entry.getValue())) {
                 Tracker tracker = trackers.get(id);
                 if (tracker == null) {
+                    entry.getValue().remove(id);
+                    continue;
+                }
+                if (tracker.isRuined()) {
+                    // Живых координат больше не будет: сообщаем последнее
+                    // место и прекращаем слежение, чтобы не спамить.
+                    player.sendMessage(plugin.getMessages().getPrefixed("itrak-watch-ruined",
+                            "name", tracker.getDisplayName(),
+                            "world", tracker.getWorld() == null ? "?" : tracker.getWorld(),
+                            "x", formatCoord(tracker.getX()),
+                            "y", formatCoord(tracker.getY()),
+                            "z", formatCoord(tracker.getZ())));
                     entry.getValue().remove(id);
                     continue;
                 }
@@ -656,6 +787,9 @@ public class TrackerService {
                 tracker.getOwnerName(), tracker.getWorld(), tracker.getX(), tracker.getY(),
                 tracker.getZ(), tracker.getEntityUuid(), tracker.isSunk(), tracker.getPlacedAt(),
                 tracker.getMovedAt(), tracker.getUpdatedAt(), tracker.getSupportBlock());
+        // Промокание — тоже состояние: без него после рестарта трекер
+        // «оживал» бы с сигналом.
+        copy.setRuined(tracker.isRuined(), tracker.getRuinedAt());
         return copy;
     }
 
@@ -666,9 +800,8 @@ public class TrackerService {
             if (player == null || !player.isOnline()) {
                 continue;
             }
-            player.sendMessage(withCarrierHover(messages.getPrefixed("itrak-stationary",
-                    "name", tracker.getDisplayName(),
-                    "time", formatDuration(tracker.stationaryMillis(now))), tracker));
+            player.sendMessage(trackerLine("itrak-stationary", tracker,
+                    "time", formatDuration(tracker.stationaryMillis(now))));
             player.sendMessage(messages.getComponent("itrak-route-button",
                     "code", tracker.getCode()));
         }
@@ -792,7 +925,7 @@ public class TrackerService {
         if (player.hasPermission("gps.itrak.admin")) {
             return true;
         }
-        Location location = tracker.getLocation();
+        Location location = physicalLocation(tracker);
         if (location == null) {
             return false;
         }
@@ -1098,6 +1231,11 @@ public class TrackerService {
             if (tracker.getWorld() == null || !tracker.getWorld().equals(worldName)) {
                 continue;
             }
+            // Промокший трекер сигнала не даёт — локатор его не находит.
+            // Снять его можно вручную, зная последнее место из меню.
+            if (tracker.isRuined()) {
+                continue;
+            }
             // У привязанного к существу трекера живая точка точнее последней
             // сохранённой: локатор не должен показывать, что он «на игроке»,
             // когда тот уже ушёл.
@@ -1238,6 +1376,13 @@ public class TrackerService {
         if (tracker == null || viewer == null) {
             return new Signal(null, null, 0L, null);
         }
+        if (tracker.isRuined()) {
+            // Сигнала нет: показываем только последнее место и время, когда
+            // трекер замолчал. Район тут не нужен — координаты и так открыты.
+            Location last = tracker.getLocation();
+            return new Signal(null, last, tracker.getRuinedAt(),
+                    last == null ? null : regionText(last));
+        }
         Location live = liveLocation(tracker);
         if (live == null) {
             live = tracker.getLocation();
@@ -1263,6 +1408,11 @@ public class TrackerService {
     public Location targetLocation(Player viewer, Tracker tracker) {
         if (tracker == null) {
             return null;
+        }
+        if (tracker.isRuined()) {
+            // Маршрут к последнему известному месту: трекер никуда не делся,
+            // его можно подобрать, но сигнал оттуда уже не идёт.
+            return tracker.getLocation();
         }
         Location live = liveLocation(tracker);
         if (live == null) {
@@ -1338,6 +1488,9 @@ public class TrackerService {
             return;
         }
         for (Tracker tracker : trackers.values()) {
+            if (tracker.isRuined()) {
+                continue;
+            }
             Location live = tracker.liveLocation();
             if (live == null) {
                 continue;
@@ -1567,6 +1720,9 @@ public class TrackerService {
 
     public String statusText(Tracker tracker) {
         MessagesManager messages = plugin.getMessages();
+        if (tracker.isRuined()) {
+            return messages.get("itrak-status-ruined");
+        }
         // Утонувший водонепроницаемый трекер сигнал не теряет: для него
         // «затонул» звучало бы как поломка, поэтому статус — «под водой».
         if (tracker.isSunk() && tracker.isWaterproof()) {
@@ -1580,6 +1736,7 @@ public class TrackerService {
         return switch (tracker.status()) {
             case LIVE -> messages.get("itrak-status-live");
             case SUNK -> messages.get("itrak-status-sunk");
+            case RUINED -> messages.get("itrak-status-ruined");
             case NO_SIGNAL -> messages.get("itrak-status-no-signal");
         };
     }
@@ -1587,6 +1744,9 @@ public class TrackerService {
     /** «в движении» / «неподвижен» — состояние для GUI и сообщений. */
     public String stateText(Tracker tracker, long now) {
         MessagesManager messages = plugin.getMessages();
+        if (tracker.isRuined()) {
+            return messages.get("itrak-state-ruined");
+        }
         if (!tracker.hasSignal()) {
             return messages.get("itrak-state-offline");
         }
@@ -1646,6 +1806,89 @@ public class TrackerService {
         dirty.add(tracker.getId());
     }
 
+    // ------------------------------------------------------------------
+    // Короткие строки про трекер: подробности — в подсказке
+    // ------------------------------------------------------------------
+
+    /**
+     * Короткая строка про трекер: одна строка в чате вместо «Трекер <имя>
+     * установлен …». Всё остальное — по наведению: имя, код, номер, цвет,
+     * тип, статус; клик открывает карточку трекера в меню.
+     */
+    public Component trackerLine(String key, Tracker tracker, String... args) {
+        MessagesManager messages = plugin.getMessages();
+        String[] full = new String[6 + args.length];
+        full[0] = "name";
+        full[1] = tracker == null ? "iTrak" : tracker.getDisplayName();
+        full[2] = "code";
+        full[3] = tracker == null ? "?" : tracker.getCode();
+        full[4] = "id";
+        full[5] = tracker == null ? "0" : String.valueOf(tracker.getId());
+        System.arraycopy(args, 0, full, 6, args.length);
+        Component line = messages.getPrefixed(key, full);
+        if (tracker == null) {
+            return line;
+        }
+        line = line.hoverEvent(HoverEvent.showText(hoverCard(tracker)));
+        if (tracker.getCode() != null && !tracker.getCode().isBlank()) {
+            line = line.clickEvent(net.kyori.adventure.text.event.ClickEvent.runCommand(
+                    "/gps itrak open " + tracker.getCode()));
+        }
+        return line;
+    }
+
+    /**
+     * Строка про трекер, которого ещё нет в мире (только что бросили):
+     * подсказка с кодом, цветом и типом, без клика — открывать пока нечего.
+     */
+    public Component specLine(String key, ItemFactory.TrackerSpec spec, String... args) {
+        MessagesManager messages = plugin.getMessages();
+        if (spec == null) {
+            return messages.getPrefixed(key, args);
+        }
+        String[] full = new String[4 + args.length];
+        full[0] = "name";
+        full[1] = spec.name() == null || spec.name().isBlank() ? spec.code() : spec.name();
+        full[2] = "code";
+        full[3] = spec.code();
+        System.arraycopy(args, 0, full, 4, args.length);
+        Component line = messages.getPrefixed(key, full);
+        Component hover = messages.getComponent("itrak-hover-name", "name", full[1])
+                .append(Component.newline())
+                .append(messages.getComponent("itrak-hover-spec",
+                        "code", spec.code(),
+                        "color", messages.get(spec.color() == null
+                                ? TrackerColor.BLUE.messageKey() : spec.color().messageKey()),
+                        "type", messages.get(spec.waterproof()
+                                ? "itrak-type-waterproof" : "itrak-type-regular")));
+        return line.hoverEvent(HoverEvent.showText(hover));
+    }
+
+    /** Подсказка-карточка трекера для наведения на строку в чате. */
+    public Component hoverCard(Tracker tracker) {
+        MessagesManager messages = plugin.getMessages();
+        String color = messages.get(tracker.getColor() == null
+                ? TrackerColor.BLUE.messageKey() : tracker.getColor().messageKey());
+        String type = messages.get(tracker.isWaterproof()
+                ? "itrak-type-waterproof" : "itrak-type-regular");
+        Component card = messages.getComponent("itrak-hover-name", "name", tracker.getDisplayName())
+                .append(Component.newline())
+                .append(messages.getComponent("itrak-hover-code",
+                        "code", tracker.getCode(), "id", String.valueOf(tracker.getId())))
+                .append(Component.newline())
+                .append(messages.getComponent("itrak-hover-type", "color", color, "type", type))
+                .append(Component.newline())
+                .append(messages.getComponent("itrak-hover-status", "status", statusText(tracker)));
+        String carrier = carrierName(tracker);
+        if (carrier != null) {
+            card = card.append(Component.newline())
+                    .append(messages.getComponent("itrak-hover-carrier", "name", carrier));
+        }
+        card = card.append(Component.newline())
+                .append(messages.getComponent("itrak-hover-click"));
+        return card;
+    }
+
     /**
      * Подсказка при наведении на строку трекера, прицепленного к игроку:
      * ник носителя и его живой статус. У трекера на мобе или транспорте
@@ -1686,6 +1929,9 @@ public class TrackerService {
         if (tracker == null) {
             return "?";
         }
+        if (tracker.isRuined()) {
+            return messages.get("itrak-status-ruined");
+        }
         if (tracker.isSunk() && tracker.isWaterproof()) {
             return messages.get("itrak-status-submerged");
         }
@@ -1698,12 +1944,16 @@ public class TrackerService {
         return switch (tracker.status()) {
             case LIVE -> messages.get("itrak-status-live");
             case SUNK -> messages.get("itrak-status-sunk");
+            case RUINED -> messages.get("itrak-status-ruined");
             case NO_SIGNAL -> messages.get("itrak-status-no-signal");
         };
     }
 
     /** Состояние глазами игрока: вне зоны связи точных данных нет. */
     public String stateText(Player viewer, Tracker tracker, long now) {
+        if (tracker != null && tracker.isRuined()) {
+            return stateText(tracker, now);
+        }
         if (viewer != null && tracker != null && !signal(viewer, tracker).inRange()) {
             return plugin.getMessages().get("itrak-state-unknown");
         }
