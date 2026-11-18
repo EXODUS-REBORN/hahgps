@@ -74,8 +74,10 @@ public final class ItemFactory {
             String colorName = message(color.messageKey(), color.getKey());
             String label = spec.name() == null ? "" : GuiTheme.clipPlain(spec.name(), GuiTheme.NAME_MAX);
             StringBuilder display = new StringBuilder();
-            display.append("<bold><color:").append(color.hex()).append(">iTrak</color></bold>");
-            display.append(" <color:").append(color.hex()).append(">").append(GuiTheme.escapeForMini(colorName))
+            // Пробелы — внутри цветных тегов: так они не теряются ни в игре,
+            // ни при разборе подсказки внешними инструментами.
+            display.append("<bold><color:").append(color.hex()).append(">iTrak </color></bold>");
+            display.append("<color:").append(color.hex()).append(">").append(GuiTheme.escapeForMini(colorName))
                     .append("</color>");
             if (!label.isBlank()) {
                 display.append(" <dark_gray>·</dark_gray> <white>")
@@ -91,15 +93,15 @@ public final class ItemFactory {
             // разваливалась на два переноса и читалась хуже.
             List<Component> lore = new ArrayList<>();
             lore.add(GuiTheme.mm("<dark_gray>" + GuiTheme.escapeForMini(message("itrak-item-code", "Код"))
-                    + "</dark_gray> <white>" + GuiTheme.escapeForMini(spec.code()) + "</white>"
-                    + " <dark_gray>·</dark_gray> <#8fc6ff>" + GuiTheme.escapeForMini(type) + "</#8fc6ff>"));
-            lore.add(GuiTheme.mm("<#66aaff>▸</#66aaff> <gray>"
+                    + ": </dark_gray><white>" + GuiTheme.escapeForMini(spec.code()) + "</white>"
+                    + "<dark_gray> · </dark_gray><#8fc6ff>" + GuiTheme.escapeForMini(type) + "</#8fc6ff>"));
+            lore.add(GuiTheme.mm("<#66aaff>▸ </#66aaff><gray>"
                     + GuiTheme.escapeForMini(message("itrak-item-hint-attach",
                     "ПКМ по блоку — прицепить")) + "</gray>"));
-            lore.add(GuiTheme.mm("<#66aaff>▸</#66aaff> <gray>"
+            lore.add(GuiTheme.mm("<#66aaff>▸ </#66aaff><gray>"
                     + GuiTheme.escapeForMini(message("itrak-item-hint-throw",
                     "ПКМ в воздух — бросить")) + "</gray>"));
-            lore.add(GuiTheme.mm("<#66aaff>▸</#66aaff> <gray>"
+            lore.add(GuiTheme.mm("<#66aaff>▸ </#66aaff><gray>"
                     + GuiTheme.escapeForMini(message("itrak-item-hint-remove",
                     "ПКМ пустой рукой — снять")) + "</gray>"));
             meta.lore(lore);

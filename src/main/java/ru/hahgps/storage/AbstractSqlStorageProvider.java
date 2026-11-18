@@ -123,7 +123,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     }
 
     /** Текущая версия схемы: растёт при миграциях. */
-    public static final int SCHEMA_VERSION = 6;
+    public static final int SCHEMA_VERSION = 7;
 
     private void createTables() throws SQLException {
         try (Statement st = connection.createStatement()) {
@@ -195,6 +195,8 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                     "z DOUBLE NOT NULL DEFAULT 0, " +
                     "entity_uuid VARCHAR(36), " +
                     "sunk TINYINT NOT NULL DEFAULT 0, " +
+                    "ruined TINYINT NOT NULL DEFAULT 0, " +
+                    "ruined_at BIGINT NOT NULL DEFAULT 0, " +
                     "placed_at BIGINT NOT NULL DEFAULT 0, " +
                     "moved_at BIGINT NOT NULL DEFAULT 0, " +
                     "updated_at BIGINT NOT NULL DEFAULT 0)");
@@ -287,6 +289,8 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 new ColumnAdd("z", "DOUBLE NOT NULL DEFAULT 0"),
                 new ColumnAdd("entity_uuid", "VARCHAR(36)"),
                 new ColumnAdd("sunk", "TINYINT NOT NULL DEFAULT 0"),
+                new ColumnAdd("ruined", "TINYINT NOT NULL DEFAULT 0"),
+                new ColumnAdd("ruined_at", "BIGINT NOT NULL DEFAULT 0"),
                 new ColumnAdd("placed_at", "BIGINT NOT NULL DEFAULT 0"),
                 new ColumnAdd("moved_at", "BIGINT NOT NULL DEFAULT 0"),
                 new ColumnAdd("updated_at", "BIGINT NOT NULL DEFAULT 0"),
@@ -1015,9 +1019,9 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     @Override
     public synchronized Tracker createTracker(Tracker tracker) {
         String sql = "INSERT INTO trackers (code, name, owner_uuid, owner_name, color, waterproof, " +
-                "world, x, y, z, entity_uuid, sunk, placed_at, moved_at, updated_at, " +
-                "block_x, block_y, block_z) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "world, x, y, z, entity_uuid, sunk, ruined, ruined_at, placed_at, moved_at, " +
+                "updated_at, block_x, block_y, block_z) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try {
             ensureConnected();
             try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -1033,22 +1037,26 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 ps.setDouble(10, tracker.getZ());
                 ps.setString(11, tracker.getEntityUuid() == null ? null : tracker.getEntityUuid().toString());
                 ps.setInt(12, tracker.isSunk() ? 1 : 0);
-                ps.setLong(13, tracker.getPlacedAt());
-                ps.setLong(14, tracker.getMovedAt());
-                ps.setLong(15, tracker.getUpdatedAt());
+                ps.setInt(13, tracker.isRuined() ? 1 : 0);
+                ps.setLong(14, tracker.getRuinedAt());
+                ps.setLong(15, tracker.getPlacedAt());
+                ps.setLong(16, tracker.getMovedAt());
+                ps.setLong(17, tracker.getUpdatedAt());
                 Tracker.SupportBlock support = tracker.getSupportBlock();
-                ps.setObject(16, support == null ? null : support.x());
-                ps.setObject(17, support == null ? null : support.y());
-                ps.setObject(18, support == null ? null : support.z());
+                ps.setObject(18, support == null ? null : support.x());
+                ps.setObject(19, support == null ? null : support.y());
+                ps.setObject(20, support == null ? null : support.z());
                 ps.executeUpdate();
                 try (ResultSet rs = ps.getGeneratedKeys()) {
                     if (rs.next()) {
-                        return new Tracker(rs.getInt(1), tracker.getCode(), tracker.getName(),
+                        Tracker created = new Tracker(rs.getInt(1), tracker.getCode(), tracker.getName(),
                                 tracker.getColor(), tracker.isWaterproof(), tracker.getOwnerUuid(),
                                 tracker.getOwnerName(), tracker.getWorld(), tracker.getX(), tracker.getY(),
                                 tracker.getZ(), tracker.getEntityUuid(), tracker.isSunk(),
                                 tracker.getPlacedAt(), tracker.getMovedAt(), tracker.getUpdatedAt(),
                                 tracker.getSupportBlock());
+                        created.setRuined(tracker.isRuined(), tracker.getRuinedAt());
+                        return created;
                     }
                 }
             }
@@ -1062,7 +1070,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     @Override
     public synchronized boolean updateTracker(Tracker tracker) {
         String sql = "UPDATE trackers SET name = ?, world = ?, x = ?, y = ?, z = ?, entity_uuid = ?, " +
-                "sunk = ?, moved_at = ?, updated_at = ?, " +
+                "sunk = ?, ruined = ?, ruined_at = ?, moved_at = ?, updated_at = ?, " +
                 "block_x = ?, block_y = ?, block_z = ? WHERE id = ?";
         try {
             ensureConnected();
@@ -1074,13 +1082,15 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 ps.setDouble(5, tracker.getZ());
                 ps.setString(6, tracker.getEntityUuid() == null ? null : tracker.getEntityUuid().toString());
                 ps.setInt(7, tracker.isSunk() ? 1 : 0);
-                ps.setLong(8, tracker.getMovedAt());
-                ps.setLong(9, tracker.getUpdatedAt());
+                ps.setInt(8, tracker.isRuined() ? 1 : 0);
+                ps.setLong(9, tracker.getRuinedAt());
+                ps.setLong(10, tracker.getMovedAt());
+                ps.setLong(11, tracker.getUpdatedAt());
                 Tracker.SupportBlock support = tracker.getSupportBlock();
-                ps.setObject(10, support == null ? null : support.x());
-                ps.setObject(11, support == null ? null : support.y());
-                ps.setObject(12, support == null ? null : support.z());
-                ps.setInt(13, tracker.getId());
+                ps.setObject(12, support == null ? null : support.x());
+                ps.setObject(13, support == null ? null : support.y());
+                ps.setObject(14, support == null ? null : support.z());
+                ps.setInt(15, tracker.getId());
                 return ps.executeUpdate() > 0;
             }
         } catch (SQLException e) {
@@ -1113,7 +1123,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         UUID owner = parseUuid(rs.getString("owner_uuid"));
         UUID entity = parseUuid(rs.getString("entity_uuid"));
         Tracker.SupportBlock support = mapSupportBlock(rs);
-        return new Tracker(
+        Tracker tracker = new Tracker(
                 rs.getInt("id"),
                 rs.getString("code"),
                 rs.getString("name"),
@@ -1129,6 +1139,8 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 rs.getLong("moved_at"),
                 rs.getLong("updated_at"),
                 support);
+        tracker.setRuined(rs.getInt("ruined") == 1, rs.getLong("ruined_at"));
+        return tracker;
     }
 
     /** UUID из БД: битые строки не должны ронять загрузку всех трекеров. */

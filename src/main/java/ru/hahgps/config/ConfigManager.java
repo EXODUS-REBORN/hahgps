@@ -471,6 +471,15 @@ public class ConfigManager {
         return config.getBoolean("itrak.crafting", true);
     }
 
+    /**
+     * Через сколько секунд непрерывного дождя обычный (не водонепроницаемый)
+     * трекер намокает и перестаёт передавать сигнал. 0 — дождь не вредит.
+     */
+    public long getItrakRainRuinMillis() {
+        int seconds = Math.max(0, Math.min(86_400, config.getInt("itrak.rain-ruin-seconds", 60)));
+        return seconds * 1000L;
+    }
+
     /** Скорость броска трекера. */
     public double getItrakThrowSpeed() {
         double value = config.getDouble("itrak.throw-speed", 1.8);

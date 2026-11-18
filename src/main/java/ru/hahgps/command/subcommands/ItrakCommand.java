@@ -40,7 +40,7 @@ public class ItrakCommand implements SubCommand {
 
     @Override
     public String usage() {
-        return "/gps itrak [give|give-locator|give-terminal|scan|find|list|info|route|name|take|remove|watch|unwatch]";
+        return "/gps itrak [give|give-locator|give-terminal|scan|find|list|info|route|name|open|take|remove|watch|unwatch]";
     }
 
     @Override
@@ -52,8 +52,8 @@ public class ItrakCommand implements SubCommand {
     public List<SubCommand> children() {
         return List.of(new GiveCommand(), new GiveLocatorCommand(),
                 new GiveTerminalCommand(), new ScanCommand(), new FindCommand(), new ListCommand(),
-                new InfoCommand(), new RouteCommand(), new NameCommand(), new TakeCommand(),
-                new RemoveCommand(), new WatchCommand(), new UnwatchCommand());
+                new InfoCommand(), new RouteCommand(), new NameCommand(), new OpenCommand(),
+                new TakeCommand(), new RemoveCommand(), new WatchCommand(), new UnwatchCommand());
     }
 
     @Override
@@ -468,6 +468,46 @@ public class ItrakCommand implements SubCommand {
     // ------------------------------------------------------------------
     // Подкоманды
     // ------------------------------------------------------------------
+
+    /**
+     * Открыть карточку трекера в меню. По этой команде работают клики по
+     * строкам трекеров в чате: сервер присылает <click:run_command>.
+     */
+    private static class OpenCommand implements SubCommand {
+        @Override
+        public String name() {
+            return "open";
+        }
+
+        @Override
+        public String usage() {
+            return "/gps itrak open <код|id|имя>";
+        }
+
+        @Override
+        public String permission() {
+            return "gps.itrak";
+        }
+
+        @Override
+        public void execute(Player player, String[] args) {
+            HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+            if (args.length == 0) {
+                player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
+                return;
+            }
+            Tracker tracker = requireTracker(plugin, player, join(args, 0, args.length));
+            if (tracker == null) {
+                return;
+            }
+            new ru.hahgps.gui.TrackerDetailGui(player, tracker.getId()).open();
+        }
+
+        @Override
+        public List<String> tabComplete(Player player, String[] args) {
+            return args.length == 1 ? trackerSuggestions(player, args[0]) : List.of();
+        }
+    }
 
     private static class ScanCommand implements SubCommand {
         @Override
@@ -935,8 +975,7 @@ public class ItrakCommand implements SubCommand {
                 return;
             }
             plugin.getTrackerService().watch(player, tracker);
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-watch-on",
-                    "name", tracker.getDisplayName()));
+            player.sendMessage(plugin.getTrackerService().trackerLine("itrak-watch-on", tracker));
         }
 
         @Override
@@ -973,8 +1012,7 @@ public class ItrakCommand implements SubCommand {
                 return;
             }
             plugin.getTrackerService().unwatch(player, tracker);
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-watch-off",
-                    "name", tracker.getDisplayName()));
+            player.sendMessage(plugin.getTrackerService().trackerLine("itrak-watch-off", tracker));
         }
 
         @Override

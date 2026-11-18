@@ -24,7 +24,9 @@ public class Tracker {
     public enum Status {
         LIVE,
         NO_SIGNAL,
-        SUNK
+        SUNK,
+        /** Промок под дождём: сигнала больше нет, но трекер на месте. */
+        RUINED
     }
 
     /** Блок, к которому прицеплен трекер (null — прицеплен к существу или потерял опору). */
@@ -45,6 +47,13 @@ public class Tracker {
     private UUID entityUuid;
     private SupportBlock supportBlock;
     private boolean sunk;
+    /**
+     * Трекер промок под дождём и больше не передаёт сигнал. Координаты
+     * замирают на последнем месте: трекер можно найти по последней отметке
+     * и снять, но следить за ним и искать локатором уже нельзя.
+     */
+    private boolean ruined;
+    private long ruinedAt;
     private final long placedAt;
     private long movedAt;
     private long updatedAt;
@@ -249,7 +258,29 @@ public class Tracker {
     }
 
     public boolean hasSignal() {
-        return signal && (!sunk || waterproof);
+        return !ruined && signal && (!sunk || waterproof);
+    }
+
+    public boolean isRuined() {
+        return ruined;
+    }
+
+    /** Когда трекер промок: от этого времени считается «последний раз в сети». */
+    public long getRuinedAt() {
+        return ruinedAt;
+    }
+
+    public void setRuined(boolean ruined, long ruinedAt) {
+        this.ruined = ruined;
+        this.ruinedAt = ruinedAt;
+        if (ruined) {
+            this.signal = false;
+        }
+    }
+
+    /** Промокнуть: сигнал исчезает, координаты остаются на месте. */
+    public void ruin(long now) {
+        setRuined(true, now);
     }
 
     public void setSignal(boolean signal) {
@@ -257,6 +288,9 @@ public class Tracker {
     }
 
     public Status status() {
+        if (ruined) {
+            return Status.RUINED;
+        }
         if (sunk && !waterproof) {
             return Status.SUNK;
         }
@@ -324,6 +358,11 @@ public class Tracker {
      * локатор и карта должны показывать, где трекер видели в последний раз.
      */
     public Location liveLocation() {
+        // Промокший трекер никуда не «едет» вслед за носителем: показываем
+        // последнее место, где он передавал сигнал.
+        if (ruined) {
+            return getLocation();
+        }
         UUID entityId = entityUuid;
         if (entityId != null) {
             Entity entity = Bukkit.getEntity(entityId);
