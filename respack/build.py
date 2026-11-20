@@ -219,6 +219,68 @@ def model_tracker(color_key: str, wet: bool) -> dict:
     }
 
 
+
+
+def tex_device(key: str, base, accent):
+    from PIL import Image, ImageDraw
+    img = Image.new("RGBA", (16, 16))
+    d = ImageDraw.Draw(img)
+    for y in range(16):
+        for x in range(16):
+            k = 1.05 - y / 40.0 - x / 70.0
+            c = tuple(int(v * k) for v in base)
+            if y % 4 == 3:
+                c = tuple(int(v * 0.72) for v in c)
+            d.point((x, y), fill=c + (255,))
+    d.rectangle([2, 2, 13, 5], fill=accent + (255,))
+    d.rectangle([3, 8, 6, 12], fill=tuple(int(v * 0.55) for v in accent) + (255,))
+    d.rectangle([9, 8, 12, 12], fill=tuple(int(v * 0.55) for v in accent) + (255,))
+    return img
+
+
+DEVICES = {
+    "terminal": ((236, 236, 232), (120, 178, 214)),
+    "locator": ((212, 216, 222), (120, 178, 214)),
+    "locator-long": ((212, 216, 222), (150, 120, 220)),
+}
+
+
+def model_device(key: str) -> dict:
+    def bx(b, tex):
+        el = {"from": [round(v, 3) for v in b[:3]], "to": [round(v, 3) for v in b[3:]], "faces": {}}
+        for f in ("north", "south", "west", "east", "up", "down"):
+            el["faces"][f] = {"texture": tex, "uv": _auto_uv(f, b)}
+        return el
+
+    if key == "terminal":
+        els = [bx((2.0, 0.6, 2.0, 14.0, 11.0, 14.0), "#body"),
+               bx((2.0, 11.0, 2.0, 14.0, 12.2, 14.0), "#accent"),
+               bx((3.4, 3.0, 14.0, 12.6, 9.6, 14.4), "#accent"),
+               bx((7.0, 12.2, 7.0, 9.0, 15.8, 9.0), "#accent"),
+               bx((6.0, 15.8, 6.0, 10.0, 16.0, 10.0), "#body")]
+    else:
+        long_ = key == "locator-long"
+        els = [bx((3.0, 3.0, 4.0, 13.0, 13.0, 12.0), "#body"),
+               bx((3.0, 13.0, 4.0, 13.0, 14.0, 12.0), "#accent"),
+               bx((6.0, 3.0, 12.0, 10.0, 10.0, 12.4), "#accent"),
+               bx((7.0, 14.0, 7.0, 9.0, 16.0, 9.0), "#body")]
+        if long_:
+            els.append(bx((1.6, 6.0, 6.0, 3.0, 11.0, 10.0), "#accent"))
+            els.append(bx((13.0, 6.0, 6.0, 14.4, 11.0, 10.0), "#accent"))
+    return {
+        "parent": "minecraft:block/block",
+        "textures": {"particle": f"hahgps:item/{key}", "body": f"hahgps:item/{key}",
+                     "accent": f"hahgps:item/{key}_accent"},
+        "elements": els,
+        "display": {
+            "gui": {"rotation": [30, 225, 0], "translation": [0, 0, 0], "scale": [0.625, 0.625, 0.625]},
+            "ground": {"rotation": [0, 0, 0], "translation": [0, 3, 0], "scale": [0.25, 0.25, 0.25]},
+            "fixed": {"rotation": [0, 0, 0], "translation": [0, 0, 0], "scale": [0.5, 0.5, 0.5]},
+            "thirdperson_righthand": {"rotation": [0, 45, 0], "translation": [0, 3, 0], "scale": [0.4, 0.4, 0.4]},
+            "firstperson_righthand": {"rotation": [0, 45, 0], "translation": [0, 2, 0], "scale": [0.45, 0.45, 0.45]},
+        },
+    }
+
 def _auto_uv(face, b):
     x0, y0, z0, x1, y1, z1 = b
     if face == "north":
@@ -259,10 +321,16 @@ def build_pack() -> None:
         icons2d.render(icons2d.DRAW[key]).save(tex / f"{key}.png")
     icons2d.render(icons2d.DRAW["itrak-card"]).save(tex / "itrak-card.png")
 
+    for key, (base, accent) in DEVICES.items():
+        tex_device(key, base, accent).save(tex / f"{key}.png")
+        Image.new("RGBA", (16, 16), accent + (255,)).save(tex / f"{key}_accent.png")
+        write_json(models / f"{key}.json", model_device(key))
+
     # модели плоских иконок: parent item/generated + layer0
     flat = {key for _cmd, key, _mats in ICONS}
     flat |= set(ICON_BY_MATERIAL.values())
     flat.add("itrak-card")
+    flat -= set(DEVICES)
     for key in sorted(flat):
         write_json(models / f"{key}.json", {
             "parent": "minecraft:item/generated",
