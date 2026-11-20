@@ -1,6 +1,6 @@
 # HahGPS — ресурспак
 
-Готовый пак для Minecraft **1.21.11 и выше**: `dist/hahgps-pack-1.21.11.zip`.
+Готовый пак для Minecraft **1.21.11 и выше**: `dist/hahgps.zip`.
 Все номера `custom_model_data` уже выдаёт плагин (`ru.hahgps.item.ItemIds`),
 поэтому пак подключается без правок кода: положить zip в `.minecraft/resourcepacks/`
 и включить.

@@ -115,25 +115,24 @@ CARD_CMD = 2031
 # ---------------------------------------------------------------------------
 
 def tex_body(color, wet: bool) -> Image.Image:
-    """16x16: пластиковый корпус трекера. Мокрый — капли и светлая окантовка."""
+    """16x16: пластик корпуса-датчика; мокрый — капли и светлая кромка."""
     r, g, b = color
     img = Image.new("RGBA", (16, 16))
     d = ImageDraw.Draw(img)
     for y in range(16):
         for x in range(16):
-            k = 1.06 - y / 44.0 - x / 60.0
+            k = 1.04 - y / 52.0
             c = (int(r * k), int(g * k), int(b * k))
-            if (x + y) % 17 == 0:
-                c = tuple(max(0, v - 10) for v in c)
-            if y in (0, 15) or x in (0, 15):
-                c = tuple(int(v * 0.5) for v in c)
+            if (x * 3 + y) % 23 == 0:
+                c = tuple(max(0, v - 9) for v in c)
+            if y in (0, 15):
+                c = tuple(int(v * 0.55) for v in c)
             d.point((x, y), fill=c + (255,))
-    for (x, y) in ((2, 2), (13, 2), (2, 13), (13, 13)):
-        d.point((x, y), fill=(90, 96, 108, 255))
+    for (x, y) in ((2, 3), (13, 3), (3, 12), (12, 12)):
+        d.point((x, y), fill=(88, 94, 106, 255))
     if wet:
-        for (x, y) in ((3, 4), (11, 6), (6, 11), (12, 12), (4, 13)):
+        for (x, y) in ((4, 5), (11, 7), (6, 12), (12, 13)):
             d.point((x, y), fill=(160, 228, 250, 255))
-            d.point((x, y + 1), fill=(96, 170, 210, 255))
         d.rectangle([0, 0, 15, 0], fill=(150, 210, 235, 255))
     return img
 
@@ -162,6 +161,19 @@ def tex_metal() -> Image.Image:
     return img
 
 
+def disc_strips(radius, x0, x1, y0, y1, strip=2.0, overlap=0.02):
+    out = []
+    x = x0
+    while x < x1 - 1e-9:
+        xb = min(x + strip, x1)
+        dx = (x + xb) / 2.0 - 8.0
+        half = math.sqrt(max(radius * radius - dx * dx, 0.0))
+        if half > 0.4:
+            out.append((x, min(xb + overlap, x1), 8.0 - half, 8.0 + half))
+        x = xb
+    return out
+
+
 def model_tracker(color_key: str, wet: bool) -> dict:
     suffix = "_wp" if wet else ""
     texts = {
@@ -171,22 +183,25 @@ def model_tracker(color_key: str, wet: bool) -> dict:
         "metal": "hahgps:item/tracker_metal",
     }
 
-    def box(b, tex, faces=None):
+    def box(b, tex):
         el = {"from": [round(v, 3) for v in b[:3]], "to": [round(v, 3) for v in b[3:]],
               "faces": {}}
-        for face in (faces or ("north", "south", "west", "east", "up", "down")):
+        for face in ("north", "south", "west", "east", "up", "down"):
             el["faces"][face] = {"texture": tex, "uv": _auto_uv(face, b)}
         return el
 
-    els = [
-        box((3.2, 2.6, 5.4, 12.8, 12.6, 10.6), "#body"),            # корпус
-        box((4.4, 4.0, 10.6, 11.6, 9.8, 10.9), "#panel"),           # экран спереди
-        box((4.4, 4.0, 5.1, 11.6, 9.8, 5.4), "#panel"),             # экран сзади
-        box((3.8, 12.6, 7.2, 5.2, 14.8, 8.8), "#metal"),            # антенна
-        box((3.4, 14.8, 6.8, 5.6, 16.0, 9.2), "#body"),             # набалдашник
-        box((9.8, 12.6, 7.0, 12.9, 13.8, 9.0), "#metal"),           # ушко
-        box((6.0, 2.9, 10.6, 9.2, 3.6, 10.8), "#metal"),            # кнопка
-    ]
+    els = []
+    for (x0, x1, z0, z1) in disc_strips(6.0, 2.0, 14.0, 4.0, 9.5, 2.0):
+        els.append(box((x0, 4.0, z0, x1, 9.5, z1), "#body"))
+    for (x0, x1, z0, z1) in disc_strips(6.4, 1.6, 14.4, 9.5, 11.0, 2.0):
+        els.append(box((x0, 9.5, z0, x1, 11.0, z1), "#body"))
+    for (x0, x1, z0, z1) in disc_strips(5.2, 2.8, 13.2, 11.0, 12.0, 2.0):
+        els.append(box((x0, 11.0, z0, x1, 12.0, z1), "#metal"))
+    for dx in (-3.0, -1.0, 1.0, 3.0):
+        els.append(box((8.0 + dx, 12.0, 5.6, 8.6 + dx, 12.4, 10.4), "#panel"))
+    els.append(box((7.0, 11.6, 6.4, 9.0, 12.6, 8.0), "#panel"))
+    els.append(box((9.6, 9.8, 2.2, 11.2, 11.0, 3.8), "#metal"))
+    els.append(box((7.0, 2.2, 6.6, 9.0, 4.0, 9.4), "#metal"))
     return {
         "parent": "minecraft:block/block",
         "textures": texts,
@@ -338,7 +353,7 @@ def validate() -> list[str]:
     return problems
 
 
-def zip_pack(name: str = "hahgps-pack-1.21.11.zip") -> Path:
+def zip_pack(name: str = "hahgps.zip") -> Path:
     DIST.mkdir(parents=True, exist_ok=True)
     out = DIST / name
     if out.exists():

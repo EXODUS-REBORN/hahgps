@@ -107,6 +107,7 @@ public final class ItemFactory {
             meta.lore(lore);
 
             meta.setCustomModelData(ItemIds.tracker(color, spec.waterproof()));
+            meta.setMaxStackSize(1);
             PersistentDataContainer data = meta.getPersistentDataContainer();
             data.set(TRACKER_CODE, PersistentDataType.STRING, spec.code());
             data.set(TRACKER_COLOR, PersistentDataType.STRING, color.getKey());
@@ -166,6 +167,7 @@ public final class ItemFactory {
             lore.add(GuiTheme.mm("<#66aaff>→</#66aaff> <gray>" + GuiTheme.escapeForMini(
                     message("itrak-locator-hint", "ПКМ — просканировать")) + "</gray>"));
             meta.lore(lore);
+            meta.setMaxStackSize(1);
             meta.setCustomModelData(value >= LONG_LOCATOR_RADIUS
                     ? ItemIds.ITRAK_LOCATOR_LONG : ItemIds.ITRAK_LOCATOR);
             PersistentDataContainer data = meta.getPersistentDataContainer();
@@ -359,6 +361,7 @@ public final class ItemFactory {
                     message("itrak-terminal-item-hint", "ПКМ по блоку — установить")) + "</gray>"));
             meta.lore(lore);
             meta.setCustomModelData(ItemIds.ITRAK_TERMINAL);
+            meta.setMaxStackSize(1);
             meta.getPersistentDataContainer().set(TERMINAL, PersistentDataType.BYTE, (byte) 1);
             item.setItemMeta(meta);
         }
