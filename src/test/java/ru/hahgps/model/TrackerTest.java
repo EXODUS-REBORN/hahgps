@@ -26,6 +26,31 @@ class TrackerTest {
                 null, sunk, 1_000L, movedAt, movedAt);
     }
 
+    /**
+     * Медленный носитель: за один тик меньше порога, но суммарно трекер едет —
+     * координаты обязаны сохраняться, а «неподвижен» не должно приходить.
+     */
+    @Test
+    void slowCarrierIsMarkedAsMovedAfterAccumulatedShift() {
+        Tracker tracker = tracker(0L, false);
+        long now = 10_000L;
+        boolean marked = false;
+        for (int step = 0; step < 12; step++) {
+            // 0.3 блока за тик: каждый шаг ниже MOVE_THRESHOLD (0.35).
+            marked |= tracker.moveTo(10 + 0.3 * (step + 1), 64, 20, now);
+        }
+        assertTrue(marked, "суммарный сдвиг больше блока — трекер сдвинулся");
+        assertEquals(0L, tracker.stationaryMillis(now), "время движения обновилось");
+    }
+
+    @Test
+    void standingStillIsNotMarkedAsMoved() {
+        Tracker tracker = tracker(0L, false);
+        assertFalse(tracker.moveTo(10, 64, 20, 5_000L), "координаты не менялись");
+        assertFalse(tracker.moveTo(10.1, 64, 20, 6_000L), "0.1 блока — ниже порога");
+        assertTrue(tracker.moveTo(12, 64, 20, 7_000L), "почти два блока — движение");
+    }
+
     @Test
     void stationaryOnlyAfterConfiguredThreshold() {
         long now = 200_000L;

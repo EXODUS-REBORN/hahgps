@@ -57,6 +57,16 @@ public class MapService {
     /** Не чаще этой паузы полотно карты перерисовывается при движении мышью. */
     private static final long PAN_RENDER_INTERVAL_MS = 300L;
 
+    /** Пауза после последнего движения панорамой, через которую идёт рендер. */
+    private static final long PAN_SETTLE_TICKS = 8L;
+
+    /**
+     * Дольше этого непрерывный жест не откладывает настоящий рендер: иначе
+     * при бесконечном вращении мыши карта показывала бы только сдвинутую
+     * копию со всё большими серыми полосами.
+     */
+    private static final long PAN_MAX_DEFER_MS = 1_500L;
+
     /** Следование: не чаще этой паузы карта переезжает за игроком. */
     private static final long FOLLOW_RENDER_INTERVAL_MS = 700L;
 
@@ -85,11 +95,22 @@ public class MapService {
     private final Map<Integer, MapView> views = new ConcurrentHashMap<>();
     private final Map<Integer, AtomicLong> renderTokens = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastPanRender = new ConcurrentHashMap<>();
-    private final Map<UUID, int[]> pendingPan = new ConcurrentHashMap<>();
     /** Карта следует за игроком или закреплена в точке, куда её сдвинули. */
     private final Map<UUID, Boolean> follow = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastFollowRender = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastRefresh = new ConcurrentHashMap<>();
+    /** Идёт ли рендер этого MapView (один на вид, чтобы задачи не убивали друг друга). */
+    private final Map<Integer, Boolean> renderInFlight = new ConcurrentHashMap<>();
+    /** Пока рендер шёл, полотно просили обновить ещё раз. */
+    private final Map<Integer, Boolean> renderDirty = new ConcurrentHashMap<>();
+    /** Отложенный (дебаунс) рендер панорамы по игроку. */
+    private final Map<UUID, BukkitTask> pendingRenders = new ConcurrentHashMap<>();
+    /** Когда начался текущий жест панорамы (для ограничения откладывания). */
+    private final Map<UUID, Long> panGestureStart = new ConcurrentHashMap<>();
+    /** Что сейчас нарисовано на полотне (сдвинутая копия) — рисует рендерер. */
+    private final Map<Integer, BufferedImage> shownImages = new ConcurrentHashMap<>();
+    /** Центр, в котором снята картинка из {@link #images}. */
+    private final Map<Integer, int[]> renderedCenters = new ConcurrentHashMap<>();
     private volatile BukkitTask tickTask;
 
     /**
@@ -254,8 +275,9 @@ public class MapService {
     /**
      * Сдвиг полотна карты (панорама Shift+мышью): центр карты едет за
      * курсором, картинка сразу сдвигается, а точная перерисовка приходит из
-     * фонового рендера. Не чаще {@link #PAN_RENDER_INTERVAL_MS}, иначе на
-     * каждое движение мыши уходил бы пакет карты на 16 КБ.
+     * фонового рендера. Рендер не запускается на каждое движение мыши — он
+     * откладывается и выполняется один раз, когда жест закончился: иначе
+     * 16 384 точки полотна переснимались бы по восемь раз в секунду.
      */
     public void pan(Player player, double dx, double dz) {
         if (player == null || !plugin.isEnabled()) {
@@ -283,19 +305,53 @@ public class MapService {
         }
         view.setCenterX(targetX);
         view.setCenterZ(targetZ);
-        int[] pending = pendingPan.computeIfAbsent(player.getUniqueId(), key -> new int[2]);
-        pending[0] += stepX;
-        pending[1] += stepZ;
         if (!render) {
+            // Жест продолжается: рендер состоится после его окончания.
+            scheduleRender(player, view, PAN_SETTLE_TICKS);
             return;
         }
-        int dxTotal = pending[0];
-        int dzTotal = pending[1];
-        pending[0] = 0;
-        pending[1] = 0;
-        shiftImage(view, dxTotal, dzTotal);
-        player.sendMap(view);
-        renderAsync(player, view);
+        // Сдвиг считается от центра, в котором снята картинка, поэтому
+        // накопленный жест учитывается сам собой — отдельный счётчик не нужен.
+        if (shiftImage(view) && isHoldingMapMainHand(player)) {
+            player.sendMap(view);
+        }
+        UUID id = player.getUniqueId();
+        long gestureStart = panGestureStart.computeIfAbsent(id, key -> now);
+        if (now - gestureStart >= PAN_MAX_DEFER_MS) {
+            // Жест длится слишком долго — рисуем по-настоящему сейчас.
+            panGestureStart.put(id, now);
+            renderAsync(player, view);
+            return;
+        }
+        scheduleRender(player, view, PAN_SETTLE_TICKS);
+    }
+
+    /**
+     * Отложенный рендер: жест продолжается — таймер сдвигается, работа идёт
+     * один раз после его окончания.
+     */
+    private void scheduleRender(Player player, MapView view, long delayTicks) {
+        UUID id = player.getUniqueId();
+        BukkitTask previous = pendingRenders.remove(id);
+        if (previous != null) {
+            try {
+                previous.cancel();
+            } catch (Throwable ignored) {
+            }
+        }
+        try {
+            BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                pendingRenders.remove(id);
+                if (!plugin.isEnabled() || !player.isOnline()
+                        || playerMaps.get(id) != view) {
+                    return;
+                }
+                renderAsync(player, view);
+            }, delayTicks);
+            pendingRenders.put(id, task);
+        } catch (Throwable ignored) {
+            renderAsync(player, view);
+        }
     }
 
     /**
@@ -316,25 +372,44 @@ public class MapService {
         pan(player, dx, dz);
     }
 
-    /** Сдвинуть уже нарисованную картинку — панорама отзывается мгновенно. */
-    private void shiftImage(MapView view, int blockDx, int blockDz) {
-        BufferedImage source = images.get(view.getId());
+    /**
+     * Сдвинуть уже нарисованную картинку — панорама отзывается мгновенно.
+     *
+     * Сдвигается отдельный буфер показа, а не сама отрендеренная картинка:
+     * раньше новый кадр затирался сдвинутым, полоса неизвестности (тёмно-серая)
+     * утягивалась внутрь полотна при каждом шаге и накапливалась.
+     *
+     * @return true, если картинка изменилась и её надо отправить игроку
+     */
+    private boolean shiftImage(MapView view) {
+        int viewId = view.getId();
+        BufferedImage source = images.get(viewId);
         if (source == null) {
-            return;
+            return false;
+        }
+        int[] renderedCenter = renderedCenters.get(viewId);
+        if (renderedCenter == null) {
+            return false;
         }
         double bpp = TerrainRenderer.blocksPerPixel(view.getScale());
-        int px = (int) Math.round(blockDx / bpp);
-        int pz = (int) Math.round(blockDz / bpp);
+        // Сдвиг считаем от центра, в котором картинка действительно снята:
+        // несколько шагов панорамы складываются, поэтому смещение не теряется.
+        int px = (int) Math.round((view.getCenterX() - renderedCenter[0]) / bpp);
+        int pz = (int) Math.round((view.getCenterZ() - renderedCenter[1]) / bpp);
         if (px == 0 && pz == 0) {
-            return;
+            return false;
         }
-        BufferedImage shifted = new BufferedImage(MAP_SIZE, MAP_SIZE, BufferedImage.TYPE_INT_RGB);
-        Graphics2D graphics = shifted.createGraphics();
+        BufferedImage shown = shownImages.get(viewId);
+        if (shown == null) {
+            shown = new BufferedImage(MAP_SIZE, MAP_SIZE, BufferedImage.TYPE_INT_RGB);
+            shownImages.put(viewId, shown);
+        }
+        Graphics2D graphics = shown.createGraphics();
         graphics.setColor(new java.awt.Color(0x202020));
         graphics.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
         graphics.drawImage(source, -px, -pz, null);
         graphics.dispose();
-        images.put(view.getId(), shifted);
+        return true;
     }
 
     /** Зум: +1 — ближе, −1 — дальше. Возвращает новый масштаб. */
@@ -360,7 +435,6 @@ public class MapService {
         }
         player.sendMap(view);
         renderAsync(player, view);
-        ensureMapInHand(player, view);
         return view.getScale();
     }
 
@@ -409,14 +483,25 @@ public class MapService {
         }
         long now = System.currentTimeMillis();
         long refreshMs = Math.max(1_000L, plugin.getConfigManager().getMapRefreshSeconds() * 1000L);
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            MapView view = playerMaps.get(player.getUniqueId());
+        // Идём по владельцам карт, а не по всем игрокам сервера: на 200 онлайн
+        // без карт прежний цикл всё равно перебирал их каждые полсекунды.
+        for (UUID id : playerMaps.keySet()) {
+            Player player = Bukkit.getPlayer(id);
+            if (player == null || !player.isOnline()) {
+                continue;
+            }
+            MapView view = playerMaps.get(id);
             if (view == null || !isHoldingMapMainHand(player)) {
                 continue;
             }
             if (view.getWorld() == null
                     || !ru.hahgps.util.LocationUtil.sameWorld(view.getWorld(), player.getWorld())) {
-                openMap(player);
+                // Карта, закреплённая на точке другого мира, должна там и
+                // остаться: раньше её каждый тик пересоздавали на игрока, и
+                // «показать трекер в Нижнем мире» не работало.
+                if (isFollowing(player)) {
+                    openMap(player);
+                }
                 continue;
             }
             boolean rendered = followStep(player, view, now);
@@ -450,9 +535,9 @@ public class MapService {
         lastFollowRender.put(player.getUniqueId(), now);
         view.setCenterX(clampCenter(centerX));
         view.setCenterZ(clampCenter(centerZ));
-        shiftImage(view, dx, dz);
-        player.sendMap(view);
-        renderAsync(player, view);
+        // Полотно не дёргаем вовсе: карта «стоит», а точную картинку принесёт
+        // рендер нового центра. Сдвиг показа нужен только ручной панораме.
+        scheduleRender(player, view, 1L);
         return true;
     }
 
@@ -630,7 +715,11 @@ public class MapService {
     private class ImageRenderer extends MapRenderer {
         @Override
         public void render(MapView mapView, MapCanvas canvas, Player player) {
-            BufferedImage image = images.get(mapView.getId());
+            int viewId = mapView.getId();
+            BufferedImage image = shownImages.get(viewId);
+            if (image == null) {
+                image = images.get(viewId);
+            }
             canvas.drawImage(0, 0, image != null ? image : Blank.IMAGE);
         }
     }
@@ -639,23 +728,37 @@ public class MapService {
     // Рендер
     // ------------------------------------------------------------------
 
+    /**
+     * Перерисовать полотно карты.
+     *
+     * Один рендер на MapView одновременно: пока он идёт, новые запросы только
+     * ставят флаг «нужно ещё раз». Раньше каждый запрос поднимал новый токен и
+     * убивал текущую задачу, поэтому при панораме (кадр раз в 300 мс, а
+     * сэмплирование полотна дольше) рендер не доходил до конца никогда.
+     */
     private void renderAsync(Player player, MapView view) {
         World world = view.getWorld();
         DataService dataService = plugin.getDataService();
         if (world == null || !plugin.isEnabled() || dataService == null) {
             return;
         }
+        int viewId = view.getId();
+        if (renderInFlight.putIfAbsent(viewId, Boolean.TRUE) != null) {
+            renderDirty.put(viewId, Boolean.TRUE);
+            return;
+        }
+        renderDirty.remove(viewId);
+
         ConfigManager config = plugin.getConfigManager();
         UUID id = player.getUniqueId();
-        int viewId = view.getId();
 
         AtomicLong counter = renderTokens.computeIfAbsent(viewId, key -> new AtomicLong());
         long token = counter.incrementAndGet();
-        // Устаревший рендер видит это и прекращает грузить чанки.
-        BooleanSupplier cancelled = () -> {
-            AtomicLong current = renderTokens.get(viewId);
-            return current == null || current.get() != token || playerMaps.get(id) != view;
-        };
+        // Отменяем только то, что действительно устарело: карта сменила
+        // игрока/вид, мир выгрузился или плагин выключается.
+        BooleanSupplier cancelled = () -> !plugin.isEnabled()
+                || playerMaps.get(id) != view
+                || view.getWorld() == null;
 
         int centerX = view.getCenterX();
         int centerZ = view.getCenterZ();
@@ -726,19 +829,36 @@ public class MapService {
         List<Location> finalOthers = others;
         List<TerrainRenderer.Blip> finalTrackers = trackers;
 
+        // Слой кэша мира резолвится один раз на рендер, а не на каждый пиксель.
         WorldMapCache cache = config.isMapWorldCache() ? plugin.getWorldMapCache() : null;
-        TerrainRenderer.CachedColors cached = cache == null ? null
-                : (cachedWorld, x, z) -> cache.colorAt(cachedWorld, x, z);
+        TerrainRenderer.CachedColors cached = cache == null ? null : cache.snapshot(world);
         terrainRenderer.render(world, centerX, centerZ, scale, finalPois, finalRoute, playerLoc,
                         finalOthers, finalTrackers, cancelled, cached)
-                .thenAccept(image -> {
-                    if (image != null) {
-                        applyRenderedImage(view, token, player, image);
-                    }
-                });
+                .whenComplete((image, error) -> finishRender(viewId, view, token, player, image,
+                        centerX, centerZ));
     }
 
-    private void applyRenderedImage(MapView view, long token, Player player, BufferedImage image) {
+    /** Рендер закончился: показать картинку и, если просили ещё, запустить снова. */
+    private void finishRender(int viewId, MapView view, long token, Player player,
+                              BufferedImage image, int centerX, int centerZ) {
+        renderInFlight.remove(viewId);
+        if (image != null) {
+            applyRenderedImage(view, token, player, image, centerX, centerZ);
+        }
+        if (renderDirty.remove(viewId) != null && plugin.isEnabled()) {
+            try {
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (player.isOnline() && playerMaps.get(player.getUniqueId()) == view) {
+                        renderAsync(player, view);
+                    }
+                });
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private void applyRenderedImage(MapView view, long token, Player player, BufferedImage image,
+                                    int centerX, int centerZ) {
         try {
             if (!plugin.isEnabled()) {
                 return;
@@ -751,11 +871,25 @@ public class MapService {
                 if (current == null || current.get() != token || playerMaps.get(player.getUniqueId()) != view) {
                     return;
                 }
-                images.put(view.getId(), image);
-                player.sendMap(view);
+                int viewId = view.getId();
+                images.put(viewId, image);
+                renderedCenters.put(viewId, new int[]{centerX, centerZ});
+                // Свежая картинка сразу становится и картинкой показа: сдвиг
+                // панорамы после неё считается уже от нового центра.
+                shownImages.remove(viewId);
+                // Полотно обновляем только тому, кто действительно держит карту:
+                // иначе на каждое обновление уходил пакет карты (16 КБ) впустую.
+                if (isHoldingMapMainHand(player)) {
+                    player.sendMap(view);
+                }
             });
         } catch (Throwable ignored) {
         }
+    }
+
+    /** Мир изменился: снять кэш поверхности, чтобы правка появилась на карте. */
+    public void invalidateSurfaces(String worldName) {
+        terrainRenderer.invalidateSurface(worldName);
     }
 
     public MapView getMapView(Player player) {
@@ -766,10 +900,17 @@ public class MapService {
         UUID id = player.getUniqueId();
         playerMaps.remove(id);
         lastPanRender.remove(id);
-        pendingPan.remove(id);
         follow.remove(id);
         lastFollowRender.remove(id);
         lastRefresh.remove(id);
+        panGestureStart.remove(id);
+        BukkitTask deferred = pendingRenders.remove(id);
+        if (deferred != null) {
+            try {
+                deferred.cancel();
+            } catch (Throwable ignored) {
+            }
+        }
         // Картинку и рендерер не снимаем: карта остаётся в инвентаре игрока
         // и должна показывать то же полотно после повторного входа.
     }
@@ -792,13 +933,24 @@ public class MapService {
                 }
             }
         }
+        for (BukkitTask deferred : pendingRenders.values()) {
+            try {
+                deferred.cancel();
+            } catch (Throwable ignored) {
+            }
+        }
+        pendingRenders.clear();
+        panGestureStart.clear();
         playerMaps.clear();
         views.clear();
         renderers.clear();
         images.clear();
+        shownImages.clear();
+        renderedCenters.clear();
+        renderInFlight.clear();
+        renderDirty.clear();
         renderTokens.clear();
         lastPanRender.clear();
-        pendingPan.clear();
         follow.clear();
         lastFollowRender.clear();
         lastRefresh.clear();

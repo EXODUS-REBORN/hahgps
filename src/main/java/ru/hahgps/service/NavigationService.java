@@ -231,12 +231,20 @@ public class NavigationService {
 
         BossBar bar = bossBars.get(player.getUniqueId());
         if (bar != null) {
-            bar.setTitle(title(arrow, targetName,
-                    LocationUtil.formatDistance(distanceToTarget)));
+            // Отправляем пакет только если строка/полоса действительно
+            // изменились: стоящий на месте игрок получал их дважды в секунду.
+            String nextTitle = title(arrow, targetName,
+                    LocationUtil.formatDistance(distanceToTarget));
             float progress = session.getTotalDistance() > 0
                     ? (float) Math.max(0.0, Math.min(1.0, distanceToTarget / session.getTotalDistance()))
                     : 0.0f;
-            bar.setProgress(progress);
+            progress = Math.round(progress * 100.0f) / 100.0f;
+            if (!nextTitle.equals(session.getLastBarTitle()) || progress != session.getLastBarProgress()) {
+                session.setLastBarTitle(nextTitle);
+                session.setLastBarProgress(progress);
+                bar.setTitle(nextTitle);
+                bar.setProgress(progress);
+            }
         }
 
         HudService hud = plugin.getHudService();

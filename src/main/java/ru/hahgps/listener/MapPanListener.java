@@ -55,16 +55,9 @@ public class MapPanListener implements Listener {
         if (!player.isSneaking()) {
             return;
         }
-        if (!maps.isHoldingMapMainHand(player)) {
-            return;
-        }
-        // Пока открыт сундук или меню, взгляд не должен уводить карту.
-        try {
-            if (player.getOpenInventory().getType() != org.bukkit.event.inventory.InventoryType.CRAFTING) {
-                return;
-            }
-        } catch (Throwable ignored) {
-        }
+        // Сначала дешёвая проверка поворота: событие движения приходит на
+        // каждый шаг игрока, а isHoldingMapMainHand копирует предмет и мету —
+        // без этой ранней отсечки платили за неё даже при взгляде на месте.
         Location from = event.getFrom();
         Location to = event.getTo();
         if (to == null || from.getWorld() == null || !from.getWorld().equals(to.getWorld())) {
@@ -74,6 +67,16 @@ public class MapPanListener implements Listener {
         float dpitch = clamp(to.getPitch() - from.getPitch());
         if (Math.abs(dyaw) < DEAD_ZONE_DEGREES && Math.abs(dpitch) < DEAD_ZONE_DEGREES) {
             return;
+        }
+        if (!maps.isHoldingMapMainHand(player)) {
+            return;
+        }
+        // Пока открыт сундук или меню, взгляд не должен уводить карту.
+        try {
+            if (player.getOpenInventory().getType() != org.bukkit.event.inventory.InventoryType.CRAFTING) {
+                return;
+            }
+        } catch (Throwable ignored) {
         }
         double[] delta = MapService.panDelta(dyaw, dpitch, maps.blocksPerPixel(player),
                 plugin.getConfigManager().getMapPanSensitivity());

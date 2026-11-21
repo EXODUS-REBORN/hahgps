@@ -25,15 +25,35 @@ public class VisualizationService {
     private static final double RADIUS = 64.0;
     private static final double RADIUS_SQ = RADIUS * RADIUS;
 
-    private static final double PARTICLE_STEP = 2.0;
+    /** Шаг точек вдоль ребра, блоков: 2.0 давало до 600 пакетов в секунду. */
+    private static final double PARTICLE_STEP = 4.0;
 
-    private static final int PARTICLE_BUDGET = 600;
+    /**
+     * Бюджет частиц на игрока за кадр (а не на тип транспорта): каждый вызов
+     * spawnParticle — отдельный пакет, и пять включённых типов давали 3000
+     * пакетов в секунду на зрителя.
+     */
+    private static final int PARTICLE_BUDGET = 160;
+
+    /** Ребро дальше этого от игрока на картинке не нужно. */
+    private static final double EDGE_CLIP_RADIUS = RADIUS;
+
+    /** Ячейка пространственного индекса рёбер, блоков. */
+    private static final int GRID_CELL = 64;
 
     private final GraphService graphService;
     private final Map<UUID, Set<TransportType>> activeVisualizations = new ConcurrentHashMap<>();
 
 
     private final Map<TransportType, List<GraphEdge>> edgeCache = new EnumMap<>(TransportType.class);
+    /**
+     * Пространственный индекс: тип → ячейка → рёбра, которые её касаются.
+     * Раньше на каждого зрителя перебирались и сортировались ВСЕ рёбра типа
+     * (на графе в 10k рёбер — O(E log E) в секунду), хотя рисуются только
+     * попавшие в радиус 64.
+     */
+    private final Map<TransportType, Map<Long, List<GraphEdge>>> gridCache =
+            new EnumMap<>(TransportType.class);
     private final Map<TransportType, Particle.DustOptions> dustCache = new EnumMap<>(TransportType.class);
     private int cachedRevision = -1;
 
@@ -41,6 +61,8 @@ public class VisualizationService {
     private final double[] clipBuffer = new double[2];
 
     private final List<GraphEdge> candidates = new ArrayList<>();
+    /** Отметка уже добавленных рёбер: ребро лежит сразу в нескольких ячейках. */
+    private final Set<GraphEdge> seenEdges = new java.util.HashSet<>();
 
     public VisualizationService(GraphService graphService) {
         this.graphService = graphService;
@@ -83,10 +105,12 @@ public class VisualizationService {
     }
 
     public void tick() {
-        refreshCacheIfNeeded();
+        // Сначала «есть ли зрители»: раньше кэш рёбер пересобирался на каждую
+        // ревизию графа даже при нуле зрителей.
         if (activeVisualizations.isEmpty()) {
             return;
         }
+        refreshCacheIfNeeded();
 
         List<UUID> offline = null;
         for (Map.Entry<UUID, Set<TransportType>> entry : activeVisualizations.entrySet()) {
@@ -147,10 +171,54 @@ public class VisualizationService {
             }
         }
         edgeCache.clear();
+        gridCache.clear();
         for (Map.Entry<TransportType, List<GraphEdge>> entry : fresh.entrySet()) {
-            edgeCache.put(entry.getKey(), Collections.unmodifiableList(entry.getValue()));
+            List<GraphEdge> edges = Collections.unmodifiableList(entry.getValue());
+            edgeCache.put(entry.getKey(), edges);
+            gridCache.put(entry.getKey(), buildGrid(edges));
         }
         cachedRevision = revision;
+    }
+
+    /** Рёбра по ячейкам сетки: ребро попадает во все ячейки, которые пересекает. */
+    private static Map<Long, List<GraphEdge>> buildGrid(List<GraphEdge> edges) {
+        Map<Long, List<GraphEdge>> grid = new java.util.HashMap<>();
+        for (GraphEdge edge : edges) {
+            org.bukkit.Location from = edge.getFrom().getLocation();
+            org.bukkit.Location to = edge.getTo().getLocation();
+            if (from == null || to == null || from.getWorld() == null) {
+                continue;
+            }
+            int minCellX = Math.floorDiv((int) Math.floor(Math.min(from.getX(), to.getX())), GRID_CELL);
+            int maxCellX = Math.floorDiv((int) Math.floor(Math.max(from.getX(), to.getX())), GRID_CELL);
+            int minCellZ = Math.floorDiv((int) Math.floor(Math.min(from.getZ(), to.getZ())), GRID_CELL);
+            int maxCellZ = Math.floorDiv((int) Math.floor(Math.max(from.getZ(), to.getZ())), GRID_CELL);
+            int spanX = maxCellX - minCellX;
+            int spanZ = maxCellZ - minCellZ;
+            if ((long) spanX * spanZ > 1024L) {
+                // Совсем длинное ребро (мост через полмира): кладём в первую
+                // ячейку, чтобы не взорвать индекс.
+                maxCellX = minCellX;
+                maxCellZ = minCellZ;
+            }
+            String worldName = from.getWorld().getName();
+            for (int cx = minCellX; cx <= maxCellX; cx++) {
+                for (int cz = minCellZ; cz <= maxCellZ; cz++) {
+                    grid.computeIfAbsent(cellKey(worldName, cx, cz), key -> new ArrayList<>(4))
+                            .add(edge);
+                }
+            }
+        }
+        return grid;
+    }
+
+    private static long cellKey(String world, int cellX, int cellZ) {
+        return ((long) world.hashCode() << 42) ^ ((long) cellX << 21) ^ cellZ;
+    }
+
+    private static long cellKeyAt(String world, double x, double z) {
+        return cellKey(world, Math.floorDiv((int) Math.floor(x), GRID_CELL),
+                Math.floorDiv((int) Math.floor(z), GRID_CELL));
     }
 
     private void renderForType(Player player, TransportType type) {
@@ -170,17 +238,32 @@ public class VisualizationService {
 
 
 
+        // Берём только рёбра из ячеек возле игрока — вместо полного перебора
+        // и сортировки всех рёбер типа.
+        String worldName = world.getName();
+        Map<Long, List<GraphEdge>> grid = gridCache.get(type);
         candidates.clear();
-        for (GraphEdge edge : edges) {
-            org.bukkit.Location from = edge.getFrom().getLocation();
-            org.bukkit.Location to = edge.getTo().getLocation();
-            if (from == null || to == null || from.getWorld() == null || to.getWorld() == null) {
-                continue;
+        seenEdges.clear();
+        if (grid != null) {
+            int cellX = Math.floorDiv((int) Math.floor(px), GRID_CELL);
+            int cellZ = Math.floorDiv((int) Math.floor(pz), GRID_CELL);
+            int cellRadius = (int) Math.ceil(EDGE_CLIP_RADIUS / GRID_CELL);
+            for (int cx = cellX - cellRadius; cx <= cellX + cellRadius; cx++) {
+                for (int cz = cellZ - cellRadius; cz <= cellZ + cellRadius; cz++) {
+                    List<GraphEdge> bucket = grid.get(cellKey(worldName, cx, cz));
+                    if (bucket == null) {
+                        continue;
+                    }
+                    for (GraphEdge edge : bucket) {
+                        if (seenEdges.add(edge)) {
+                            candidates.add(edge);
+                        }
+                    }
+                }
             }
-            if (!world.equals(from.getWorld()) || !world.equals(to.getWorld())) {
-                continue;
-            }
-            candidates.add(edge);
+        }
+        if (candidates.isEmpty()) {
+            return;
         }
         candidates.sort((e1, e2) -> Double.compare(
                 nearestDistSq(e1, px, pz), nearestDistSq(e2, px, pz)));
@@ -208,10 +291,13 @@ public class VisualizationService {
             double length = Math.hypot(bx - ax, bz - az);
             int steps = Math.max(1, (int) (length / PARTICLE_STEP));
             if (steps > budget) {
-
                 steps = budget;
             }
-            budget -= steps;
+            if (steps <= 0) {
+                break;
+            }
+            // В цикле i <= steps, то есть steps + 1 точек: списываем ровно их.
+            budget -= steps + 1;
 
             double startY = from.getY() + t0 * dy;
             double endY = from.getY() + t1 * dy;

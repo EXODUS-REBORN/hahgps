@@ -804,18 +804,11 @@ public class ItrakCommand implements SubCommand {
             } else {
                 query = join(args, 0, args.length);
             }
+            // requireTracker сам отвечает «не найдено»: второй строкой про
+            // аргументы ругаться незачем.
             Tracker tracker = requireTracker(plugin, player, query);
             if (tracker == null) {
                 return;
-            }
-            if (args.length >= 2) {
-                TransportType parsed = SubCommand.parseTransport(args[args.length - 1]);
-                if (parsed == null) {
-                    player.sendMessage(plugin.getMessages().getPrefixed("invalid-args",
-                            "usage", usage()));
-                    return;
-                }
-                transport = parsed;
             }
             if (!plugin.getConfigManager().isTransportAvailable(transport.getKey())) {
                 player.sendMessage(plugin.getMessages().getPrefixed("transport-disabled",

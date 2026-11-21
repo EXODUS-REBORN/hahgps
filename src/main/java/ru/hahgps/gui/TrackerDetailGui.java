@@ -108,10 +108,17 @@ public class TrackerDetailGui extends GuiScreen {
             try {
                 refresh();
             } catch (Throwable t) {
-                plugin.getLogger().warning("HahGps: карточка iTrak не обновилась: " + t);
+                // Не чаще раза в минуту: иначе сбой карточки заливает лог.
+                long now = System.currentTimeMillis();
+                if (now - lastFailureLog >= 60_000L) {
+                    lastFailureLog = now;
+                    plugin.getLogger().warning("HahGps: карточка iTrak не обновилась: " + t);
+                }
             }
         }, 20L, 20L);
     }
+
+    private long lastFailureLog;
 
     private void stopRefresh() {
         BukkitTask task = refreshTask;
@@ -195,8 +202,8 @@ public class TrackerDetailGui extends GuiScreen {
                 lines.add(comp("gui.lore-itrak-carrier", "name", carrier));
             }
             lines.add(comp("gui.lore-itrak-code", "code", tracker.getCode()));
-            lines.add(comp("gui.lore-itrak-status", "status", service.statusText(player, tracker)));
-            lines.add(comp("gui.lore-itrak-state", "state", service.stateText(player, tracker, now)));
+            lines.add(comp("gui.lore-itrak-status", "status", service.statusText(signal, tracker)));
+            lines.add(comp("gui.lore-itrak-state", "state", service.stateText(signal, tracker, now)));
             if (tracker.isRuined()) {
                 // Промок: показываем, когда трекер был в сети и где, — по этой
                 // отметке строится маршрут и его можно забрать.

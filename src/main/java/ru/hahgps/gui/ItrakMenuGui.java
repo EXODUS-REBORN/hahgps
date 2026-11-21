@@ -74,11 +74,29 @@ public class ItrakMenuGui extends GuiScreen {
                 return;
             }
             try {
+                // Список перечитываем: трекер мог появиться или исчезнуть, пока
+                // меню открыто (раньше показывался устаревший снимок).
+                reloadTrackers(plugin.getTrackerService());
                 buildPage();
             } catch (Throwable t) {
-                plugin.getLogger().warning("HahGps: iTrak GUI не обновился: " + t);
+                logFailure(plugin, t);
             }
         }, 20L, 20L);
+    }
+
+    /** Не чаще раза в минуту: иначе сбой превращается в строку лога каждую секунду. */
+    private long lastFailureLog;
+    private int failureStreak;
+
+    private void logFailure(HahGpsPlugin plugin, Throwable error) {
+        long now = System.currentTimeMillis();
+        failureStreak++;
+        if (now - lastFailureLog < 60_000L) {
+            return;
+        }
+        lastFailureLog = now;
+        plugin.getLogger().warning("HahGps: меню iTrak не обновилось ("
+                + failureStreak + " раз подряд): " + error);
     }
 
     private void stopRefresh() {
@@ -100,9 +118,17 @@ public class ItrakMenuGui extends GuiScreen {
             fillEmpty();
             return;
         }
+        reloadTrackers(service);
+        buildPage();
+    }
+
+    /** Перечитать список трекеров этого игрока (или всех — для админа). */
+    private void reloadTrackers(TrackerService service) {
+        if (service == null) {
+            return;
+        }
         boolean admin = player.hasPermission("gps.itrak.admin");
         trackers = admin ? service.all() : service.byOwner(player.getUniqueId());
-        buildPage();
     }
 
     private void buildPage() {
@@ -115,6 +141,9 @@ public class ItrakMenuGui extends GuiScreen {
         int pages = Math.max(1, (trackers.size() + PER_PAGE - 1) / PER_PAGE);
         page = Math.max(0, Math.min(page, pages - 1));
         inventory.clear();
+        // Заполнитель — общий предмет (см. GuiTheme.filler), а не новый стек
+        // на каждый пустой слот каждую секунду.
+        GuiTheme.fill(inventory);
 
         int start = page * PER_PAGE;
         for (int i = start; i < Math.min(start + PER_PAGE, trackers.size()); i++) {
@@ -148,11 +177,6 @@ public class ItrakMenuGui extends GuiScreen {
                 comp("gui.itrak-refresh"), lore("gui.lore-itrak-refresh"), ItemIds.ITRAK_REFRESH));
         inventory.setItem(53, GuiTheme.navClose(getMsg("gui.close")));
 
-        for (int i = 0; i < size(); i++) {
-            if (inventory.getItem(i) == null) {
-                inventory.setItem(i, GuiUtil.filler());
-            }
-        }
         putBrand();
     }
 
@@ -170,8 +194,10 @@ public class ItrakMenuGui extends GuiScreen {
             if (carrier != null) {
                 lines.add(comp("gui.lore-itrak-carrier", "name", carrier));
             }
-            lines.add(comp("gui.lore-itrak-status", "status", service.statusText(player, tracker)));
-            lines.add(comp("gui.lore-itrak-state", "state", service.stateText(player, tracker, now)));
+            // Сигнал уже посчитан выше: statusText/stateText по нему, без
+            // повторного поиска сущности и записи «последнего места».
+            lines.add(comp("gui.lore-itrak-status", "status", service.statusText(signal, tracker)));
+            lines.add(comp("gui.lore-itrak-state", "state", service.stateText(signal, tracker, now)));
             if (signal.inRange()) {
                 lines.add(comp("gui.lore-itrak-coords",
                         "x", TrackerService.formatCoord(signal.exact().getX()),
