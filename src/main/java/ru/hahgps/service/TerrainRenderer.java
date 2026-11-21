@@ -34,32 +34,82 @@ public class TerrainRenderer {
     private static final int MAP_SIZE = 128;
     private static final int TOTAL_SAMPLES = MAP_SIZE * MAP_SIZE;
 
-    /** Больше чанков за один рендер не грузим: остальное станет дырками NO_DATA. */
-    private static final int MAX_CHUNK_REQUESTS = 512;
-
     /**
-     * Сколько чанков разрешено догрузить на этом масштабе. Дальние карты
-     * рисуются из кэша мира и уже загруженных чанков: на FARTHEST полотно
-     * покрывает 128×128 чанков, и грузить их все на каждое открытие карты
-     * — гарантированный лаг. Кэш всё равно знает, что игрок уже видел.
+     * Сколько чанков разрешено догрузить за один рендер. Догрузка идёт без
+     * генерации (второй аргумент {@code getChunkAtAsync} — false), но каждый
+     * загруженный чанк — это работа главного потока и событие ChunkLoad,
+     * поэтому бюджет маленький: остальное полотно возьмёт из кэша мира, а
+     * совсем неисследованные углы останутся тёмными.
      */
     private static int chunkBudget(org.bukkit.map.MapView.Scale scale) {
         return switch (scale) {
-            case CLOSEST -> 128;
-            case CLOSE -> 256;
-            case NORMAL -> MAX_CHUNK_REQUESTS;
-            case FAR -> 128;
-            case FARTHEST -> 0;
+            case CLOSEST -> 16;
+            case CLOSE -> 24;
+            case NORMAL -> 32;
+            case FAR, FARTHEST -> 0;
         };
     }
 
-    private static final int SAMPLES_PER_TICK = 2048;
+    /** Пикселей за тик: 128×128 полотно снимается за 16 тиков (0.8 с). */
+    private static final int SAMPLES_PER_TICK = 1024;
 
     private static final int NO_DATA = 0x202020;
 
 
     private final HahGpsPlugin plugin;
     private final ExecutorService drawExecutor;
+    /** Задачи порционного сэмплирования: снимаются при выключении плагина. */
+    private final java.util.Set<BukkitTask> samplingTasks =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /**
+     * Последняя снятая поверхность: «мир + центр + масштаб» → цвета пикселей.
+     * Карта перерисовывается раз в {@code map.refresh-seconds} (и на каждый
+     * шаг следования), но поверхность под маркерами не меняется — повторное
+     * сэмплирование 16 384 блоков было самой дорогой частью рендера.
+     * Живёт недолго: мир меняется, кэш надо перечитывать.
+     */
+    private static final int SURFACE_CACHE_LIMIT = 8;
+    private static final long SURFACE_TTL_MS = 20_000L;
+    private final java.util.Map<String, Surface> surfaces = new java.util.LinkedHashMap<>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(java.util.Map.Entry<String, Surface> eldest) {
+            return size() > SURFACE_CACHE_LIMIT;
+        }
+    };
+
+    private record Surface(int[] colors, long at) {
+    }
+
+    private static String surfaceKey(World world, int centerX, int centerZ, MapView.Scale scale) {
+        return world.getName() + '|' + centerX + '|' + centerZ + '|' + scale.name();
+    }
+
+    /** Готовая поверхность, если она ещё свежая; иначе null. */
+    private synchronized int[] cachedSurface(String key) {
+        Surface surface = surfaces.get(key);
+        if (surface == null) {
+            return null;
+        }
+        if (System.currentTimeMillis() - surface.at > SURFACE_TTL_MS) {
+            surfaces.remove(key);
+            return null;
+        }
+        return surface.colors;
+    }
+
+    private synchronized void storeSurface(String key, int[] colors) {
+        surfaces.put(key, new Surface(colors, System.currentTimeMillis()));
+    }
+
+    /** Сбросить кэш поверхности: мир изменился (поставили/сломали блок). */
+    public synchronized void invalidateSurface(String worldName) {
+        if (worldName == null) {
+            surfaces.clear();
+            return;
+        }
+        surfaces.keySet().removeIf(key -> key.startsWith(worldName + '|'));
+    }
 
     public TerrainRenderer(HahGpsPlugin plugin) {
         this.plugin = plugin;
@@ -72,6 +122,7 @@ public class TerrainRenderer {
 
 
     public void shutdown() {
+        cancelSamplingTasks();
         drawExecutor.shutdownNow();
     }
 
@@ -157,39 +208,66 @@ public class TerrainRenderer {
         double bpp = blocksPerPixel(scale);
         int radius = (int) (MAP_SIZE / 2 * bpp);
 
-        int minChunkX = (centerX - radius) >> 4;
-        int maxChunkX = (centerX + radius) >> 4;
-        int minChunkZ = (centerZ - radius) >> 4;
-        int maxChunkZ = (centerZ + radius) >> 4;
+        // Готовая поверхность этой же карты (тот же центр и масштаб) не
+        // сэмплируется заново: полотно обновляется раз в map.refresh-seconds,
+        // и без кэша это была бы повторная выборка 16 384 блоков каждые
+        // несколько секунд на каждого держателя карты. Маркеры рисуются
+        // поверх и всегда свежие.
+        String key = surfaceKey(world, centerX, centerZ, scale);
+        int[] reused = cachedSurface(key);
+        if (reused != null) {
+            return CompletableFuture.supplyAsync(
+                    () -> drawImage(reused, centerX, centerZ, bpp, pois, route, playerLoc, others,
+                            trackers, world),
+                    drawExecutor);
+        }
+
         int centerChunkX = centerX >> 4;
         int centerChunkZ = centerZ >> 4;
 
-        List<int[]> chunks = new ArrayList<>();
-        for (int cx = minChunkX; cx <= maxChunkX; cx++) {
-            for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
-                chunks.add(new int[]{cx, cz});
-            }
-        }
+        // Чанки, которые надо догрузить: сразу только ближайшие к центру и
+        // строго в пределах бюджета. Раньше площадь чанков материализовалась
+        // целиком (на FARTHEST — 16 641 массив int[]), сортировалась и почти
+        // вся выбрасывалась: на FAR это 4225 лишних аллокаций в главном потоке.
         int budget = chunkBudget(scale);
-        if (budget <= 0) {
-            // Дальний масштаб: только загруженные чанки и кэш мира. Догружать
-            // тысячи чанков ради открытия карты нельзя — сервер встанет.
-            chunks = List.of();
-        } else if (chunks.size() > budget) {
-            // Обрезаем по дальности от центра: дальние края возьмут цвета из
-            // кэша мира, а непойманные останутся тёмными.
-            chunks.sort(Comparator.comparingInt(c -> {
-                int dx = c[0] - centerChunkX;
-                int dz = c[1] - centerChunkZ;
-                return dx * dx + dz * dz;
-            }));
-            plugin.getLogger().fine("HahGps: для карты нужно " + chunks.size()
-                    + " чанков, загружаю " + budget + " ближайших.");
-            chunks = new ArrayList<>(chunks.subList(0, budget));
+        List<int[]> chunks = new ArrayList<>(Math.max(1, budget));
+        if (budget > 0) {
+            int chunkRadius = (radius >> 4) + 1;
+            int side = 2 * chunkRadius + 1;
+            int total = side * side;
+            if (total <= budget) {
+                for (int dx = -chunkRadius; dx <= chunkRadius; dx++) {
+                    for (int dz = -chunkRadius; dz <= chunkRadius; dz++) {
+                        chunks.add(new int[]{centerChunkX + dx, centerChunkZ + dz});
+                    }
+                }
+            } else {
+                // Кольца от центра наружу: ровно budget чанков, без сортировки.
+                chunks.add(new int[]{centerChunkX, centerChunkZ});
+                outer:
+                for (int ring = 1; ring <= chunkRadius; ring++) {
+                    for (int dx = -ring; dx <= ring; dx++) {
+                        for (int dz = -ring; dz <= ring; dz++) {
+                            if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) {
+                                continue;
+                            }
+                            chunks.add(new int[]{centerChunkX + dx, centerChunkZ + dz});
+                            if (chunks.size() >= budget) {
+                                break outer;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         List<CompletableFuture<?>> loads = new ArrayList<>(chunks.size());
         for (int[] c : chunks) {
+            // Уже загруженный чанк трогать не надо: getChunkAtAsync на нём всё
+            // равно делает работу и поднимает событие загрузки.
+            if (world.isChunkLoaded(c[0], c[1])) {
+                continue;
+            }
             try {
                 CompletableFuture<Chunk> load = world.getChunkAtAsync(c[0], c[1], false);
                 loads.add(load.handle((chunk, error) -> null));
@@ -211,7 +289,7 @@ public class TerrainRenderer {
                 sampled.complete(null);
                 return;
             }
-            startSampling(world, centerX, centerZ, bpp, sampled, cancelled, cachedColors);
+            startSampling(world, centerX, centerZ, bpp, sampled, cancelled, cachedColors, key);
         });
 
         return sampled.thenApplyAsync(
@@ -222,42 +300,79 @@ public class TerrainRenderer {
     }
 
 
+    /**
+     * Порционное сэмплирование полотна в главном потоке.
+     *
+     * Задача обязана завершить {@code out} при любом исходе: раньше исключение
+     * внутри тика (Bukkit ловит только RuntimeException — но здесь могли
+     * прилететь и Errors из чанк-API) убивало задачу вместе с future, и карта
+     * молча переставала обновляться до перезапуска. Ссылка на задачу хранится,
+     * чтобы {@link #shutdown()} мог её снять.
+     */
     private void startSampling(World world, int centerX, int centerZ, double bpp,
                                CompletableFuture<int[]> out, BooleanSupplier cancelled,
-                               CachedColors cachedColors) {
+                               CachedColors cachedColors, String surfaceKey) {
         int[] colors = new int[TOTAL_SAMPLES];
         Arrays.fill(colors, NO_DATA);
         int[] cursor = {0};
         BukkitTask[] holder = new BukkitTask[1];
         try {
             holder[0] = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-                if (cancelled != null && cancelled.getAsBoolean()) {
-                    BukkitTask task = holder[0];
-                    if (task != null) {
-                        task.cancel();
+                try {
+                    if (cancelled != null && cancelled.getAsBoolean()) {
+                        cancelQuietly(holder[0]);
+                        out.complete(null);
+                        return;
                     }
-                    out.complete(null);
-                    return;
-                }
-                int budget = SAMPLES_PER_TICK;
-                while (budget-- > 0 && cursor[0] < TOTAL_SAMPLES) {
-                    int index = cursor[0]++;
-                    int px = index % MAP_SIZE;
-                    int pz = index / MAP_SIZE;
-                    int worldX = centerX + (int) ((px - MAP_SIZE / 2) * bpp);
-                    int worldZ = centerZ + (int) ((pz - MAP_SIZE / 2) * bpp);
-                    colors[index] = sampleBlock(world, worldX, worldZ, cachedColors);
-                }
-                if (cursor[0] >= TOTAL_SAMPLES) {
-                    BukkitTask task = holder[0];
-                    if (task != null) {
-                        task.cancel();
+                    int budget = SAMPLES_PER_TICK;
+                    while (budget-- > 0 && cursor[0] < TOTAL_SAMPLES) {
+                        int index = cursor[0]++;
+                        int px = index % MAP_SIZE;
+                        int pz = index / MAP_SIZE;
+                        int worldX = centerX + (int) ((px - MAP_SIZE / 2) * bpp);
+                        int worldZ = centerZ + (int) ((pz - MAP_SIZE / 2) * bpp);
+                        colors[index] = sampleBlock(world, worldX, worldZ, cachedColors);
                     }
-                    out.complete(colors);
+                    if (cursor[0] >= TOTAL_SAMPLES) {
+                        cancelQuietly(holder[0]);
+                        if (surfaceKey != null) {
+                            storeSurface(surfaceKey, colors);
+                        }
+                        out.complete(colors);
+                    }
+                } catch (Throwable t) {
+                    cancelQuietly(holder[0]);
+                    out.completeExceptionally(t);
                 }
             }, 0L, 1L);
+            BukkitTask created = holder[0];
+            if (created != null) {
+                synchronized (samplingTasks) {
+                    samplingTasks.add(created);
+                }
+            }
         } catch (Throwable t) {
             out.completeExceptionally(t);
+        }
+    }
+
+    /** Снять все задачи сэмплирования: выключение плагина не должно их оставлять. */
+    private void cancelSamplingTasks() {
+        synchronized (samplingTasks) {
+            for (BukkitTask task : samplingTasks) {
+                cancelQuietly(task);
+            }
+            samplingTasks.clear();
+        }
+    }
+
+    private static void cancelQuietly(BukkitTask task) {
+        if (task == null) {
+            return;
+        }
+        try {
+            task.cancel();
+        } catch (Throwable ignored) {
         }
     }
 
@@ -341,12 +456,8 @@ public class TerrainRenderer {
                                     List<Poi> pois, List<Location> route, Location playerLoc,
                                     List<Location> others, List<Blip> trackers, World world) {
         BufferedImage image = new BufferedImage(MAP_SIZE, MAP_SIZE, BufferedImage.TYPE_INT_RGB);
-        for (int pz = 0; pz < MAP_SIZE; pz++) {
-            int row = pz * MAP_SIZE;
-            for (int px = 0; px < MAP_SIZE; px++) {
-                image.setRGB(px, pz, colors[row + px]);
-            }
-        }
+        // Одной пачкой вместо 16 384 вызовов setRGB по одному пикселю.
+        image.setRGB(0, 0, MAP_SIZE, MAP_SIZE, colors, 0, MAP_SIZE);
         Graphics2D g = image.createGraphics();
 
         if (route != null && route.size() >= 2) {

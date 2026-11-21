@@ -41,16 +41,26 @@ public class WorldMapCache implements Listener {
     private static final int MIN_IMAGE_SIZE = 128;
     private static final int SAVE_INTERVAL_TICKS = 20 * 60;
     private static final long CATCHUP_TICKS_LIMIT = 20L * 60L;
-    private static final int CATCHUP_CHUNKS_PER_PASS = 256;
+    private static final int CATCHUP_CHUNKS_PER_PASS = 64;
+    /** Чанков из очереди загрузки за один проход (раз в секунду). */
+    private static final int PENDING_CHUNKS_PER_TICK = 48;
+    private static final int PENDING_LIMIT = 4096;
+    /** Ниже этого TPS кэш не снимает новые чанки, чтобы не добавлять лага. */
+    private static final double MIN_TPS_FOR_SAMPLING = 17.0;
 
     private final HahGpsPlugin plugin;
     private final Map<String, Layer> layers = new ConcurrentHashMap<>();
     /** С какого чанка продолжать «догон» уже загруженных чанков. */
     private final Map<String, Integer> catchupCursor = new ConcurrentHashMap<>();
+    /** Чанки, которые надо снять в кэш (загрузились или ещё не сняты). */
+    private final java.util.Queue<PendingChunk> pending = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private final java.util.Set<Long> pendingKeys = ConcurrentHashMap.newKeySet();
     private final ExecutorService io;
     private BukkitTask saveTask;
     private BukkitTask catchupTask;
     private long catchupStartedAt;
+    /** Первый полный проход по уже загруженным чанкам выполнен. */
+    private volatile boolean catchupDone;
 
     public WorldMapCache(HahGpsPlugin plugin) {
         this.plugin = plugin;
@@ -93,6 +103,9 @@ public class WorldMapCache implements Listener {
             layer(world, true);
         }
         catchupStartedAt = System.currentTimeMillis();
+        catchupDone = false;
+        pending.clear();
+        pendingKeys.clear();
         catchupTask = Bukkit.getScheduler().runTaskTimer(plugin, this::catchUp, 40L, 20L);
         saveTask = Bukkit.getScheduler().runTaskTimer(plugin, this::saveIfDirty,
                 SAVE_INTERVAL_TICKS, SAVE_INTERVAL_TICKS);
@@ -109,6 +122,8 @@ public class WorldMapCache implements Listener {
         if (catchup != null) {
             catchup.cancel();
         }
+        pending.clear();
+        pendingKeys.clear();
         for (Layer layer : layers.values()) {
             if (layer.dirty) {
                 layer.dirty = false;
@@ -117,7 +132,9 @@ public class WorldMapCache implements Listener {
         }
         io.shutdown();
         try {
-            if (!io.awaitTermination(3, TimeUnit.SECONDS)) {
+            // Не держим главный поток выключением плагина: PNG-кэш небольшой,
+            // секунды хватает, остальное допишется на демонах.
+            if (!io.awaitTermination(1, TimeUnit.SECONDS)) {
                 io.shutdownNow();
             }
         } catch (InterruptedException e) {
@@ -127,19 +144,34 @@ public class WorldMapCache implements Listener {
         layers.clear();
     }
 
-    /** Исследованный чанк попал в память — снимаем с него цвет. */
+    /** Исследованный чанк попал в память — ставим его в очередь кэша. */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onChunkLoad(ChunkLoadEvent event) {
-        if (!plugin.getConfigManager().isMapWorldCache()) {
+        if (!plugin.getConfigManager().isMapWorldCache() || !plugin.isEnabled()) {
             return;
         }
-        Layer layer = layer(event.getWorld(), true);
-        if (layer != null) {
-            try {
-                sample(event.getWorld(), layer, event.getChunk());
-            } catch (Throwable ignored) {
-            }
+        // Сэмплировать прямо в событии нельзя: карта успевала загрузить
+        // сотни чанков, и на каждый шёл скан поверхности в главном потоке.
+        // Чанк встаёт в очередь, кэш снимает его порцией из своего тика.
+        World world = event.getWorld();
+        if (world == null) {
+            return;
         }
+        int x = event.getChunk().getX();
+        int z = event.getChunk().getZ();
+        long key = chunkKey(world, x, z);
+        if (pendingKeys.size() >= PENDING_LIMIT) {
+            return;
+        }
+        if (pendingKeys.add(key)) {
+            pending.add(new PendingChunk(world, x, z, key));
+        }
+    }
+
+    private static long chunkKey(World world, int x, int z) {
+        return ((long) world.getName().hashCode() << 42)
+                ^ ((long) (x + 0x100000) << 21)
+                ^ (z + 0x100000);
     }
 
     @EventHandler
@@ -149,24 +181,68 @@ public class WorldMapCache implements Listener {
         }
     }
 
+    /** Чанк, который ещё не снят в кэш. */
+    private record PendingChunk(World world, int x, int z, long key) {
+    }
+
+    private void drainPending() {
+        if (pending.isEmpty() || !plugin.getConfigManager().isMapWorldCache()) {
+            return;
+        }
+        // Сервер и так под нагрузкой — кэш подождёт следующего тика.
+        try {
+            if (Bukkit.getTPS()[0] < MIN_TPS_FOR_SAMPLING) {
+                return;
+            }
+        } catch (Throwable ignored) {
+        }
+        int budget = PENDING_CHUNKS_PER_TICK;
+        while (budget-- > 0) {
+            PendingChunk ref = pending.poll();
+            if (ref == null) {
+                return;
+            }
+            pendingKeys.remove(ref.key());
+            if (!ref.world().isChunkLoaded(ref.x(), ref.z())) {
+                continue;
+            }
+            Layer layer = layer(ref.world(), true);
+            if (layer == null) {
+                continue;
+            }
+            try {
+                sample(ref.world(), layer, ref.world().getChunkAt(ref.x(), ref.z()));
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
     /**
      * Чанки, загруженные до регистрации слушателя (перезагрузка плагина,
      * огромный радиус прогрузки), добираем порциями: снимать всё сразу в
-     * главном потоке нельзя.
+     * главном потоке нельзя. Один полный проход, дальше — очередь событий
+     * загрузки, иначе кэш переснимал одни и те же чанки каждую секунду.
      */
     private void catchUp() {
-        if (System.currentTimeMillis() - catchupStartedAt > CATCHUP_TICKS_LIMIT * 50L) {
-            BukkitTask task = catchupTask;
-            catchupTask = null;
-            if (task != null) {
-                task.cancel();
-            }
+        drainPending();
+        if (catchupDone) {
             return;
         }
+        if (System.currentTimeMillis() - catchupStartedAt > CATCHUP_TICKS_LIMIT * 50L) {
+            catchupDone = true;
+            return;
+        }
+        try {
+            if (Bukkit.getTPS()[0] < MIN_TPS_FOR_SAMPLING) {
+                return;
+            }
+        } catch (Throwable ignored) {
+        }
         int budget = CATCHUP_CHUNKS_PER_PASS;
+        boolean anything = false;
         for (World world : Bukkit.getWorlds()) {
             if (budget <= 0) {
-                return;
+                break;
             }
             Layer layer = layer(world, true);
             if (layer == null) {
@@ -181,17 +257,33 @@ public class WorldMapCache implements Listener {
             if (loaded.length == 0) {
                 continue;
             }
+            anything = true;
             int start = Math.floorMod(catchupCursor.getOrDefault(world.getName(), 0), loaded.length);
-            int count = Math.min(budget, loaded.length);
+            int count = Math.min(budget, loaded.length - start);
             for (int i = 0; i < count; i++) {
-                Chunk chunk = loaded[(start + i) % loaded.length];
                 try {
-                    sample(world, layer, chunk);
+                    sample(world, layer, loaded[start + i]);
                 } catch (Throwable ignored) {
                 }
             }
             catchupCursor.put(world.getName(), (start + count) % loaded.length);
             budget -= count;
+        }
+        // Пока проход не упёрся в бюджет — все загруженные чанки уже сняты.
+        if (!anything || budget == CATCHUP_CHUNKS_PER_PASS) {
+            catchupDone = true;
+            return;
+        }
+        boolean allWrapped = true;
+        for (World world : Bukkit.getWorlds()) {
+            int cursor = catchupCursor.getOrDefault(world.getName(), 0);
+            if (cursor != 0) {
+                allWrapped = false;
+                break;
+            }
+        }
+        if (allWrapped && budget > 0) {
+            catchupDone = true;
         }
     }
 
@@ -201,7 +293,10 @@ public class WorldMapCache implements Listener {
 
     /** Цвет поверхности из кэша; 0 — этой точки в кэше нет. */
     public int colorAt(World world, int x, int z) {
-        Layer layer = layer(world, false);
+        return colorAt(layer(world, false), x, z);
+    }
+
+    private static int colorAt(Layer layer, int x, int z) {
         if (layer == null) {
             return 0;
         }
@@ -211,6 +306,19 @@ public class WorldMapCache implements Listener {
             return 0;
         }
         return layer.colors[pz * layer.size + px];
+    }
+
+    /**
+     * Слой мира, разрешённый один раз на рендер карты.
+     *
+     * Раньше на каждый тёмный пиксель полотна вызывался {@code colorAt}, а он
+     * делал {@code ConcurrentHashMap.get} по имени мира плюс два floorDiv —
+     * до 16 384 поисков в главном потоке за рендер. Теперь карта один раз
+     * берёт снимок слоя и читает из него напрямую.
+     */
+    public TerrainRenderer.CachedColors snapshot(World world) {
+        Layer layer = layer(world, true);
+        return layer == null ? null : (cachedWorld, x, z) -> colorAt(layer, x, z);
     }
 
     // ------------------------------------------------------------------
@@ -314,16 +422,14 @@ public class WorldMapCache implements Listener {
             }
             int[] copy = layer.colors.clone();
             BufferedImage image = new BufferedImage(layer.size, layer.size, BufferedImage.TYPE_INT_ARGB);
-            for (int pz = 0; pz < layer.size; pz++) {
-                int row = pz * layer.size;
-                for (int px = 0; px < layer.size; px++) {
-                    int color = copy[row + px];
-                    if (color != 0) {
-                        image.setRGB(px, pz, color);
-                    }
-                }
-            }
-            ImageIO.write(image, "png", pngFile(layer.world));
+            image.setRGB(0, 0, layer.size, layer.size, copy, 0, layer.size);
+            File target = pngFile(layer.world);
+            // Пишем в временный файл и переносим: прерванная запись не должна
+            // оставить битый PNG вместо рабочего кэша.
+            File temp = new File(target.getParentFile(), target.getName() + ".tmp");
+            ImageIO.write(image, "png", temp);
+            Files.move(temp.toPath(), target.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             Files.writeString(metaFile(layer.world).toPath(),
                     layer.minX + " " + layer.minZ + " " + layer.bpp + " " + layer.size,
                     StandardCharsets.UTF_8);
@@ -358,12 +464,19 @@ public class WorldMapCache implements Listener {
                     || image.getWidth() != layer.size || image.getHeight() != layer.size) {
                 return;
             }
+            // Только пустые пиксели: пока PNG читался в фоне, главный поток уже
+            // снял с загруженных чанков свежие цвета — затирать их нельзя.
+            int[] colors = layer.colors;
             for (int pz = 0; pz < layer.size; pz++) {
                 int row = pz * layer.size;
                 for (int px = 0; px < layer.size; px++) {
+                    int index = row + px;
+                    if (colors[index] != 0) {
+                        continue;
+                    }
                     int argb = image.getRGB(px, pz);
                     if ((argb >>> 24) != 0) {
-                        layer.colors[row + px] = argb | 0xFF000000;
+                        colors[index] = argb | 0xFF000000;
                     }
                 }
             }

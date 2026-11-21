@@ -8,6 +8,7 @@ import ru.hahgps.gui.GuiManager;
 import ru.hahgps.gui.InputManager;
 import ru.hahgps.listener.ChatInputListener;
 import ru.hahgps.listener.GuiListener;
+import ru.hahgps.listener.MapCacheInvalidateListener;
 import ru.hahgps.listener.MapPanListener;
 import ru.hahgps.listener.PlayerQuitListener;
 import ru.hahgps.listener.RouteRecordListener;
@@ -335,6 +336,7 @@ public class HahGpsPlugin extends JavaPlugin {
                     Bukkit.getPluginManager().registerEvents(new RouteRecordListener(this), this);
                     Bukkit.getPluginManager().registerEvents(new TrackerListener(this), this);
                     Bukkit.getPluginManager().registerEvents(new MapPanListener(this), this);
+                    Bukkit.getPluginManager().registerEvents(new MapCacheInvalidateListener(this), this);
                     if (worldMapCache != null) {
                         Bukkit.getPluginManager().registerEvents(worldMapCache, this);
                         worldMapCache.start();

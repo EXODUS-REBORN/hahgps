@@ -120,6 +120,8 @@ public class TrackerService {
      */
     private final Map<Integer, Long> wetSince = new ConcurrentHashMap<>();
     private final Set<Integer> dirty = ConcurrentHashMap.newKeySet();
+    /** Когда последний раз писали в лог про ошибку трекера (не чаще раза в минуту). */
+    private final Map<Integer, Long> tickFailureLogged = new ConcurrentHashMap<>();
     /** Коды, которые прямо сейчас вставляются в БД: двойной клик не создаст два трекера. */
     private final Set<String> placingCodes = ConcurrentHashMap.newKeySet();
     /** С какого момента привязанная сущность не находится (для снятия «висящих» трекеров). */
@@ -240,11 +242,19 @@ public class TrackerService {
     public synchronized void stop() {
         stopTask();
         thrownVisuals.dispose();
-        // Досохраняем всё, что успело сдвинуться: иначе после рестарта трекер
-        // окажется там, где был при прошлом сохранении.
-        for (Tracker tracker : trackers.values()) {
+        // Досохраняем только сдвинувшееся: остальное уже лежит в БД, а полная
+        // перезапись всех трекеров не влезала в две секунды shutdown пула.
+        List<Tracker> toSave = new ArrayList<>(dirty.size());
+        for (Integer id : dirty) {
+            Tracker tracked = trackers.get(id);
+            if (tracked != null) {
+                toSave.add(snapshotOf(tracked));
+            }
+        }
+        dirty.clear();
+        for (Tracker snapshot : toSave) {
             try {
-                data.updateTracker(tracker);
+                data.updateTracker(snapshot);
             } catch (Throwable ignored) {
             }
         }
@@ -277,11 +287,20 @@ public class TrackerService {
     // ------------------------------------------------------------------
 
     private void tick() {
-        if (!plugin.getConfigManager().isItrakEnabled()) {
+        ConfigManager config = plugin.getConfigManager();
+        if (!config.isItrakEnabled()) {
             return;
         }
+        // Все настройки читаются один раз на тик, а не на каждый трекер:
+        // каждый getX() — это разбор пути и обход YAML.
         long now = System.currentTimeMillis();
-        long stationaryMillis = plugin.getConfigManager().getItrakStationaryMillis();
+        long stationaryMillis = config.getItrakStationaryMillis();
+        boolean stationaryNotify = config.isItrakStationaryNotify();
+        boolean waterCurrent = config.isItrakWaterCurrent();
+        int intervalTicks = config.getItrakUpdateInterval();
+        double driftSpeed = config.getItrakWaterDriftSpeed();
+        double fallSpeed = config.getItrakWaterFallSpeed();
+        long rainMillis = config.getItrakRainRuinMillis();
 
         for (Tracker tracker : trackers.values()) {
             // Промокший трекер замер: ни за носителем не ходит, ни по воде не
@@ -289,26 +308,47 @@ public class TrackerService {
             if (tracker.isRuined()) {
                 continue;
             }
-            updateFromEntity(tracker, now);
-            updateWater(tracker, now);
-            updateRain(tracker, now);
-            if (stationaryMillis > 0 && tracker.isStationary(now, stationaryMillis)) {
-                if (stationaryNotified.add(tracker.getId())
-                        && plugin.getConfigManager().isItrakStationaryNotify()) {
-                    notifyStationary(tracker, now);
+            try {
+                updateFromEntity(tracker, now);
+                updateWater(tracker, now, waterCurrent, intervalTicks, driftSpeed, fallSpeed);
+                updateRain(tracker, now, rainMillis);
+                if (stationaryMillis > 0 && tracker.isStationary(now, stationaryMillis)) {
+                    if (stationaryNotified.add(tracker.getId()) && stationaryNotify) {
+                        notifyStationary(tracker, now);
+                    }
+                } else {
+                    stationaryNotified.remove(tracker.getId());
                 }
-            } else {
-                stationaryNotified.remove(tracker.getId());
+            } catch (Throwable t) {
+                // Один сломанный трекер не должен ронять весь тик: иначе
+                // сохранение, слежение и сообщения стоят до перезапуска.
+                logTickFailure(tracker, t);
             }
         }
 
-        if (plugin.getConfigManager().isItrakParticles()) {
-            spawnParticles();
+        try {
+            if (config.isItrakParticles()) {
+                spawnParticles();
+            }
+            spawnHighlights(now);
+            refreshSignalSnapshots();
+            pushWatchMessages(now);
+            saveDirty(now);
+        } catch (Throwable t) {
+            plugin.getLogger().log(Level.WARNING, "HahGps: пост-обработка тика iTrak упала", t);
         }
-        spawnHighlights(now);
-        refreshSignalSnapshots();
-        pushWatchMessages(now);
-        saveDirty(now);
+    }
+
+    /** Ошибка одного трекера: пишем не чаще раза в минуту, чтобы не залить лог. */
+    private void logTickFailure(Tracker tracker, Throwable error) {
+        long now = System.currentTimeMillis();
+        Long last = tickFailureLogged.get(tracker.getId());
+        if (last != null && now - last < 60_000L) {
+            return;
+        }
+        tickFailureLogged.put(tracker.getId(), now);
+        plugin.getLogger().log(Level.WARNING,
+                "HahGps: тик трекера " + tracker.getCode() + " упал", error);
     }
 
     /** Кому сообщать о событиях трекера: владелец и все следящие. */
@@ -347,10 +387,13 @@ public class TrackerService {
                         || !LocationUtil.sameWorld(player.getWorld(), location.getWorld())) {
                     continue;
                 }
-                Particle.DustOptions dust = new Particle.DustOptions(tracker.getColor().bukkitColor(), 1.1f);
-                player.spawnParticle(Particle.DUST, location.clone().add(0, 0.7, 0),
+                Particle.DustOptions dust = dustFor(tracker.getColor(), 1.1f);
+                double x = location.getX();
+                double y = location.getY();
+                double z = location.getZ();
+                player.spawnParticle(Particle.DUST, x, y + 0.7, z,
                         24, 0.9, 0.9, 0.9, 0, dust);
-                player.spawnParticle(Particle.END_ROD, location.clone().add(0, 1.1, 0),
+                player.spawnParticle(Particle.END_ROD, x, y + 1.1, z,
                         4, 0.25, 0.35, 0.25, 0.01);
             }
         }
@@ -454,9 +497,9 @@ public class TrackerService {
      * Чанк, в котором стоит трекер, не грузим: если он выгружен, трекер
      * просто ждёт на последних координатах.
      */
-    private void updateWater(Tracker tracker, long now) {
-        if (tracker.isAttached() || tracker.isSunk() || !tracker.isWater()
-                || !plugin.getConfigManager().isItrakWaterCurrent()) {
+    private void updateWater(Tracker tracker, long now, boolean waterCurrent,
+                             int intervalTicks, double driftSpeed, double fallSpeed) {
+        if (tracker.isAttached() || tracker.isSunk() || !tracker.isWater() || !waterCurrent) {
             return;
         }
         World world = Bukkit.getWorld(tracker.getWorld());
@@ -468,11 +511,9 @@ public class TrackerService {
         if (!world.isChunkLoaded(bx >> 4, bz >> 4)) {
             return;
         }
-        double dt = plugin.getConfigManager().getItrakUpdateInterval() / 20.0;
+        double dt = intervalTicks / 20.0;
         WaterPhysics.Pose pose = WaterPhysics.floatStep(tracker.getX(), tracker.getY(), tracker.getZ(),
-                new WorldTerrain(world), dt,
-                plugin.getConfigManager().getItrakWaterDriftSpeed(),
-                plugin.getConfigManager().getItrakWaterFallSpeed());
+                new WorldTerrain(world), dt, driftSpeed, fallSpeed);
         double dx = pose.x() - tracker.getX();
         double dy = pose.y() - tracker.getY();
         double dz = pose.z() - tracker.getZ();
@@ -522,8 +563,7 @@ public class TrackerService {
      * Водонепроницаемый не мокнет вообще, под крышей и в воде счётчик
      * сбрасывается — как только дождь кончился, трекер снова сухой.
      */
-    private void updateRain(Tracker tracker, long now) {
-        long limit = plugin.getConfigManager().getItrakRainRuinMillis();
+    private void updateRain(Tracker tracker, long now, long limit) {
         if (limit <= 0 || tracker.isWaterproof() || !tracker.hasSignal()) {
             wetSince.remove(tracker.getId());
             return;
@@ -541,11 +581,16 @@ public class TrackerService {
 
     /** Мокнет ли трекер: гроза в мире и над ним открытое небо. */
     private boolean isExposedToRain(Tracker tracker) {
+        // Дешёвая проверка первой: без грозы незачем даже искать носителя.
+        World world = tracker.getWorld() == null ? null : Bukkit.getWorld(tracker.getWorld());
+        if (world == null || !world.hasStorm()) {
+            return false;
+        }
         Location at = physicalLocation(tracker);
         if (at == null || at.getWorld() == null) {
             return false;
         }
-        World world = at.getWorld();
+        world = at.getWorld();
         if (!world.hasStorm()) {
             return false;
         }
@@ -628,41 +673,73 @@ public class TrackerService {
         double radius = plugin.getConfigManager().getItrakParticleRadius();
         double radiusSquared = radius * radius;
         boolean ownerOnly = plugin.getConfigManager().isItrakParticlesOwnerOnly();
-        List<Player> players = new ArrayList<>(Bukkit.getOnlinePlayers());
-        if (players.isEmpty()) {
-            return;
-        }
-        for (Tracker tracker : trackers.values()) {
-            Location location = tracker.getLocation();
-            if (location == null) {
+
+        // Снимок игроков один раз на тик: мир и координаты в «сыром» виде.
+        // Раньше на каждую пару «трекер × игрок» создавался Location, а на
+        // каждую отправку — ещё и клон позиции.
+        Map<String, List<Viewer>> viewers = new java.util.HashMap<>();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            Location at = player.getLocation();
+            World world = at.getWorld();
+            if (world == null) {
                 continue;
             }
-            World world = location.getWorld();
-            if (world == null || !world.isChunkLoaded(location.getBlockX() >> 4, location.getBlockZ() >> 4)) {
+            viewers.computeIfAbsent(world.getName(), key -> new ArrayList<>(4))
+                    .add(new Viewer(player, at.getX(), at.getY(), at.getZ()));
+        }
+        if (viewers.isEmpty()) {
+            return;
+        }
+
+        for (Tracker tracker : trackers.values()) {
+            String worldName = tracker.getWorld();
+            if (worldName == null) {
+                continue;
+            }
+            List<Viewer> here = viewers.get(worldName);
+            if (here == null || here.isEmpty()) {
+                continue;
+            }
+            World world = Bukkit.getWorld(worldName);
+            double x = tracker.getX();
+            double y = tracker.getY() + 0.65;
+            double z = tracker.getZ();
+            if (world == null || !world.isChunkLoaded(floor(x) >> 4, floor(z) >> 4)) {
                 continue;
             }
             UUID owner = tracker.getOwnerUuid();
-            float size = tracker.hasSignal() ? 0.9f : 0.45f;
-            Particle.DustOptions dust = new Particle.DustOptions(tracker.getColor().bukkitColor(), size);
-            for (Player player : players) {
-                if (ownerOnly && (owner == null || !owner.equals(player.getUniqueId()))) {
+            Particle.DustOptions dust = null;
+            for (Viewer viewer : here) {
+                if (ownerOnly && (owner == null || !owner.equals(viewer.player().getUniqueId()))) {
                     continue;
                 }
-                if (!LocationUtil.sameWorld(player.getWorld(), world)) {
-                    continue;
-                }
-                Location eye = player.getLocation();
-                double dx = eye.getX() - location.getX();
-                double dy = eye.getY() - location.getY();
-                double dz = eye.getZ() - location.getZ();
+                double dx = viewer.x() - x;
+                double dy = viewer.y() - y;
+                double dz = viewer.z() - z;
                 if (dx * dx + dy * dy + dz * dz > radiusSquared) {
                     continue;
                 }
-                player.spawnParticle(Particle.DUST,
-                        location.clone().add(0, 0.65, 0), 3,
+                if (dust == null) {
+                    float size = tracker.hasSignal() ? 0.9f : 0.45f;
+                    dust = dustFor(tracker.getColor(), size);
+                }
+                viewer.player().spawnParticle(Particle.DUST, x, y, z, 3,
                         0.18, 0.18, 0.18, 0, dust);
             }
         }
+    }
+
+    /** Игрок и его координаты на момент тика — без живого Location. */
+    private record Viewer(Player player, double x, double y, double z) {
+    }
+
+    /** Пылинки маркера кэшируются: один и тот же цвет/размер не создаётся заново. */
+    private final Map<String, Particle.DustOptions> dustCache = new ConcurrentHashMap<>();
+
+    private Particle.DustOptions dustFor(TrackerColor color, float size) {
+        String key = color.name() + '|' + size;
+        return dustCache.computeIfAbsent(key, ignored ->
+                new Particle.DustOptions(color.bukkitColor(), size));
     }
 
     /**
@@ -910,9 +987,13 @@ public class TrackerService {
                     if (created == null) {
                         return new PlaceOutcome(null, PlaceResult.FAILED);
                     }
-                    created.setWater(floating);
-                    TrackerCodes.reserve(created.getCode());
-                    trackers.put(created.getId(), created);
+                    // Публикуем состояние в главном потоке: created приходит из
+                    // пула БД, а tick() читает поля трекера без синхронизации.
+                    runMain(() -> {
+                        created.setWater(floating);
+                        TrackerCodes.reserve(created.getCode());
+                        trackers.put(created.getId(), created);
+                    });
                     return new PlaceOutcome(created, PlaceResult.OK);
                 });
     }
@@ -1051,6 +1132,13 @@ public class TrackerService {
 
     /** Снять трекер со всех подписок и убрать из памяти (только главный поток). */
     private void forgetTracker(Tracker tracker) {
+        if (tracker != null) {
+            wetSince.remove(tracker.getId());
+            tickFailureLogged.remove(tracker.getId());
+            for (Map<Integer, LastKnown> known : lastKnown.values()) {
+                known.remove(tracker.getId());
+            }
+        }
         unwatchAll(tracker.getId());
         stationaryNotified.remove(tracker.getId());
         lostSince.remove(tracker.getId());
@@ -1355,10 +1443,15 @@ public class TrackerService {
 
     /** Просроченные записи не копятся до перезапуска сервера. */
     private void pruneScanCooldowns() {
+        long now = System.currentTimeMillis();
+        // Попытки без перезарядки копятся у игроков, которые больше не сканируют.
+        if (scanAttempts.size() > 256) {
+            scanAttempts.keySet().removeIf(id -> !scanCooldownEnd.containsKey(id)
+                    && Bukkit.getPlayer(id) == null);
+        }
         if (scanCooldownEnd.size() < 256) {
             return;
         }
-        long now = System.currentTimeMillis();
         scanCooldownEnd.entrySet().removeIf(entry -> entry.getValue() <= now);
     }
 
@@ -1464,10 +1557,22 @@ public class TrackerService {
         if (viewer == null || tracker == null || live == null) {
             return;
         }
-        lastKnown.computeIfAbsent(viewer.getUniqueId(), key -> new ConcurrentHashMap<>())
-                .put(tracker.getId(), new LastKnown(
-                        live.getWorld() == null ? null : live.getWorld().getName(),
-                        live.getX(), live.getY(), live.getZ(), System.currentTimeMillis()));
+        Map<Integer, LastKnown> known =
+                lastKnown.computeIfAbsent(viewer.getUniqueId(), key -> new ConcurrentHashMap<>());
+        LastKnown previous = known.get(tracker.getId());
+        long now = System.currentTimeMillis();
+        // Стоящий трекер не переписывает отметку каждую секунду: пишем, только
+        // если он сдвинулся больше чем на блок или прошло пять секунд.
+        if (previous != null
+                && now - previous.at() < 5_000L
+                && Math.abs(previous.x() - live.getX()) < 1.0
+                && Math.abs(previous.y() - live.getY()) < 1.0
+                && Math.abs(previous.z() - live.getZ()) < 1.0) {
+            return;
+        }
+        known.put(tracker.getId(), new LastKnown(
+                live.getWorld() == null ? null : live.getWorld().getName(),
+                live.getX(), live.getY(), live.getZ(), now));
     }
 
     private LastKnown recallLastKnown(Player viewer, Tracker tracker) {
@@ -1487,24 +1592,47 @@ public class TrackerService {
         if (range <= 0 || trackers.isEmpty()) {
             return;
         }
+        // Владельцы: один проход по трекерам.
         for (Tracker tracker : trackers.values()) {
-            if (tracker.isRuined()) {
+            if (tracker.isRuined() || tracker.getOwnerUuid() == null) {
                 continue;
             }
-            Location live = tracker.liveLocation();
-            if (live == null) {
+            Player owner = Bukkit.getPlayer(tracker.getOwnerUuid());
+            if (owner == null || !owner.isOnline()) {
                 continue;
             }
-            for (UUID id : recipientsOf(tracker)) {
-                Player player = Bukkit.getPlayer(id);
-                if (player == null || !player.isOnline()) {
+            rememberIfInRange(owner, tracker, range);
+        }
+        // Следящие: проход по подпискам, а не по трекерам. Раньше на каждый
+        // трекер собирался LinkedHashSet из всех следящих — O(трекеры × следящие).
+        for (Map.Entry<UUID, Set<Integer>> entry : watchedByPlayer.entrySet()) {
+            Player player = Bukkit.getPlayer(entry.getKey());
+            if (player == null || !player.isOnline()) {
+                continue;
+            }
+            for (Integer id : entry.getValue()) {
+                Tracker tracker = trackers.get(id);
+                if (tracker == null || tracker.isRuined()) {
                     continue;
                 }
-                if (LocationUtil.distance(player.getLocation(), live) <= range) {
-                    rememberLastKnown(player, tracker, live);
+                if (tracker.getOwnerUuid() != null
+                        && tracker.getOwnerUuid().equals(player.getUniqueId())) {
+                    continue;
                 }
+                rememberIfInRange(player, tracker, range);
             }
         }
+    }
+
+    private void rememberIfInRange(Player player, Tracker tracker, int range) {
+        Location live = tracker.liveLocation();
+        if (live == null) {
+            return;
+        }
+        if (!SignalRegion.inRange(LocationUtil.distance(player.getLocation(), live), range)) {
+            return;
+        }
+        rememberLastKnown(player, tracker, live);
     }
 
     public void watch(Player player, Tracker tracker) {
@@ -1523,6 +1651,11 @@ public class TrackerService {
         Set<Integer> ids = watchedByPlayer.get(player.getUniqueId());
         if (ids != null) {
             ids.remove(tracker.getId());
+            // Пустой набор не оставляем: иначе карта подписок растёт, а тик
+            // обходит игроков без единой подписки.
+            if (ids.isEmpty()) {
+                watchedByPlayer.remove(player.getUniqueId(), ids);
+            }
         }
     }
 
@@ -1625,9 +1758,10 @@ public class TrackerService {
             dirty.add(tracker.getId());
             // Сохраняем сразу: после выхода игрока сервер может уйти в
             // рестарт раньше, чем сработает периодическое сохранение.
-            data.updateTracker(tracker).exceptionally(error -> {
+            Tracker snapshot = snapshotOf(tracker);
+            data.updateTracker(snapshot).exceptionally(error -> {
                 plugin.getLogger().log(Level.WARNING, "HahGps: не удалось сохранить трекер "
-                        + tracker.getCode() + " при выходе игрока", error);
+                        + snapshot.getCode() + " при выходе игрока", error);
                 return false;
             });
         }
@@ -1925,6 +2059,11 @@ public class TrackerService {
      * точных данных, и это важнее «в сети»/«нет сигнала».
      */
     public String statusText(Player viewer, Tracker tracker) {
+        return statusText(viewer == null || tracker == null ? null : signal(viewer, tracker), tracker);
+    }
+
+    /** То же, но по уже посчитанному сигналу — GUI не спрашивает его трижды за кадр. */
+    public String statusText(Signal signal, Tracker tracker) {
         MessagesManager messages = plugin.getMessages();
         if (tracker == null) {
             return "?";
@@ -1938,7 +2077,7 @@ public class TrackerService {
         if (tracker.isCarrierOffline()) {
             return messages.get("itrak-status-offline");
         }
-        if (viewer != null && !signal(viewer, tracker).inRange()) {
+        if (signal != null && !signal.inRange()) {
             return messages.get("itrak-status-out-of-range");
         }
         return switch (tracker.status()) {
@@ -1955,6 +2094,17 @@ public class TrackerService {
             return stateText(tracker, now);
         }
         if (viewer != null && tracker != null && !signal(viewer, tracker).inRange()) {
+            return plugin.getMessages().get("itrak-state-unknown");
+        }
+        return stateText(tracker, now);
+    }
+
+    /** То же по уже посчитанному сигналу — без повторного поиска сущности. */
+    public String stateText(Signal signal, Tracker tracker, long now) {
+        if (tracker != null && tracker.isRuined()) {
+            return stateText(tracker, now);
+        }
+        if (signal != null && !signal.inRange()) {
             return plugin.getMessages().get("itrak-state-unknown");
         }
         return stateText(tracker, now);

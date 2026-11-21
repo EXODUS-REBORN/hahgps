@@ -63,8 +63,16 @@ public class ItrakTerminalService {
         if (block == null || block.getWorld() == null) {
             return null;
         }
-        return terminals.get(TrackerTerminal.key(block.getWorld().getName(),
+        TrackerTerminal terminal = terminals.get(TrackerTerminal.key(block.getWorld().getName(),
                 block.getX(), block.getY(), block.getZ()));
+        if (terminal == null) {
+            return null;
+        }
+        // Реестр может помнить блок, который уже сломали взрывом или поршнем.
+        if (block.getType() != Material.LODESTONE) {
+            return null;
+        }
+        return terminal;
     }
 
     public boolean isTerminal(Block block) {
@@ -109,10 +117,12 @@ public class ItrakTerminalService {
                 player.getUniqueId(), player.getName(), now);
         return data.createTerminal(candidate).thenApply(created -> {
             if (created == null) {
-                block.setBlockData(previous, false);
+                // Возврат блока — в главном потоке: created приходит из пула БД,
+                // и setBlockData оттуда Paper запрещает.
+                plugin.getDataService().runSync(() -> block.setBlockData(previous, false));
                 return new Outcome(null, PlaceResult.FAILED);
             }
-            terminals.put(created.key(), created);
+            plugin.getDataService().runSync(() -> terminals.put(created.key(), created));
             return new Outcome(created, PlaceResult.OK);
         });
     }
@@ -123,7 +133,15 @@ public class ItrakTerminalService {
         if (terminal == null) {
             return CompletableFuture.completedFuture(false);
         }
-        terminals.remove(terminal.key());
-        return data.deleteTerminal(terminal.world(), terminal.x(), terminal.y(), terminal.z());
+        // Из памяти убираем только после успешного удаления из БД: иначе при
+        // сбое остаётся живая строка без блока (после рестарта терминал
+        // «воскресал» на этом месте).
+        return data.deleteTerminal(terminal.world(), terminal.x(), terminal.y(), terminal.z())
+                .thenApply(deleted -> {
+                    if (Boolean.TRUE.equals(deleted)) {
+                        plugin.getDataService().runSync(() -> terminals.remove(terminal.key()));
+                    }
+                    return Boolean.TRUE.equals(deleted);
+                });
     }
 }

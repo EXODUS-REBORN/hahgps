@@ -2,6 +2,7 @@ package ru.hahgps.listener;
 
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
+import org.bukkit.Material;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -117,7 +118,9 @@ public class TrackerListener implements Listener {
             return;
         }
 
-        healTrackerItem(player);
+        if (isTrackerMaterial(item)) {
+            healTrackerItem(player);
+        }
         ItemFactory.TrackerSpec spec = ItemFactory.readTracker(
                 player.getInventory().getItemInMainHand());
         if (spec == null) {
@@ -189,11 +192,30 @@ public class TrackerListener implements Listener {
      */
     private void healTrackerItem(Player player) {
         ItemStack hand = player.getInventory().getItemInMainHand();
+        // Раньше healTrackerItem вызывался на любом клике любым предметом и
+        // копировал мету ради проверки. Теперь сначала материал.
+        if (!isTrackerMaterial(hand)) {
+            return;
+        }
         ItemStack healed = ItemFactory.healedTrackerItem(hand);
         if (healed != null) {
             healed.setAmount(Math.max(1, hand.getAmount()));
             player.getInventory().setItemInMainHand(healed);
         }
+    }
+
+    /** Материал принадлежит трекеру (любой из восьми цветов). */
+    private static boolean isTrackerMaterial(ItemStack item) {
+        if (item == null || item.getType().isAir()) {
+            return false;
+        }
+        Material type = item.getType();
+        for (ru.hahgps.model.TrackerColor color : ru.hahgps.model.TrackerColor.values()) {
+            if (color.getMaterial() == type) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ------------------------------------------------------------------
@@ -224,7 +246,9 @@ public class TrackerListener implements Listener {
             return;
         }
 
-        healTrackerItem(player);
+        if (isTrackerMaterial(item)) {
+            healTrackerItem(player);
+        }
         ItemFactory.TrackerSpec spec = ItemFactory.readTracker(
                 player.getInventory().getItemInMainHand());
         if (spec == null) {
@@ -660,6 +684,11 @@ public class TrackerListener implements Listener {
 
     @EventHandler
     public void onEntityDeath(EntityDeathEvent event) {
+        // Игроков обрабатывает onPlayerDeath: PlayerDeathEvent — подкласс
+        // EntityDeathEvent, и без этой отсечки смерть игрока приходила дважды.
+        if (event.getEntity() instanceof Player) {
+            return;
+        }
         TrackerService service = plugin.getTrackerService();
         if (service != null) {
             service.onEntityGone(event.getEntity());
@@ -668,9 +697,9 @@ public class TrackerListener implements Listener {
 
     /**
      * Смерть игрока — отдельное событие: {@link EntityDeathEvent} для игроков
-     * не приходит (у {@code PlayerDeathEvent} свой список обработчиков).
-     * Без него трекер оставался «на игроке» после респавна: запись ссылалась
-     * на мёртвую сущность, а локатор продолжал показывать её в точке смерти.
+     * игнорируется в {@link #onEntityDeath(EntityDeathEvent)}. Без него трекер
+     * оставался «на игроке» после респавна: запись ссылалась на мёртвую
+     * сущность, а локатор продолжал показывать её в точке смерти.
      */
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {

@@ -10,6 +10,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 import ru.hahgps.HahGpsPlugin;
+import ru.hahgps.item.ItemFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -153,31 +154,61 @@ public final class ThrownTrackerVisuals {
     }
 
     private void sync() {
-        if (flying.isEmpty()) {
-            stopTask();
-            return;
+        try {
+            if (flying.isEmpty()) {
+                stopTask();
+                return;
+            }
+            List<UUID> gone = new ArrayList<>();
+            List<Flying> expired = new ArrayList<>();
+            for (Map.Entry<UUID, Flying> entry : flying.entrySet()) {
+                Flying fly = entry.getValue();
+                if (!fly.projectile.isValid() || fly.display == null || !fly.display.isValid()) {
+                    gone.add(entry.getKey());
+                    continue;
+                }
+                if (++fly.age > MAX_AGE_TICKS) {
+                    expired.add(fly);
+                    gone.add(entry.getKey());
+                    continue;
+                }
+                try {
+                    fly.display.teleport(fly.projectile.getLocation());
+                    fly.display.setRotation((fly.age * SPIN_PER_TICK) % 360f,
+                            pitchOf(fly.projectile.getVelocity()));
+                } catch (Throwable t) {
+                    gone.add(entry.getKey());
+                }
+            }
+            for (UUID id : gone) {
+                remove(flying.remove(id));
+            }
+            // Снаряд, который так ни во что и не попал, раньше просто исчезал
+            // без события попадания: трекер пропадал вместе с предметом.
+            // Возвращаем предмет туда, где снаряд закончил полёт.
+            for (Flying fly : expired) {
+                refund(fly.projectile);
+            }
+        } catch (Throwable t) {
+            // Одна ошибка не должна навсегда убивать анимацию и бросать
+            // висящие ItemDisplay в мире: чистим показанное и даём задаче
+            // перезапуститься при следующем броске.
+            plugin.getLogger().log(Level.FINE, "HahGps: анимация броска упала", t);
+            dispose();
         }
-        List<UUID> gone = new ArrayList<>();
-        for (Map.Entry<UUID, Flying> entry : flying.entrySet()) {
-            Flying fly = entry.getValue();
-            if (!fly.projectile.isValid() || fly.display == null || !fly.display.isValid()) {
-                gone.add(entry.getKey());
-                continue;
+    }
+
+    /** Предмет обратно: брошенный трекер не должен исчезать молча. */
+    private void refund(Projectile projectile) {
+        try {
+            ItemFactory.TrackerSpec spec = ItemFactory.readSpec(projectile);
+            World world = projectile.getWorld();
+            Location at = projectile.getLocation();
+            projectile.remove();
+            if (spec != null && world != null && at != null) {
+                world.dropItemNaturally(at, ItemFactory.trackerItem(spec));
             }
-            if (++fly.age > MAX_AGE_TICKS) {
-                fly.projectile.remove();
-                gone.add(entry.getKey());
-                continue;
-            }
-            try {
-                fly.display.teleport(fly.projectile.getLocation());
-                fly.display.setRotation((fly.age * SPIN_PER_TICK) % 360f, pitchOf(fly.projectile.getVelocity()));
-            } catch (Throwable t) {
-                gone.add(entry.getKey());
-            }
-        }
-        for (UUID id : gone) {
-            remove(flying.remove(id));
+        } catch (Throwable ignored) {
         }
     }
 

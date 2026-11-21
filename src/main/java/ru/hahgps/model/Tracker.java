@@ -21,6 +21,9 @@ public class Tracker {
     /** Порог смещения: дрожание сущности на месте не считается движением. */
     public static final double MOVE_THRESHOLD = 0.35;
 
+    /** Накопленное смещение, после которого трекер считается сдвинувшимся. */
+    private static final double PERSIST_THRESHOLD = 1.0;
+
     public enum Status {
         LIVE,
         NO_SIGNAL,
@@ -56,6 +59,8 @@ public class Tracker {
     private long ruinedAt;
     private final long placedAt;
     private long movedAt;
+    /** Смещение, накопленное после последней отметки «сдвинулся». */
+    private transient double pendingMove;
     private long updatedAt;
 
     /** Живой сигнал: у привязанного к сущности трекера снимается, если сущности нет. */
@@ -305,16 +310,24 @@ public class Tracker {
         double dx = newX - x;
         double dy = newY - y;
         double dz = newZ - z;
-        double moved2 = dx * dx + dy * dy + dz * dz;
-        boolean moved = moved2 > MOVE_THRESHOLD * MOVE_THRESHOLD;
+        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
         this.x = newX;
         this.y = newY;
         this.z = newZ;
         this.updatedAt = now;
-        if (moved) {
-            this.movedAt = now;
+        if (distance <= 0.0) {
+            return false;
         }
-        return moved;
+        // Копим смещение с прошлой отметки: медленный носитель (лодка, вагонетка)
+        // за один тик сдвигается меньше порога, и раньше его координаты не
+        // сохранялись вовсе, а трекер считался неподвижным.
+        pendingMove += distance;
+        if (distance > MOVE_THRESHOLD || pendingMove > PERSIST_THRESHOLD) {
+            this.movedAt = now;
+            this.pendingMove = 0.0;
+            return true;
+        }
+        return false;
     }
 
     /** Сколько миллисекунд трекер стоит на месте. */
@@ -331,6 +344,7 @@ public class Tracker {
     public void markMoved(long now) {
         this.movedAt = now;
         this.updatedAt = now;
+        this.pendingMove = 0.0;
     }
 
     /** Неподвижен ли трекер достаточно долго, чтобы предлагать маршрут. */

@@ -15,6 +15,7 @@ public class HudService {
     private volatile Method getInstanceMethod;
     private volatile Method sendMethod;
     private volatile Method removeMethod;
+    private final java.util.Set<String> logged = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private volatile boolean apiBroken;
     private volatile long apiBrokenAt;
 
@@ -165,7 +166,12 @@ public class HudService {
             if (String.class.equals(types[0])) {
                 return method;
             }
-            if (fallback == null && params == 2 && Player.class.isAssignableFrom(types[0])) {
+            // Один параметр — это уже Player: у String-варианта последний
+            // параметр тоже String, и он поймался выше. Раньше условие
+            // params == 2 делало removeFontImage(Player) недостижимым, и HUD
+            // отключался навсегда после первого remove.
+            if (fallback == null && (params == 1 || params == 2)
+                    && Player.class.isAssignableFrom(types[0])) {
                 fallback = method;
             }
         }
@@ -178,8 +184,11 @@ public class HudService {
                 && String.class.equals(method.getParameterTypes()[0]);
     }
 
+    /** Пишем один раз на состояние, а не на каждый тик навигации. */
     private void logOnce(String text) {
-        Bukkit.getLogger().warning(text);
+        if (logged.add(text)) {
+            Bukkit.getLogger().warning(text);
+        }
     }
 
     private String getIconName(TransportType type) {

@@ -41,7 +41,18 @@ public class PlayerQuitListener implements Listener {
         } catch (Throwable ignored) {
 
         }
-        GuiManager.getInstance().unregister(event.getPlayer());
+        // Сначала снять экран (он отменяет свой таймер), потом убрать запись:
+        // unregister() без onClose() оставлял задачи до следующего тика, а
+        // лямбда ещё секунду держала ссылку на Player.
+        GuiManager manager = GuiManager.getInstance();
+        ru.hahgps.gui.GuiScreen screen = manager.get(event.getPlayer());
+        if (screen != null) {
+            try {
+                screen.onClose();
+            } catch (Throwable ignored) {
+            }
+        }
+        manager.unregister(event.getPlayer());
         InputManager.getInstance().remove(event.getPlayer());
     }
 }

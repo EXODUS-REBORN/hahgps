@@ -41,6 +41,12 @@ public class GuiManager {
         List<GuiScreen> screens = new ArrayList<>(openGuis.values());
         openGuis.clear();
         for (GuiScreen gui : screens) {
+            // Экран должен сам снять задачи и подписки: без onClose() его
+            // таймер живёт до следующего тика, а состояние экрана — навсегда.
+            try {
+                gui.onClose();
+            } catch (Throwable ignored) {
+            }
             try {
                 Player p = gui.getPlayer();
                 if (p != null && p.isOnline()) {

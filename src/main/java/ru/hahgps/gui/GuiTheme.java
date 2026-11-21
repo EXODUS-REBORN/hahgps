@@ -378,7 +378,16 @@ public final class GuiTheme {
         return item;
     }
 
-    public static ItemStack filler() {
+    /**
+     * Заполнитель собран один раз: раньше {@code filler()} создавал новый
+     * ItemStack и Meta на каждый пустой слот, а меню перерисовывалось раз в
+     * секунду — до 54 пар «предмет + мета» в секунду на каждого зрителя.
+     */
+    private static final class FillerHolder {
+        private static final ItemStack STACK = buildFiller();
+    }
+
+    private static ItemStack buildFiller() {
         ItemStack it = new ItemStack(FILLER);
         ItemMeta m = it.getItemMeta();
         if (m != null) {
@@ -387,6 +396,11 @@ public final class GuiTheme {
             it.setItemMeta(m);
         }
         return it;
+    }
+
+    /** Копия общего заполнителя — инвентарь может менять свой экземпляр. */
+    public static ItemStack filler() {
+        return FillerHolder.STACK.clone();
     }
 
     public static void fill(Inventory inv) {
