@@ -14,7 +14,7 @@
 | Трекер, 8 цветов × обычный/водонепроницаемый | 2001–2016 | лазурит, призмарин, изумруд, золотой самородок, магма, редстоун, аметист, кварц | `hahgps:item/tracker_<цвет>` и `_wp` |
 | Локатор, 20 блоков | 2020 | `recovery_compass` | `hahgps:item/locator` |
 | Дальний локатор, 30 блоков | 2021 | `recovery_compass` | `hahgps:item/locator_long` |
-| Терминал | 2042 | `lodestone` | `hahgps:item/terminal` |
+| Терминал — предмет и блок в мире | 2042 | `lodestone` | `hahgps:item/terminal` + `hahgps:block/terminal` |
 | Знак-указатель, 8 направлений | 1810–1817 | `oak_sign` | `hahgps:item/arrow_sign_*` |
 | Блок-знак, 8 направлений | 1820–1827 | `oak_sign` | `hahgps:item/arrow_block_*` |
 | Глифы HUD/чата | шрифт | `hahgps:arrow` | 4 ванильные стрелки, перекрашенные в жёлтый |
@@ -36,7 +36,8 @@
 - 8 материалов трекеров — fallback на ванильный предмет;
 - `recovery_compass` — fallback на **полную ванильную модель компаса** (стрелка
   на точку смерти сохраняется);
-- `lodestone` — fallback на `minecraft:item/lodestone`.
+- `lodestone` — fallback на `minecraft:item/lodestone`, а `blockstates/lodestone.json`
+  ведёт на `hahgps:block/terminal` (поэтому поставленный терминал — не куб).
 
 ## Превью
 
@@ -44,7 +45,8 @@
 - `respack/preview/06-locators.png` — локаторы и терминал;
 - `respack/preview/07-dropped.png` — предметы на земле;
 - `respack/preview/08-gui-catalog.png` — каталог выдачи;
-- `respack/preview/09-gui-my-trackers.png` — «Мои трекеры».
+- `respack/preview/09-gui-my-trackers.png` — «Мои трекеры»;
+- `respack/preview/10-terminal-block.png` — терминал в мире.
 
 Иконки меню (кнопки, рамки, категории) в 1.6.0 остаются ванильными: пак рисует
 только физические предметы и стрелки, чтобы не переопределять лишние материалы.

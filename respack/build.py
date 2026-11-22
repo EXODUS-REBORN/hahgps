@@ -388,8 +388,9 @@ def build_pack() -> None:
     models_block = PACK / "assets/hahgps/models/block"
     font_dir = PACK / "assets/hahgps/font"
     items_dir = PACK / "assets/minecraft/items"
+    blockstates_dir = PACK / "assets/minecraft/blockstates"
     for path in (tex_item, tex_block, tex_font, models_item, models_block,
-                 font_dir, items_dir):
+                 font_dir, items_dir, blockstates_dir):
         path.mkdir(parents=True, exist_ok=True)
 
     # --- HUD-глифы ---------------------------------------------------------
@@ -502,6 +503,15 @@ def build_pack() -> None:
     write_json(models_item / "locator.json", model_locator(False))
     write_json(models_item / "locator_long.json", model_locator(True))
     write_json(models_item / "terminal.json", model_terminal())
+    # Терминал — это блок в мире. Без blockstate на лодестоуне стоял бы
+    # огромный ванильный куб; теперь и предмет, и поставленный блок выглядят
+    # одинаково — маленькая база с экраном и антенной.
+    terminal_block = model_terminal()
+    terminal_block.pop("display", None)
+    write_json(models_block / "terminal.json", terminal_block)
+    write_json(blockstates_dir / "lodestone.json", {
+        "variants": {"": {"model": "hahgps:block/terminal"}},
+    })
     write_json(items_dir / "recovery_compass.json", {
         "model": {
             "type": "minecraft:range_dispatch",
@@ -807,6 +817,20 @@ def build_previews() -> list[Path]:
         sheet.paste(image, (x, 318 - size // 2), image)
         x += size + 6
     path = PREVIEW / "07-dropped.png"
+    sheet.save(path)
+    out.append(path)
+
+    # 8. Терминал в мире: blockstate лодестоуна ведёт на нашу модель.
+    tile = 430
+    sheet = Image.new("RGB", (tile + 28, tile + 58), (17, 19, 24))
+    draw = ImageDraw.Draw(sheet)
+    label(draw, "Терминал в мире: blockstate lodestone → hahgps:block/terminal",
+          (14, 10), 18)
+    model = json.loads((PACK / "assets/hahgps/models/block/terminal.json")
+                       .read_text(encoding="utf-8"))
+    image = render_model(model, images, tile, yaw=-32, pitch=-24, view=1.25)
+    sheet.paste(image, (14, 40))
+    path = PREVIEW / "10-terminal-block.png"
     sheet.save(path)
     out.append(path)
     return out

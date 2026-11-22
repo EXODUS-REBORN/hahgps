@@ -107,7 +107,11 @@ public class Tracker {
         this.supportBlock = supportBlock;
         this.sunk = sunk;
         this.placedAt = placedAt;
-        this.movedAt = movedAt;
+        // moved_at появился не во всех старых схемах: у записей до него
+        // значение 0. Начинать отсчёт «неподвижен» с 1970 года нельзя —
+        // берём последнее известное время (обновление, установку, сейчас).
+        this.movedAt = effectiveMovedAt(movedAt, updatedAt, placedAt,
+                System.currentTimeMillis());
         this.updatedAt = updatedAt;
         // Обычный трекер под водой глохнет, водонепроницаемый продолжает
         // передавать сигнал со дна — за это его и утапливают намеренно.
@@ -330,7 +334,27 @@ public class Tracker {
         return false;
     }
 
-    /** Сколько миллисекунд трекер стоит на месте. */
+    /**
+     * Время последнего движения с исправлением старых записей.
+     *
+     * Валидный {@code movedAt} не трогаем: именно он даёт «неподвижен N»,
+     * включая время, пока сервер был выключен. Ноль — это отсутствие колонки
+     * в старой БД, а не «двигался в 1970-м».
+     */
+    public static long effectiveMovedAt(long movedAt, long updatedAt, long placedAt, long now) {
+        if (movedAt > 0L) {
+            return movedAt;
+        }
+        if (updatedAt > 0L) {
+            return updatedAt;
+        }
+        if (placedAt > 0L) {
+            return placedAt;
+        }
+        return now;
+    }
+
+    /** Сколько миллисекунд трекер стоит на месте (включая простой сервера). */
     public long stationaryMillis(long now) {
         return Math.max(0L, now - movedAt);
     }

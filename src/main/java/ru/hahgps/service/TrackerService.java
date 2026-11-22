@@ -153,6 +153,7 @@ public class TrackerService {
         lostSince.clear();
         placingCodes.clear();
         lastKnown.clear();
+        stationaryNotified.clear();
         Set<String> seenCodes = new HashSet<>();
         if (loaded != null) {
             for (Tracker tracker : loaded) {
@@ -187,6 +188,14 @@ public class TrackerService {
                     tracker.setWater(isWaterUnder(tracker));
                 }
                 trackers.put(tracker.getId(), tracker);
+                // После рестарта не спамим «трекер неподвижен N» по всем
+                // старым маячкам: уведомление — это событие перехода в
+                // неподвижность, а не факт загрузки. Время неподвижности
+                // при этом считается по moved_at и включает простой сервера.
+                // Загруженный трекер считается «уже известным»; после первого
+                // реального движения отметка снимется и следующая остановка
+                // снова даст одно уведомление.
+                stationaryNotified.add(tracker.getId());
             }
         }
         plugin.getLogger().info("HahGps: загружено трекеров iTrak — " + trackers.size());

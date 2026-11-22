@@ -225,4 +225,33 @@ class TrackerTest {
         Tracker tracker = tracker(1L, false);
         assertEquals("10.0, 64.0, 20.0", tracker.getFormattedCoords());
     }
+    @Test
+    void stationaryClockIncludesServerDowntime() {
+        // Два часа сервер был выключен: movedAt в БД не менялся, и время
+        // неподвижности обязано включать этот простой.
+        long now = 10_000_000L;
+        Tracker tracker = tracker(now - 2 * 60 * 60 * 1000L, false);
+        assertEquals(2 * 60 * 60 * 1000L, tracker.stationaryMillis(now));
+        assertTrue(tracker.isStationary(now, 60_000L));
+    }
+
+    @Test
+    void legacyZeroMovedAtDoesNotMean1970() {
+        // Старая схема БД: колонки moved_at ещё нет, значение 0.
+        assertEquals(5_000L, Tracker.effectiveMovedAt(0L, 5_000L, 1_000L, 9_000L));
+        assertEquals(1_000L, Tracker.effectiveMovedAt(0L, 0L, 1_000L, 9_000L));
+        assertEquals(9_000L, Tracker.effectiveMovedAt(0L, 0L, 0L, 9_000L));
+        assertEquals(4_000L, Tracker.effectiveMovedAt(4_000L, 5_000L, 1_000L, 9_000L),
+                "валидное время движения не переписывается");
+    }
+
+    @Test
+    void legacyTrackerUsesUpdatedAtInsteadOfZero() {
+        Tracker tracker = new Tracker(1, "TRK-LEGACY", "", TrackerColor.BLUE, false,
+                UUID.randomUUID(), "tester", "world", 0, 64, 0,
+                null, false, 1_000L, 0L, 7_000L);
+        assertEquals(7_000L, tracker.getMovedAt());
+        assertEquals(3_000L, tracker.stationaryMillis(10_000L));
+    }
+
 }
