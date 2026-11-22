@@ -20,9 +20,6 @@ public class PlayerQuitListener implements Listener {
             if (plugin.getNavigationService() != null) {
                 plugin.getNavigationService().stopNavigation(event.getPlayer());
             }
-            if (plugin.getMapService() != null) {
-                plugin.getMapService().removePlayer(event.getPlayer());
-            }
             // Незакрытая запись маршрута копит до 2000 Location (каждый держит
             // мир) до перезапуска: снимаем при выходе.
             if (plugin.getRouteRecordingService() != null) {

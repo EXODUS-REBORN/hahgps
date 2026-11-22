@@ -108,6 +108,9 @@ public final class ItemFactory {
 
             meta.setCustomModelData(ItemIds.tracker(color, spec.waterproof()));
             meta.setMaxStackSize(1);
+            // Трекер — предмет-вещь, а не зачарованный артефакт: без блика даже
+            // у водонепроницаемого (его выдаёт отдельная модель и подпись).
+            meta.setEnchantmentGlintOverride(false);
             PersistentDataContainer data = meta.getPersistentDataContainer();
             data.set(TRACKER_CODE, PersistentDataType.STRING, spec.code());
             data.set(TRACKER_COLOR, PersistentDataType.STRING, color.getKey());
@@ -116,9 +119,6 @@ public final class ItemFactory {
                 data.set(TRACKER_LABEL, PersistentDataType.STRING, label);
             }
             item.setItemMeta(meta);
-        }
-        if (spec.waterproof()) {
-            GuiTheme.glow(item);
         }
         return item;
     }
@@ -170,12 +170,13 @@ public final class ItemFactory {
             meta.setMaxStackSize(1);
             meta.setCustomModelData(value >= LONG_LOCATOR_RADIUS
                     ? ItemIds.ITRAK_LOCATOR_LONG : ItemIds.ITRAK_LOCATOR);
+            meta.setEnchantmentGlintOverride(false);
             PersistentDataContainer data = meta.getPersistentDataContainer();
             data.set(LOCATOR, PersistentDataType.BYTE, (byte) 1);
             data.set(LOCATOR_RADIUS, PersistentDataType.INTEGER, value);
             item.setItemMeta(meta);
         }
-        return GuiTheme.glow(item);
+        return item;
     }
 
     /** Радиус из предмета-локатора; 0 — у старого локатора без радиуса. */
@@ -362,10 +363,11 @@ public final class ItemFactory {
             meta.lore(lore);
             meta.setCustomModelData(ItemIds.ITRAK_TERMINAL);
             meta.setMaxStackSize(1);
+            meta.setEnchantmentGlintOverride(false);
             meta.getPersistentDataContainer().set(TERMINAL, PersistentDataType.BYTE, (byte) 1);
             item.setItemMeta(meta);
         }
-        return GuiTheme.glow(item);
+        return item;
     }
 
     public static boolean isTerminalItem(ItemStack item) {

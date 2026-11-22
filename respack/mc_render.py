@@ -156,6 +156,13 @@ class Scene:
                 normal /= ln
                 self.faces.append((pts, uvs, arr, face_shade(normal)))
 
+    def raster_rgba(self, cam: Cam) -> Image.Image:
+        """Кадр с прозрачным фоном: для композитных превью «на земле»."""
+        image = self.raster(cam).convert("RGBA")
+        alpha = np.where(np.isfinite(self.z), 255, 0).astype(np.uint8)
+        image.putalpha(Image.fromarray(alpha, "L"))
+        return image
+
     def raster(self, cam: Cam) -> Image.Image:
         for pts, uvs, arr, shade in self.faces:
             scr, dep = cam.project(pts)
@@ -191,16 +198,23 @@ class Scene:
         if not mask.any():
             return
         z = w0 * dep[0] + w1 * dep[1] + w2 * dep[2]
-        zmask = mask & (z < self.z[miny:maxy + 1, minx:maxx + 1])
-        if not zmask.any():
-            return
-        u = w0 * uv[0][0] + w1 * uv[1][0] + w2 * uv[2][0]
-        v = w0 * uv[0][1] + w1 * uv[1][1] + w2 * uv[2][1]
+        # UV в моделях заданы в сетке 16×16 независимо от разрешения текстуры:
+        # 64-пиксельная текстура должна занимать ту же грань, а не четверть.
+        u = (w0 * uv[0][0] + w1 * uv[1][0] + w2 * uv[2][0]) * tw / 16.0
+        v = (w0 * uv[0][1] + w1 * uv[1][1] + w2 * uv[2][1]) * th / 16.0
         ui = np.floor(u).astype(int) % tw
         vi = np.floor(v).astype(int) % th
+        alpha = arr[vi, ui, 3] / 255.0
+        zmask = (mask & (z < self.z[miny:maxy + 1, minx:maxx + 1])
+                 & (alpha > 0.004))
+        if not zmask.any():
+            return
         col = arr[vi, ui, :3] * shade
         sub = self.rgb[miny:maxy + 1, minx:maxx + 1]
-        sub[zmask] = col[zmask]
+        # Полупрозрачные края (круглый корпус, стекло экрана) смешиваем с фоном,
+        # иначе в превью они становятся чёрными квадратами.
+        a = alpha[zmask][:, None]
+        sub[zmask] = col[zmask] * a + sub[zmask] * (1.0 - a)
         self.z[miny:maxy + 1, minx:maxx + 1][zmask] = z[zmask]
 
 

@@ -32,9 +32,11 @@ public class MainMenuGui extends GuiScreen {
                 comp("gui.categories"),
                 lore("gui.lore-categories"), ItemIds.MAIN_CATEGORIES));
 
-        inventory.setItem(14, GuiUtil.item(Material.MAP,
-                comp("gui.map"),
-                lore("gui.lore-map"), ItemIds.MAIN_MAP));
+        if (player.hasPermission("gps.itrak.give")) {
+            inventory.setItem(14, GuiUtil.item(Material.RECOVERY_COMPASS,
+                    comp("gui.itrak-catalog"),
+                    lore("gui.lore-itrak-catalog"), ItemIds.MAIN_ITRAK_GIVE));
+        }
 
         inventory.setItem(16, GuiUtil.item(Material.PAPER,
                 comp("gui.search"),
@@ -63,7 +65,13 @@ public class MainMenuGui extends GuiScreen {
         switch (slot) {
             case 10 -> new PointsListGui(player, null).open();
             case 12 -> new CategoriesGui(player).open();
-            case 14 -> new MapGui(player).open();
+            case 14 -> {
+                if (player.hasPermission("gps.itrak.give")) {
+                    new ItrakCatalogGui(player).open();
+                } else {
+                    GuiTheme.deny(player);
+                }
+            }
             case 16 -> {
                 if (!player.hasPermission("gps.search")) {
                     player.sendMessage(HahGpsPlugin.getInstance().getMessages().getPrefixed("no-permission"));

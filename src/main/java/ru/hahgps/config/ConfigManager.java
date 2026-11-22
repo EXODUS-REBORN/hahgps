@@ -2,7 +2,6 @@ package ru.hahgps.config;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.map.MapView;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.util.ArrowStyle;
 
@@ -55,7 +54,6 @@ public class ConfigManager {
         checkEnum("navigation.bossbar-color", "BLUE", BarColor::valueOf, v -> v != null);
         checkEnum("navigation.bossbar-style", "SOLID", BarStyle::valueOf, v -> v != null);
         checkEnum("navigation.arrow-style", "AUTO", ArrowStyle::valueOf, v -> v != null);
-        checkEnum("map.zoom", "CLOSE", MapView.Scale::valueOf, v -> v != null);
 
         String language = config.getString("language", "ru");
         if (language == null || !LANGUAGES.contains(language.toLowerCase(Locale.ROOT))) {
@@ -121,8 +119,14 @@ public class ConfigManager {
         checkRange("itrak.terminal-radius", 5, 1, 32);
         checkRange("itrak.terminal-highlight-seconds", 10, 1, 120);
         checkRange("itrak.scan-highlight-seconds", 10, 1, 120);
-        checkRange("map.refresh-seconds", 5, 1, 60);
         checkRange("navigation.walk-max-distance", 128, 8, 512);
+        checkRange("navigation.walk-detour-blocks", 24, 0, 512);
+        double detour = config.getDouble("navigation.walk-detour-factor", 1.35);
+        if (!Double.isFinite(detour) || detour < 1.0 || detour > 5.0) {
+            warn("navigation.walk-detour-factor", String.valueOf(detour),
+                    "множитель крюка должен быть в диапазоне 1.0..5.0 — использую 1.35");
+            config.set("navigation.walk-detour-factor", 1.35);
+        }
         checkRange("resource-pack.port", 8123, 1024, 65535);
     }
 
@@ -291,63 +295,6 @@ public class ConfigManager {
         return config.getBoolean("navigation.hud", false);
     }
 
-    public String getMapZoom() {
-        String name = config.getString("map.zoom", "CLOSE");
-        return isEnumValue(name, MapView.Scale.values()) ? name.toUpperCase(Locale.ROOT) : "CLOSE";
-    }
-
-    public boolean isMapShowPois() {
-        return config.getBoolean("map.show-pois", true);
-    }
-
-    public boolean isMapShowRoute() {
-        return config.getBoolean("map.show-route", true);
-    }
-
-    public boolean isMapShowPlayers() {
-        return config.getBoolean("map.show-players", false);
-    }
-
-    /** Свои трекеры iTrak на карте: цветные маячки, офлайн — контуром. */
-    public boolean isMapShowTrackers() {
-        return config.getBoolean("map.show-trackers", true);
-    }
-
-    /** Мышь двигает карту в руке (панорама без ходьбы), теперь — только с Shift. */
-    public boolean isMapMousePan() {
-        return config.getBoolean("map.mouse-pan", true);
-    }
-
-    /** Карта сама едет за игроком, а не остаётся на месте после каждого шага. */
-    public boolean isMapFollowPlayer() {
-        return config.getBoolean("map.follow-player", true);
-    }
-
-    /** Как часто обновлять маркеры на открытой карте, секунд. */
-    public int getMapRefreshSeconds() {
-        return Math.max(1, Math.min(60, config.getInt("map.refresh-seconds", 5)));
-    }
-
-    /** Чувствительность мышиного сдвига карты. */
-    public double getMapPanSensitivity() {
-        double value = config.getDouble("map.mouse-pan-sensitivity", 1.0);
-        return Double.isFinite(value) ? Math.max(0.1, Math.min(5.0, value)) : 1.0;
-    }
-
-    /** Кэш карты мира: исследованные места не пропадают без загруженных чанков. */
-    public boolean isMapWorldCache() {
-        return config.getBoolean("map.world-cache", true);
-    }
-
-    /** Блоков на пиксель в кэше карты мира: 4, 8 или 16. */
-    public int getMapCacheBlocksPerPixel() {
-        int value = config.getInt("map.world-cache-blocks-per-pixel", 8);
-        if (value <= 0) {
-            return 8;
-        }
-        return Math.max(4, Math.min(16, value));
-    }
-
     public boolean isTransportAvailable(String key) {
         return config.getBoolean("transport." + key, false);
     }
@@ -406,6 +353,20 @@ public class ConfigManager {
     /** Насколько далеко искать пеший путь по блокам. */
     public double getWalkMaxDistance() {
         return Math.max(8, Math.min(512, config.getInt("navigation.walk-max-distance", 128)));
+    }
+
+    /**
+     * Во сколько раз путь по графу может быть длиннее прямой, прежде чем
+     * пешеходу искать обход по блокам. 1.35 — дорога может быть чуть длиннее.
+     */
+    public double getWalkDetourFactor() {
+        double value = config.getDouble("navigation.walk-detour-factor", 1.35);
+        return Double.isFinite(value) ? Math.max(1.0, Math.min(5.0, value)) : 1.35;
+    }
+
+    /** Минимальный лишний путь по графу (блоки), чтобы включился обход. */
+    public int getWalkDetourBlocks() {
+        return Math.max(0, Math.min(512, config.getInt("navigation.walk-detour-blocks", 24)));
     }
 
     public boolean isItrakParticles() {

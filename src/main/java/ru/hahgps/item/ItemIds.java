@@ -20,7 +20,7 @@ import java.util.Set;
  *   <li>1500–1599 — поиск;</li>
  *   <li>1600–1699 — настройки;</li>
  *   <li>1700–1799 — транспорт;</li>
- *   <li>1800–1899 — карта и знаки маршрута (1810–1817 предмет, 1820–1827 блок);</li>
+ *   <li>1800–1899 — знаки маршрута (1810–1817 предмет, 1820–1827 блок);</li>
  *   <li>2000–2099 — iTrak.</li>
  * </ul>
  */
@@ -39,10 +39,12 @@ public final class ItemIds {
 
     public static final int MAIN_POINTS = 1101;
     public static final int MAIN_CATEGORIES = 1102;
-    public static final int MAIN_MAP = 1103;
     public static final int MAIN_SEARCH = 1104;
     public static final int MAIN_SETTINGS = 1105;
+    /** «Мои трекеры» — список установленных маячков. */
     public static final int MAIN_ITRAK = 1106;
+    /** «Трекеры и локаторы» — каталог выдачи предметов. */
+    public static final int MAIN_ITRAK_GIVE = 1107;
 
     public static final int POI_ICON_BASE = 1201;
     public static final int POI_ICON_COUNT = 6;
@@ -65,11 +67,8 @@ public final class ItemIds {
 
     public static final int SETTINGS_LANGUAGE = 1601;
     public static final int SETTINGS_LOGGING = 1602;
-    public static final int SETTINGS_MAP = 1603;
 
     public static final int TRANSPORT_BASE = 1701;
-
-    public static final int MAP_ITEM = 1801;
 
     /**
      * 8 номеров 3D-предмета «знак-указатель» (стрелка на чёрной плите).
@@ -118,10 +117,10 @@ public final class ItemIds {
         }
         ids.add(MAIN_POINTS);
         ids.add(MAIN_CATEGORIES);
-        ids.add(MAIN_MAP);
         ids.add(MAIN_SEARCH);
         ids.add(MAIN_SETTINGS);
         ids.add(MAIN_ITRAK);
+        ids.add(MAIN_ITRAK_GIVE);
         for (int i = 0; i < POI_ICON_COUNT; i++) {
             ids.add(POI_ICON_BASE + i);
         }
@@ -139,11 +138,9 @@ public final class ItemIds {
         ids.add(SEARCH_LIMIT);
         ids.add(SETTINGS_LANGUAGE);
         ids.add(SETTINGS_LOGGING);
-        ids.add(SETTINGS_MAP);
         for (int i = 0; i < 5; i++) {
             ids.add(TRANSPORT_BASE + i);
         }
-        ids.add(MAP_ITEM);
         for (int i = 0; i < 8; i++) {
             ids.add(ROUTE_SIGN_BASE + i);
             ids.add(ROUTE_BLOCK_BASE + i);

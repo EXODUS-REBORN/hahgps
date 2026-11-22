@@ -7,8 +7,6 @@ import ru.hahgps.item.ItemIds;
 
 public class SettingsGui extends GuiScreen {
 
-    private static final String[] ZOOMS = {"FARTHEST", "FAR", "NORMAL", "CLOSE", "CLOSEST"};
-
     public SettingsGui(Player player) {
         super(player);
     }
@@ -37,9 +35,11 @@ public class SettingsGui extends GuiScreen {
                 comp("gui.logging", "state", logging ? getMsg("gui.state-on") : getMsg("gui.state-off")),
                 lore("gui.lore-logging"), ItemIds.SETTINGS_LOGGING));
 
-        inventory.setItem(15, GuiUtil.item(Material.MAP,
-                comp("gui.map-scale"),
-                lore("gui.lore-toggle"), ItemIds.SETTINGS_MAP));
+        if (player.hasPermission("gps.itrak.give")) {
+            inventory.setItem(15, GuiUtil.item(Material.RECOVERY_COMPASS,
+                    comp("gui.itrak-catalog"),
+                    lore("gui.lore-itrak-catalog"), ItemIds.MAIN_ITRAK_GIVE));
+        }
 
         inventory.setItem(22, GuiTheme.navBack(getMsg("gui.back")));
 
@@ -73,19 +73,11 @@ public class SettingsGui extends GuiScreen {
                 GuiTheme.click(player);
             }
             case 15 -> {
-                String current = plugin.getConfigManager().getMapZoom();
-                int idx = 0;
-                for (int i = 0; i < ZOOMS.length; i++) {
-                    if (ZOOMS[i].equals(current)) {
-                        idx = i;
-                        break;
-                    }
+                if (player.hasPermission("gps.itrak.give")) {
+                    new ItrakCatalogGui(player).open();
+                } else {
+                    GuiTheme.deny(player);
                 }
-                String next = ZOOMS[(idx + 1) % ZOOMS.length];
-                plugin.getConfigManager().get().set("map.zoom", next);
-                persistConfig(plugin);
-                refresh();
-                GuiTheme.click(player);
             }
             case 22 -> {
                 new MainMenuGui(player).open();

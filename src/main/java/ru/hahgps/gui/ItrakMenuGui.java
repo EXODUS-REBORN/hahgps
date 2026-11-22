@@ -168,10 +168,11 @@ public class ItrakMenuGui extends GuiScreen {
                 comp("gui.page-info", "page", String.valueOf(page + 1),
                         "pages", String.valueOf(pages)), null, ItemIds.PAGE_INFO));
         if (player.hasPermission("gps.itrak.give")) {
-            // Лазурит, а не компас восстановления: на том же материале висит
-            // полоса КД локатора, и кнопка «выдать» мигала бы перезарядкой.
-            inventory.setItem(50, GuiUtil.item(Material.LAPIS_LAZULI,
-                    comp("gui.itrak-give"), lore("gui.lore-itrak-give"), ItemIds.ITRAK_GIVE));
+            // Лазурит-блок, а не лазурит: на предмете-лазурите висит модель
+            // синего трекера, и кнопка «выдать» выглядела бы маячком.
+            inventory.setItem(50, GuiUtil.item(Material.LAPIS_BLOCK,
+                    comp("gui.itrak-catalog"), lore("gui.lore-itrak-catalog"),
+                    ItemIds.MAIN_ITRAK_GIVE));
         }
         inventory.setItem(51, GuiUtil.item(Material.SPYGLASS,
                 comp("gui.itrak-refresh"), lore("gui.lore-itrak-refresh"), ItemIds.ITRAK_REFRESH));
@@ -213,10 +214,8 @@ public class ItrakMenuGui extends GuiScreen {
                     "distance", LocationUtil.formatDistance(distance(tracker, signal))));
             meta.lore(lines);
             meta.setCustomModelData(ItemIds.tracker(tracker.getColor(), tracker.isWaterproof()));
+            meta.setEnchantmentGlintOverride(false);
             icon.setItemMeta(meta);
-        }
-        if (tracker.isWaterproof()) {
-            icon = GuiTheme.glow(icon);
         }
         return icon;
     }
@@ -249,10 +248,8 @@ public class ItrakMenuGui extends GuiScreen {
             return;
         }
         if (slot == 50 && player.hasPermission("gps.itrak.give")) {
-            player.closeInventory();
-            InputManager.getInstance().request(player,
-                    plugin.getMessages().getPrefixed("input-itrak-give"),
-                    input -> ItrakCommand.giveFromInput(plugin, player, input));
+            new ItrakCatalogGui(player).open();
+            GuiTheme.click(player);
             return;
         }
         if (slot == 46 && page > 0) {

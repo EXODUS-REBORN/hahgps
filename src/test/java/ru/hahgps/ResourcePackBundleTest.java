@@ -42,7 +42,23 @@ class ResourcePackBundleTest {
                 "нет 3D-предмета");
         assertTrue(entries.contains("assets/hahgps/models/block/arrow_block_straight.json"),
                 "нет 3D-блока");
+        assertTrue(entries.contains("assets/hahgps/models/item/tracker_blue.json"),
+                "нет 3D-трекера");
+        assertTrue(entries.contains("assets/hahgps/models/item/tracker_blue_wp.json"),
+                "нет водонепроницаемого трекера");
+        assertTrue(entries.contains("assets/hahgps/models/item/locator.json"),
+                "нет 3D-локатора");
+        assertTrue(entries.contains("assets/hahgps/models/item/locator_long.json"),
+                "нет дальнего локатора");
+        assertTrue(entries.contains("assets/hahgps/textures/item/tracker_blue.png"),
+                "нет текстуры трекера");
         assertTrue(entries.contains("assets/minecraft/items/oak_sign.json"),
                 "нет диспетчера CMD для oak_sign");
+        assertTrue(entries.contains("assets/minecraft/items/lapis_lazuli.json"),
+                "нет диспетчера CMD для синего трекера");
+        assertTrue(entries.contains("assets/minecraft/items/recovery_compass.json"),
+                "нет диспетчера CMD для локаторов");
+        assertTrue(entries.contains("assets/minecraft/items/lodestone.json"),
+                "нет диспетчера CMD для терминала");
     }
 }

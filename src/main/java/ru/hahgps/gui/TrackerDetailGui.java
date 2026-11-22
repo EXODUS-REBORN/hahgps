@@ -240,11 +240,11 @@ public class TrackerDetailGui extends GuiScreen {
                 lines.add(comp("gui.lore-itrak-live"));
             }
             meta.lore(lines);
-            meta.setCustomModelData(ItemIds.ITRAK_DETAIL);
+            // Карточка показывает настоящую модель трекера (цвет и защиту),
+            // а не отдельную иконку: у водонепроницаемого свой номер модели.
+            meta.setCustomModelData(ItemIds.tracker(tracker.getColor(), tracker.isWaterproof()));
+            meta.setEnchantmentGlintOverride(false);
             icon.setItemMeta(meta);
-        }
-        if (tracker.isWaterproof()) {
-            icon = GuiTheme.glow(icon);
         }
         return icon;
     }

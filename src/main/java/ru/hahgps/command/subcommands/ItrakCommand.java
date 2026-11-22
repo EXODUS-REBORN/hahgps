@@ -10,12 +10,12 @@ import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.SubCommand;
 import ru.hahgps.gui.GuiTheme;
 import ru.hahgps.gui.ItrakMenuGui;
+import ru.hahgps.gui.TrackerDetailGui;
 import ru.hahgps.item.ItemFactory;
 import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TrackerColor;
 import ru.hahgps.model.TransportType;
 import ru.hahgps.service.LocatorCooldown;
-import ru.hahgps.service.MapService;
 import ru.hahgps.service.Pathfinder;
 import ru.hahgps.service.TrackerService;
 import ru.hahgps.util.LocationUtil;
@@ -362,53 +362,26 @@ public class ItrakCommand implements SubCommand {
     }
 
     /**
-     * Навести карту игрока на трекер и подсветить его. Используется командой
-     * «find» и кнопкой «показать на карте» в карточке.
+     * Открыть карточку трекера и подсветить его, если он в зоне связи.
+     * Используется командой «find» с аргументом.
      */
-    public static void focusOnMap(HahGpsPlugin plugin, Player player, Tracker tracker) {
+    public static void openTracker(Player player, Tracker tracker) {
+        if (player == null || tracker == null) {
+            return;
+        }
+        HahGpsPlugin plugin = HahGpsPlugin.getInstance();
         TrackerService service = plugin.getTrackerService();
-        if (service == null || tracker == null || player == null) {
-            return;
+        if (service != null) {
+            TrackerService.Signal signal = service.signal(player, tracker);
+            Location target = signal.inRange() ? signal.exact()
+                    : service.targetLocation(player, tracker);
+            if (target != null && target.getWorld() != null
+                    && LocationUtil.sameWorld(player.getWorld(), target.getWorld())) {
+                service.highlight(player, tracker,
+                        plugin.getConfigManager().getItrakScanHighlightSeconds());
+            }
         }
-        TrackerService.Signal signal = service.signal(player, tracker);
-        Location target = signal.inRange() ? signal.exact()
-                : service.targetLocation(player, tracker);
-        if (target == null || target.getWorld() == null) {
-            player.sendMessage(plugin.getMessages().getPrefixed("world-not-found",
-                    "world", tracker.getWorld() == null ? "?" : tracker.getWorld()));
-            return;
-        }
-        if (!LocationUtil.sameWorld(player.getWorld(), target.getWorld())) {
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-other-world",
-                    "world", target.getWorld().getName()));
-            GuiTheme.deny(player);
-            return;
-        }
-        MapService maps = plugin.getMapService();
-        if (maps == null) {
-            player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
-            return;
-        }
-        maps.focus(player, target);
-        int seconds = plugin.getConfigManager().getItrakScanHighlightSeconds();
-        if (signal.inRange()) {
-            service.highlight(player, tracker, seconds);
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-focused",
-                    "name", tracker.getDisplayName(),
-                    "id", String.valueOf(tracker.getId()),
-                    "status", service.statusText(player, tracker),
-                    "world", target.getWorld().getName(),
-                    "x", TrackerService.formatCoord(target.getX()),
-                    "y", TrackerService.formatCoord(target.getY()),
-                    "z", TrackerService.formatCoord(target.getZ())));
-        } else {
-            // Карта наведена на район, точных координат не показываем.
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-far",
-                    "name", tracker.getDisplayName(),
-                    "status", service.statusText(player, tracker),
-                    "region", signal.region(),
-                    "last", service.lastKnownText(signal)));
-        }
+        new TrackerDetailGui(player, tracker.getId()).open();
         GuiTheme.click(player);
     }
 
@@ -596,9 +569,9 @@ public class ItrakCommand implements SubCommand {
     }
 
     /**
-     * «Мои трекеры» — личный локатор без радиуса и перезарядки: показывает все
-     * свои трекеры (в том числе офлайн на вышедшем игроке), а с аргументом
-     * наводит карту на выбранный. Принимает код, имя и номер в БД.
+     * «Мои трекеры» — личный локатор без радиуса и перезарядки: открывает меню
+     * со всеми своими трекерами (в том числе офлайн на вышедшем игроке), а с
+     * аргументом — карточку выбранного. Принимает код, имя и номер в БД.
      */
     private static class FindCommand implements SubCommand {
         @Override
@@ -629,7 +602,7 @@ public class ItrakCommand implements SubCommand {
                 String query = join(args, 0, args.length);
                 Tracker tracker = requireMine(plugin, player, query);
                 if (tracker != null) {
-                    focusOnMap(plugin, player, tracker);
+                    openTracker(player, tracker);
                 }
                 return;
             }
@@ -639,36 +612,7 @@ public class ItrakCommand implements SubCommand {
                 player.sendMessage(plugin.getMessages().getPrefixed("itrak-no-trackers"));
                 return;
             }
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-header",
-                    "count", String.valueOf(list.size())));
-            int seconds = plugin.getConfigManager().getItrakScanHighlightSeconds();
-            for (Tracker tracker : list) {
-                TrackerService.Signal signal = service.signal(player, tracker);
-                Location location = signal.inRange() ? signal.exact() : null;
-                double distance = location == null ? Double.MAX_VALUE
-                        : LocationUtil.distance(player.getLocation(), location);
-                player.sendMessage(withCarrierHover(plugin, plugin.getMessages().getPrefixed("itrak-find-entry",
-                        "name", tracker.getDisplayName(),
-                        "id", String.valueOf(tracker.getId()),
-                        "code", tracker.getCode(),
-                        "status", service.statusText(player, tracker),
-                        "distance", LocationUtil.formatDistance(distance),
-                        "x", TrackerService.formatCoord(tracker.getX()),
-                        "y", TrackerService.formatCoord(tracker.getY()),
-                        "z", TrackerService.formatCoord(tracker.getZ())), tracker));
-                if (!signal.inRange()) {
-                    player.sendMessage(plugin.getMessages().getPrefixed("itrak-find-far-entry",
-                            "region", signal.region(),
-                            "last", service.lastKnownText(signal)));
-                }
-                sendTrackerAction(plugin, player, tracker);
-                player.sendMessage(plugin.getMessages().getComponent("itrak-find-map-button",
-                        "code", tracker.getCode()));
-                if (location != null && LocationUtil.sameWorld(player.getWorld(), location.getWorld())) {
-                    service.highlight(player, tracker, seconds);
-                }
-            }
-            GuiTheme.click(player);
+            new ItrakMenuGui(player).open();
         }
 
         @Override
@@ -1291,35 +1235,6 @@ public class ItrakCommand implements SubCommand {
         String shown = spec == null || spec.name().isBlank()
                 ? (spec == null ? "iTrak" : spec.code()) : spec.name();
         player.sendMessage(plugin.getMessages().getPrefixed("itrak-item-renamed", "name", shown));
-    }
-
-    /**
-     * Выдача из ввода в чат (кнопка «Выдать трекер» в GUI): цвет, признак
-     * водозащиты и необязательное имя через пробел.
-     */
-    public static void giveFromInput(HahGpsPlugin plugin, Player player, String input) {
-        if (input == null || input.isBlank()) {
-            player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage",
-                    "/gps itrak give <цвет> [waterproof] [имя]"));
-            return;
-        }
-        String[] parts = input.trim().split("\\s+");
-        TrackerColor color = TrackerColor.parse(parts[0]);
-        if (color == null) {
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-color-unknown",
-                    "color", parts[0]));
-            return;
-        }
-        boolean waterproof = false;
-        int index = 1;
-        if (index < parts.length && isWaterproofToken(parts[index])) {
-            waterproof = true;
-            index++;
-        } else if (index < parts.length && isRegularToken(parts[index])) {
-            index++;
-        }
-        String label = String.join(" ", java.util.Arrays.copyOfRange(parts, index, parts.length));
-        giveTracker(plugin, player, player, color, waterproof, label.trim());
     }
 
     private static List<String> playerNames() {
