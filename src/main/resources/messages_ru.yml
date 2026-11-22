@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Версия схемы палитры: при несовпадении файл заменяется эталоном (старый — в .bak)
-palette-version: 14
+palette-version: 15
 
 no-permission: "<#3f86ff>✖ У вас нет прав для выполнения этой команды.</#3f86ff>"
 player-only: "<#3f86ff>✖ Эта команда доступна только игрокам.</#3f86ff>"
@@ -90,14 +90,14 @@ route-exists: "<#3f86ff>✖ Маршрут с именем <white><bold>{name}</
 arrival: "<#8fe9f5><bold>✔ ЦЕЛЬ ДОСТИГНУТА</bold></#8fe9f5>"
 
 # --- Подсказки: та же синяя лестница, от светлого к тёмному ---
-hint-straight: "<#8fe9f5><bold>↑ Идите прямо</bold></#8fe9f5>"
-hint-slight-right: "<#8fc6ff><bold>↗ Слегка направо</bold></#8fc6ff>"
-hint-right: "<#66aaff><bold>→ Поверните направо</bold></#66aaff>"
-hint-sharp-right: "<#4fd1e0><bold>↘ Резко направо</bold></#4fd1e0>"
-hint-back: "<#3f86ff><bold>↩ Развернитесь</bold></#3f86ff>"
-hint-sharp-left: "<#4fd1e0><bold>↙ Резко налево</bold></#4fd1e0>"
-hint-left: "<#66aaff><bold>← Поверните налево</bold></#66aaff>"
-hint-slight-left: "<#8fc6ff><bold>↖ Слегка налево</bold></#8fc6ff>"
+hint-straight: "<#8fe9f5><bold>Идите прямо</bold></#8fe9f5>"
+hint-slight-right: "<#8fc6ff><bold>Слегка направо</bold></#8fc6ff>"
+hint-right: "<#66aaff><bold>Поверните направо</bold></#66aaff>"
+hint-sharp-right: "<#4fd1e0><bold>Резко направо</bold></#4fd1e0>"
+hint-back: "<#3f86ff><bold>Развернитесь</bold></#3f86ff>"
+hint-sharp-left: "<#4fd1e0><bold>Резко налево</bold></#4fd1e0>"
+hint-left: "<#66aaff><bold>Поверните налево</bold></#66aaff>"
+hint-slight-left: "<#8fc6ff><bold>Слегка налево</bold></#8fc6ff>"
 
 # --- Журналирование ---
 log-enabled: "<#8fe9f5>✔</#8fe9f5> <gray>Подсказки в чате включены.</gray>"
@@ -127,6 +127,9 @@ map-scale-16: "весь мир, 16 блоков/пиксель"
 
 # --- Прочее ---
 reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>Конфигурация HahGps перезагружена.</gray>"
+pack-sent: "<#8fe9f5>✔</#8fe9f5> <gray>Ресурспак отправлен — подтвердите установку в окне Minecraft.</gray>"
+pack-unavailable: "<#3f86ff>✖ Ресурспак недоступен: проверьте resource-pack в config.yml.</#3f86ff>"
+pack-disabled: "<#3f86ff>✖ Раздача ресурспака выключена в config.yml.</#3f86ff>"
 loading-data: "<gray><italic>Загрузка данных…</italic></gray>"
 error-occurred: "<#3f86ff>✖ Произошла ошибка:</#3f86ff> <white>{error}</white>"
 world-not-found: "<#3f86ff>✖ Мир <white><bold>{world}</bold></white> не найден.</#3f86ff>"

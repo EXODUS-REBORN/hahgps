@@ -6,7 +6,7 @@
 
     <groupId>ru.hahgps</groupId>
     <artifactId>hahgps</artifactId>
-    <version>1.5.0</version>
+    <version>1.5.1</version>
     <packaging>jar</packaging>
 
     <name>HahGps</name>
@@ -139,6 +139,8 @@
                      отключилось бы у такой сборки. -->
                 <excludes>
                     <exclude>*.token</exclude>
+                    <!-- Бинарный ресурспак: фильтрация испортила бы zip. -->
+                    <exclude>hahgps.zip</exclude>
                 </excludes>
             </resource>
             <resource>
@@ -146,6 +148,7 @@
                 <filtering>false</filtering>
                 <includes>
                     <include>*.token</include>
+                    <include>hahgps.zip</include>
                 </includes>
             </resource>
         </resources>

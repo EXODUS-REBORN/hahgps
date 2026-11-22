@@ -180,8 +180,8 @@ def build_pack() -> None:
         "providers": [{
             "type": "bitmap",
             "file": "hahgps:font/arrow.png",
-            "ascent": 8,
-            "height": 8,
+            "ascent": 9,
+            "height": 10,
             "chars": [chars],
         }],
     })
@@ -274,8 +274,8 @@ def validate() -> list[str]:
         walk(data)
 
     atlas = Image.open(PACK / "assets/hahgps/textures/font/arrow.png")
-    if atlas.size != (8 * len(arrow_art.DIRECTIONS), 8):
-        problems.append(f"font/arrow.png: {atlas.size}, ожидалось 64×8")
+    if atlas.size != (10 * len(arrow_art.DIRECTIONS), 10):
+        problems.append(f"font/arrow.png: {atlas.size}, ожидалось 80×10")
     return problems
 
 
@@ -295,8 +295,16 @@ def zip_pack(name: str = "hahgps.zip") -> Path:
 # превью
 # ---------------------------------------------------------------------------
 
+def _font(size: int):
+    """DejaVu есть не на каждом билд-хосте — превью не должны ронять сборку."""
+    try:
+        return ImageFont.truetype(FONT, size)
+    except OSError:
+        return ImageFont.load_default()
+
+
 def label(draw, text, xy, size=18, fill=(214, 220, 232)) -> None:
-    draw.text(xy, text, font=ImageFont.truetype(FONT, size), fill=fill)
+    draw.text(xy, text, font=_font(size), fill=fill)
 
 
 def load_images() -> dict[str, Image.Image]:
@@ -329,7 +337,7 @@ def build_previews() -> list[Path]:
     height = 2 * (tile + 36) + pad + 96
     sheet = Image.new("RGB", (width, height), (17, 19, 24))
     draw = ImageDraw.Draw(sheet)
-    label(draw, "HUD-стрелки 8×8: 8 направлений", (14, 10), 20)
+    label(draw, "Стрелки 10×10: HUD и чат, 8 направлений", (14, 10), 20)
     for i, direction in enumerate(arrow_art.DIRECTIONS):
         glyph = arrow_art.glyph(direction).resize((tile, tile), Image.NEAREST)
         x = pad + (i % cols) * (tile + pad)
@@ -345,10 +353,9 @@ def build_previews() -> list[Path]:
                            fill=(38, 11, 11))
     mock = Image.new("RGB", (width - 2 * pad, 46), (38, 11, 11))
     md = ImageDraw.Draw(mock)
-    arrow = arrow_art.glyph("slight-left").resize((16, 16), Image.NEAREST)
-    mock.paste(arrow, (18, 15), arrow.split()[3])
-    md.text((38, 12), "Памятник  120 м", font=ImageFont.truetype(FONT, 16),
-            fill=(255, 255, 255))
+    arrow = arrow_art.glyph("slight-left").resize((20, 20), Image.NEAREST)
+    mock.paste(arrow, (16, 13), arrow.split()[3])
+    md.text((38, 12), "Памятник  120 м", font=_font(16), fill=(255, 255, 255))
     sheet.paste(mock, (pad, y))
     label(draw, "Строка BossBar: стрелка + название + расстояние", (pad + 4, y + 52), 14,
           (188, 194, 206))
@@ -421,6 +428,12 @@ def main() -> None:
     problems = validate()
     previews = build_previews()
     archive = zip_pack()
+    # Копия для jar: /gps pack раздаёт именно этот файл, поэтому он должен
+    # попадать в сборку вместе с плагином.
+    jar_pack = ROOT.parent / "src/main/resources/hahgps.zip"
+    if jar_pack.parent.is_dir():
+        shutil.copyfile(archive, jar_pack)
+        print(f"в jar: {jar_pack}")
     print(f"пак: {PACK}")
     print(f"zip: {archive} ({archive.stat().st_size / 1024:.1f} КБ)")
     print(f"item definitions: {len(list((PACK / 'assets/minecraft/items').glob('*.json')))}")
