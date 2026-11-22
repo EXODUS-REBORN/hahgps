@@ -35,6 +35,14 @@ public class ResourcePackService {
 
     static final String RESOURCE = "hahgps.zip";
 
+    /**
+     * Публичный адрес пака: GitHub-репозиторий ресурспака (он публичный,
+     * поэтому клиенты качают без авторизации). Плагин подставляет его, если
+     * в config.yml не задан свой `resource-pack.url`.
+     */
+    static final String PUBLIC_URL =
+            "https://raw.githubusercontent.com/EXODUS-REBORN/hahgps-pack/main/hahgps.zip";
+
     private final HahGpsPlugin plugin;
     private final ConfigManager config;
     private final MessagesManager messages;
@@ -64,23 +72,26 @@ public class ResourcePackService {
         pack = readPack();
         sha1 = pack == null ? null : sha1(pack);
 
-        String external = config.getResourcePackUrl();
-        if (external != null && !external.isBlank()) {
-            url = external.trim();
-            plugin.getLogger().info("HahGps: ресурспак раздаётся по внешнему URL " + url);
+        String configured = config.getResourcePackUrl();
+        // "local" — поднять свой HTTP-сервер; пусто — публичный адрес из репозитория
+        // ресурспака; иначе — используется указанный URL как есть.
+        if ("local".equalsIgnoreCase(configured)) {
             if (pack == null) {
                 plugin.getLogger().warning("HahGps: в jar нет " + RESOURCE
-                        + " — внешний URL всё равно будет отправлен, но хэш проверить нечем.");
+                        + " — свой сервер поднять нечем. Соберите пак: python3 respack/build.py");
+                return;
             }
-            return;
-        }
-        if (pack == null) {
-            plugin.getLogger().warning("HahGps: в jar нет " + RESOURCE
-                    + " — раздача ресурспака недоступна. Пересоберите пак: python3 respack/build.py");
+            startServer();
             return;
         }
 
-        startServer();
+        String external = configured == null || configured.isBlank() ? PUBLIC_URL : configured.trim();
+        url = external;
+        plugin.getLogger().info("HahGps: ресурспак раздаётся по адресу " + url);
+        if (pack == null) {
+            plugin.getLogger().warning("HahGps: в jar нет " + RESOURCE
+                    + " — внешний URL всё равно будет отправлен, но хэш проверить нечем.");
+        }
     }
 
     public synchronized void reload() {
@@ -116,13 +127,67 @@ public class ResourcePackService {
             return;
         }
         Component prompt = Component.text(config.getResourcePackPrompt());
-        if (server != null && sha1 != null) {
-            player.setResourcePack(url, sha1, prompt, false);
+        if (server != null) {
+            // Адрес берём тот, через который игрок зашёл на сервер: в Docker
+            // автоопределение находило 172.x.x.x контейнера, и клиент не мог
+            // скачать пак («Не удалось загрузить 1 из 1 наборов»).
+            String playerUrl = urlFor(player);
+            if (playerUrl == null) {
+                plugin.getLogger().warning("HahGps: не удалось определить адрес сервера для "
+                        + player.getName() + " — задайте resource-pack.host в config.yml.");
+                player.sendMessage(messages.getPrefixed("pack-unavailable"));
+                return;
+            }
+            if (sha1 != null) {
+                player.setResourcePack(playerUrl, sha1, prompt, false);
+            } else {
+                player.setResourcePack(playerUrl);
+            }
         } else {
             // Внешний URL может указывать на другой файл: хэш и prompt не навязываем.
             player.setResourcePack(url);
         }
         player.sendMessage(messages.getPrefixed("pack-sent"));
+    }
+
+    /**
+     * URL пака для конкретного игрока. Приоритет: `resource-pack.host`,
+     * затем адрес, по которому игрок подключился (virtual host), затем
+     * автоопределённый локальный адрес.
+     */
+    private String urlFor(Player player) {
+        String host = config.getResourcePackHost();
+        if (host == null || host.isBlank()) {
+            host = virtualHost(player);
+        }
+        if (host == null || host.isBlank()) {
+            host = resolveHost();
+        }
+        if (host == null || host.isBlank() || "127.0.0.1".equals(host) || "0.0.0.0".equals(host)) {
+            return null;
+        }
+        return "http://" + bracket(host) + ":" + config.getResourcePackPort() + "/" + RESOURCE;
+    }
+
+    /** Хост, к которому подключался клиент (IP или домен), без порта. */
+    private static String virtualHost(Player player) {
+        try {
+            InetSocketAddress virtual = player.getVirtualHost();
+            if (virtual == null) {
+                return null;
+            }
+            String host = virtual.getHostString();
+            if (host == null || host.isBlank() || "0.0.0.0".equals(host) || "::".equals(host)) {
+                return null;
+            }
+            return host;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static String bracket(String host) {
+        return host.contains(":") && !host.startsWith("[") ? "[" + host + "]" : host;
     }
 
     private byte[] readPack() {

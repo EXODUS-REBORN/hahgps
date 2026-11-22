@@ -180,8 +180,8 @@ def build_pack() -> None:
         "providers": [{
             "type": "bitmap",
             "file": "hahgps:font/arrow.png",
-            "ascent": 9,
-            "height": 10,
+            "ascent": 7,
+            "height": 8,
             "chars": [chars],
         }],
     })
@@ -274,8 +274,8 @@ def validate() -> list[str]:
         walk(data)
 
     atlas = Image.open(PACK / "assets/hahgps/textures/font/arrow.png")
-    if atlas.size != (10 * len(arrow_art.DIRECTIONS), 10):
-        problems.append(f"font/arrow.png: {atlas.size}, ожидалось 80×10")
+    if atlas.size != (8 * len(arrow_art.DIRECTIONS), 8):
+        problems.append(f"font/arrow.png: {atlas.size}, ожидалось 64×8")
     return problems
 
 
@@ -330,35 +330,26 @@ def build_previews() -> list[Path]:
     images = load_images()
     out: list[Path] = []
 
-    # 1. HUD-стрелки: 8×8 в масштабе и строка «как в боссбаре».
-    tile, pad = 112, 10
+    # 1. Стрелки: ванильные формы, перекрашенные в жёлтый + карта направлений.
+    unique = [("straight", "прямо"), ("left", "влево"), ("right", "вправо"),
+              ("back", "разворот")]
+    tile, pad = 128, 12
     cols = 4
     width = cols * (tile + pad) + pad
-    height = 2 * (tile + 36) + pad + 96
+    height = tile + 96
     sheet = Image.new("RGB", (width, height), (17, 19, 24))
     draw = ImageDraw.Draw(sheet)
-    label(draw, "Стрелки 10×10: HUD и чат, 8 направлений", (14, 10), 20)
-    for i, direction in enumerate(arrow_art.DIRECTIONS):
+    label(draw, "Стрелки — ванильные, перекрашены в жёлтый", (14, 10), 20)
+    for i, (direction, caption) in enumerate(unique):
         glyph = arrow_art.glyph(direction).resize((tile, tile), Image.NEAREST)
-        x = pad + (i % cols) * (tile + pad)
-        y = 40 + (i // cols) * (tile + 36)
+        x = pad + i * (tile + pad)
+        y = 40
         draw.rounded_rectangle([x, y, x + tile, y + tile], radius=6,
                                fill=(31, 34, 41), outline=(48, 53, 63))
         sheet.paste(glyph, (x, y), glyph.split()[3])
-        label(draw, direction, (x, y + tile + 2), 14, (198, 204, 216))
-
-    # Мок строки боссбара: глиф в нативном 8 px рядом с подписью.
-    y = 40 + 2 * (tile + 36) + 8
-    draw.rounded_rectangle([pad, y, width - pad, y + 46], radius=8,
-                           fill=(38, 11, 11))
-    mock = Image.new("RGB", (width - 2 * pad, 46), (38, 11, 11))
-    md = ImageDraw.Draw(mock)
-    arrow = arrow_art.glyph("slight-left").resize((20, 20), Image.NEAREST)
-    mock.paste(arrow, (16, 13), arrow.split()[3])
-    md.text((38, 12), "Памятник  120 м", font=_font(16), fill=(255, 255, 255))
-    sheet.paste(mock, (pad, y))
-    label(draw, "Строка BossBar: стрелка + название + расстояние", (pad + 4, y + 52), 14,
-          (188, 194, 206))
+        label(draw, caption, (x + 4, y + tile + 4), 16, (198, 204, 216))
+    label(draw, "прямо ↑   чуть/влево/резко ←   чуть/вправо/резко →   разворот ↓",
+          (14, tile + 70), 15, (150, 158, 172))
     path = PREVIEW / "01-hud.png"
     sheet.save(path)
     out.append(path)

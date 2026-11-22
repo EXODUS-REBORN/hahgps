@@ -32,61 +32,58 @@ DIRECTIONS = (
 # Строка боссбара — 8 пикселей в высоту, поэтому глиф нарисован по пикселям, а
 # не масштабирован: тонкие штрихи в 8 px читаются лучше сглаженных.
 _GLYPHS = {
+    # Пиксельные маски, снятые с ванильного шрифта Minecraft 1.21.11
+    # (assets/minecraft/font/nonlatin_european.png, строка с ←↑→↓).
+    # Рисунок не меняем — только красим в жёлтый.
     "straight": (
-        "...##...",
-        "..####..",
-        ".######.",
-        "#######.",
-        "...##...",
-        "...##...",
-        "...##...",
-        "...##...",
+        "..#.....",
+        ".###....",
+        "#####...",
+        "..#.....",
+        "..#.....",
+        "..#.....",
+        "..#.....",
+        "........",
     ),
     "left": (
         "........",
-        "....##..",
-        "...####.",
+        "..#.....",
+        ".##.....",
         "#######.",
-        "...####.",
-        "....##..",
+        ".##.....",
+        "..#.....",
         "........",
         "........",
     ),
-    "slight-left": (
-        "#.......",
-        "##......",
-        "###.....",
-        ".####...",
-        "..###...",
-        "...###..",
-        "....###.",
-        ".....###",
-    ),
-    "sharp-left": (
-        ".....###",
-        "....###.",
-        "...####.",
-        "..###...",
-        ".###....",
-        "##......",
-        "#.......",
+    "right": (
+        "........",
+        ".....#..",
+        ".....##.",
+        "#######.",
+        ".....##.",
+        ".....#..",
+        "........",
         "........",
     ),
     "back": (
-        "...##...",
-        "...##...",
-        "...##...",
-        "...##...",
-        "#######.",
-        ".######.",
-        "..####..",
-        "...##...",
+        "..#.....",
+        "..#.....",
+        "..#.....",
+        "..#.....",
+        "#####...",
+        ".###....",
+        "..#.....",
+        "........",
     ),
 }
-_GLYPH_MIRROR = {
-    "right": "left",
-    "slight-right": "slight-left",
-    "sharp-right": "sharp-left",
+_GLYPH_MIRROR = {}
+# Ванильных диагоналей в шрифте нет — для «слегка/резко» берём ту же
+# оригинальную стрелку влево/вправо. Разницу направлений несёт текст.
+_GLYPH_ALIAS = {
+    "slight-left": "left",
+    "sharp-left": "left",
+    "slight-right": "right",
+    "sharp-right": "right",
 }
 
 
@@ -189,31 +186,28 @@ def _put_arrow(base: Image.Image, mask: Image.Image) -> Image.Image:
 
 
 def glyph(direction: str) -> Image.Image:
-    """10×10 глиф для BossBar и чата: жёлтая стрелка с тёмным контуром.
+    """8×8 глиф: оригинальная ванильная стрелка, перекрашенная в жёлтый.
 
-    Тело 8×8, контур 1 px: в чате глиф ростом 10 px с посадкой 9 px влезает
-    в строку (1 px уходит в выносную часть), в боссбаре тоже не задевает полосу.
+    Ничего не дорисовываем: маска снята с ванильного шрифта 1.21.11, цвет —
+    наш жёлтый. Размер совпадает с ванильным текстом, поэтому в чате и
+    BossBar стрелка выглядит как часть шрифта.
     """
-    if direction in _GLYPH_MIRROR:
-        return glyph(_GLYPH_MIRROR[direction]).transpose(Image.FLIP_LEFT_RIGHT)
+    direction = _GLYPH_ALIAS.get(direction, direction)
     rows = _GLYPHS[direction]
-    body = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
+    img = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
     for y, row in enumerate(rows):
         for x, cell in enumerate(row):
             if cell == "#":
-                body.putpixel((x, y), YELLOW + (255,))
-    mask = Image.new("L", (10, 10), 0)
-    mask.paste(body.split()[3], (1, 1))
-    outline = mask.filter(ImageFilter.MaxFilter(3))
-    out = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
-    out.paste(Image.new("RGBA", (10, 10), (16, 18, 22, 255)), (0, 0), outline)
-    out.paste(body, (1, 1), body.split()[3])
-    return out
+                img.putpixel((x, y), YELLOW + (255,))
+    return img
 
 
 def sign_face(direction: str) -> Image.Image:
-    """Лицевая грань 3D-знака: жёлтая стрелка на чёрной плите 16×16."""
-    return _put_arrow(_plate(full=True), _sign_arrow_mask(direction))
+    """Лицевая грань 3D-знака: та же ванильная стрелка ×2 на чёрной плите."""
+    arrow = glyph(direction).resize((SIGN, SIGN), Image.NEAREST)
+    base = _plate(full=True)
+    base.alpha_composite(arrow)
+    return base
 
 
 def sign_back() -> Image.Image:
@@ -287,10 +281,10 @@ def steel(kind: str = "post") -> Image.Image:
 
 
 def font_atlas() -> Image.Image:
-    """Все 8 глифов в ряд: 10 × 10 пикселей на глиф."""
-    atlas = Image.new("RGBA", (10 * len(DIRECTIONS), 10), (0, 0, 0, 0))
+    """Все 8 глифов в ряд: 8 × 8 пикселей на глиф."""
+    atlas = Image.new("RGBA", (8 * len(DIRECTIONS), 8), (0, 0, 0, 0))
     for i, direction in enumerate(DIRECTIONS):
-        atlas.paste(glyph(direction), (i * 10, 0))
+        atlas.paste(glyph(direction), (i * 8, 0))
     return atlas
 
 
