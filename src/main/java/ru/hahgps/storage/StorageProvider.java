@@ -3,7 +3,6 @@ import ru.hahgps.model.Category;
 import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
 import ru.hahgps.model.Tracker;
-import ru.hahgps.model.TrackerTerminal;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -96,13 +95,6 @@ public interface StorageProvider extends AutoCloseable {
      * @return первый номер зарезервированного блока
      */
     long reserveTrackerCodeBlock(int count);
-
-    /** Терминалы iTrak — блоки с координатами трекеров рядом. */
-    List<TrackerTerminal> getTerminals();
-
-    TrackerTerminal createTerminal(TrackerTerminal terminal);
-
-    boolean deleteTerminal(String world, int x, int y, int z);
 
     @Override
     void close();

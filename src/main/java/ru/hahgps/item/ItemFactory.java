@@ -38,7 +38,6 @@ public final class ItemFactory {
     public static final NamespacedKey LOCATOR = NamespacedKey.fromString("hahgps:itrak_locator");
     /** Радиус поиска конкретного локатора: у каждого предмета свой. */
     public static final NamespacedKey LOCATOR_RADIUS = NamespacedKey.fromString("hahgps:itrak_locator_radius");
-    public static final NamespacedKey TERMINAL = NamespacedKey.fromString("hahgps:itrak_terminal");
     public static final NamespacedKey THROWER = NamespacedKey.fromString("hahgps:itrak_thrower");
     /** Shift-бросок: попав в воду, трекер тонет, а не остаётся на поверхности. */
     public static final NamespacedKey SINK = NamespacedKey.fromString("hahgps:itrak_sink");
@@ -338,48 +337,12 @@ public final class ItemFactory {
         return item != null && item.getType() == LEGACY_LOCATOR_MATERIAL && isLocator(item);
     }
 
-    /** Любой наш предмет iTrak: локатор, терминал, заряд или трекер. */
+    /** Любой наш предмет iTrak: локатор или трекер. */
     public static boolean isItrakItem(ItemStack item) {
         if (item == null || item.getType() == Material.AIR) {
             return false;
         }
-        return isLocator(item) || isTerminalItem(item) || readTracker(item) != null;
-    }
-
-    /** Терминал iTrak — предмет-блок: ставится как лодестоун и получает координаты рядом. */
-    public static ItemStack terminalItem() {
-        ItemStack item = new ItemStack(Material.LODESTONE);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(GuiTheme.mm("<bold>" + GuiTheme.gradient("iTrak")
-                    + "</bold> <#8fc6ff>" + GuiTheme.escapeForMini(
-                    message("itrak-terminal-item-name", "Терминал")) + "</#8fc6ff>"));
-            List<Component> lore = new ArrayList<>();
-            lore.add(GuiTheme.mm("<gray>" + GuiTheme.escapeForMini(
-                    message("itrak-terminal-item-lore", "Показывает координаты трекеров рядом"))
-                    + "</gray>"));
-            lore.add(GuiTheme.mm("<#66aaff>→</#66aaff> <gray>" + GuiTheme.escapeForMini(
-                    message("itrak-terminal-item-hint", "ПКМ по блоку — установить")) + "</gray>"));
-            meta.lore(lore);
-            meta.setCustomModelData(ItemIds.ITRAK_TERMINAL);
-            meta.setMaxStackSize(1);
-            meta.setEnchantmentGlintOverride(false);
-            meta.getPersistentDataContainer().set(TERMINAL, PersistentDataType.BYTE, (byte) 1);
-            item.setItemMeta(meta);
-        }
-        return item;
-    }
-
-    public static boolean isTerminalItem(ItemStack item) {
-        if (item == null || item.getType() != Material.LODESTONE) {
-            return false;
-        }
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) {
-            return false;
-        }
-        Byte marker = meta.getPersistentDataContainer().get(TERMINAL, PersistentDataType.BYTE);
-        return marker != null && marker != 0;
+        return isLocator(item) || readTracker(item) != null;
     }
 
     /** Записывает данные трекера в носитель PDC (снаряд броска). */
@@ -440,12 +403,6 @@ public final class ItemFactory {
         }
         player.getInventory().addItem(item).values()
                 .forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
-    }
-
-    /** Убирает один предмет-заряд из инвентаря. @return true, если заряд был */
-    /** Убирает один предмет терминала из инвентаря. */
-    public static boolean consumeTerminalItem(Player player) {
-        return consumeMatching(player, ItemFactory::isTerminalItem);
     }
 
     /** Убирает один предмет-трекер с этим кодом из инвентаря. */

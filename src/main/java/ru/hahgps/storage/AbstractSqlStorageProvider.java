@@ -7,7 +7,6 @@ import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
 import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TrackerColor;
-import ru.hahgps.model.TrackerTerminal;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -201,17 +200,6 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                     "moved_at BIGINT NOT NULL DEFAULT 0, " +
                     "updated_at BIGINT NOT NULL DEFAULT 0)");
 
-            // Схема v4: терминалы iTrak. В мире это обычный блок, поэтому
-            // привязка — по координатам в отдельной таблице.
-            st.execute("CREATE TABLE IF NOT EXISTS itrak_terminals (" +
-                    "id INTEGER PRIMARY KEY " + autoIncrement() + ", " +
-                    "world VARCHAR(64) NOT NULL, " +
-                    "x INTEGER NOT NULL, y INTEGER NOT NULL, z INTEGER NOT NULL, " +
-                    "owner_uuid VARCHAR(36) NOT NULL DEFAULT '', " +
-                    "owner_name VARCHAR(64) NOT NULL DEFAULT '', " +
-                    "placed_at BIGINT NOT NULL DEFAULT 0, " +
-                    "UNIQUE (world, x, y, z))");
-
             // Схема v6: статистика поиска мест. Строка на пару «место + игрок +
             // запрос»: популярность места считается по разным игрокам, а не по
             // числу запросов, поэтому один человек не накрутит место в топ.
@@ -297,14 +285,6 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 new ColumnAdd("block_x", "INTEGER"),
                 new ColumnAdd("block_y", "INTEGER"),
                 new ColumnAdd("block_z", "INTEGER")));
-        spec.put("itrak_terminals", List.of(
-                new ColumnAdd("world", "VARCHAR(64) NOT NULL DEFAULT 'world'"),
-                new ColumnAdd("x", "INTEGER NOT NULL DEFAULT 0"),
-                new ColumnAdd("y", "INTEGER NOT NULL DEFAULT 64"),
-                new ColumnAdd("z", "INTEGER NOT NULL DEFAULT 0"),
-                new ColumnAdd("owner_uuid", "VARCHAR(36) NOT NULL DEFAULT ''"),
-                new ColumnAdd("owner_name", "VARCHAR(64) NOT NULL DEFAULT ''"),
-                new ColumnAdd("placed_at", "BIGINT NOT NULL DEFAULT 0")));
         spec.put("poi_search_stats", List.of(
                 new ColumnAdd("poi_id", "INTEGER NOT NULL DEFAULT 0"),
                 new ColumnAdd("player_uuid", "VARCHAR(36) NOT NULL DEFAULT ''"),
@@ -447,7 +427,6 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         createIndex("idx_pois_category", "pois", "category_id");
         createIndex("idx_graph_edges_world", "graph_edges", "world");
         createIndex("idx_trackers_owner", "trackers", "owner_uuid");
-        createIndex("idx_terminals_world", "itrak_terminals", "world");
         createIndex("idx_poi_search_poi", "poi_search_stats", "poi_id");
         // Один код — один установленный трекер. Старые базы могли обойтись без
         // уникальности, да и гонка двух установок не должна давать два ряда.
@@ -1166,82 +1145,6 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
             return null;
         }
         return new Tracker.SupportBlock(x, y, z);
-    }
-
-    @Override
-    public synchronized List<TrackerTerminal> getTerminals() {
-        List<TrackerTerminal> list = new ArrayList<>();
-        try {
-            ensureConnected();
-            try (Statement st = connection.createStatement();
-                 ResultSet rs = st.executeQuery("SELECT * FROM itrak_terminals ORDER BY id")) {
-                while (rs.next()) {
-                    list.add(mapTerminal(rs));
-                }
-            }
-        } catch (SQLException e) {
-            markStale();
-            throw new RuntimeException("Failed to load itrak terminals", e);
-        }
-        return list;
-    }
-
-    @Override
-    public synchronized TrackerTerminal createTerminal(TrackerTerminal terminal) {
-        String sql = "INSERT INTO itrak_terminals (world, x, y, z, owner_uuid, owner_name, placed_at) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?)";
-        try {
-            ensureConnected();
-            try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-                ps.setString(1, terminal.world());
-                ps.setInt(2, terminal.x());
-                ps.setInt(3, terminal.y());
-                ps.setInt(4, terminal.z());
-                ps.setString(5, terminal.ownerUuid() == null ? "" : terminal.ownerUuid().toString());
-                ps.setString(6, terminal.ownerName() == null ? "" : terminal.ownerName());
-                ps.setLong(7, terminal.placedAt());
-                ps.executeUpdate();
-                try (ResultSet rs = ps.getGeneratedKeys()) {
-                    if (rs.next()) {
-                        return new TrackerTerminal(rs.getInt(1), terminal.world(), terminal.x(),
-                                terminal.y(), terminal.z(), terminal.ownerUuid(),
-                                terminal.ownerName(), terminal.placedAt());
-                    }
-                }
-            }
-        } catch (SQLException e) {
-            markStale();
-            throw new RuntimeException("Failed to create itrak terminal", e);
-        }
-        return null;
-    }
-
-    @Override
-    public synchronized boolean deleteTerminal(String world, int x, int y, int z) {
-        try {
-            ensureConnected();
-            try (PreparedStatement ps = connection.prepareStatement(
-                    "DELETE FROM itrak_terminals WHERE world = ? AND x = ? AND y = ? AND z = ?")) {
-                ps.setString(1, world);
-                ps.setInt(2, x);
-                ps.setInt(3, y);
-                ps.setInt(4, z);
-                return ps.executeUpdate() > 0;
-            }
-        } catch (SQLException e) {
-            markStale();
-            throw new RuntimeException("Failed to delete itrak terminal", e);
-        }
-    }
-
-    private TrackerTerminal mapTerminal(ResultSet rs) throws SQLException {
-        return new TrackerTerminal(
-                rs.getInt("id"),
-                rs.getString("world"),
-                rs.getInt("x"), rs.getInt("y"), rs.getInt("z"),
-                parseUuid(rs.getString("owner_uuid")),
-                rs.getString("owner_name"),
-                rs.getLong("placed_at"));
     }
 
     private Poi mapPoi(ResultSet rs) throws SQLException {

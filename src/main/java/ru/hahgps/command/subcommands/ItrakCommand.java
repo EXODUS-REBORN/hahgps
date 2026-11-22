@@ -3,7 +3,6 @@ package ru.hahgps.command.subcommands;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import ru.hahgps.HahGpsPlugin;
@@ -40,7 +39,7 @@ public class ItrakCommand implements SubCommand {
 
     @Override
     public String usage() {
-        return "/gps itrak [give|give-locator|give-terminal|scan|find|list|info|route|name|open|take|remove|watch|unwatch]";
+        return "/gps itrak [give|give-locator|scan|find|list|info|route|name|open|take|remove|watch|unwatch]";
     }
 
     @Override
@@ -51,7 +50,7 @@ public class ItrakCommand implements SubCommand {
     @Override
     public List<SubCommand> children() {
         return List.of(new GiveCommand(), new GiveLocatorCommand(),
-                new GiveTerminalCommand(), new ScanCommand(), new FindCommand(), new ListCommand(),
+                new ScanCommand(), new FindCommand(), new ListCommand(),
                 new InfoCommand(), new RouteCommand(), new NameCommand(), new OpenCommand(),
                 new TakeCommand(), new RemoveCommand(), new WatchCommand(), new UnwatchCommand());
     }
@@ -220,46 +219,6 @@ public class ItrakCommand implements SubCommand {
             return line;
         }
         return service.withCarrierHover(line, tracker);
-    }
-
-    /**
-     * Нажатие на терминал: координаты трекеров в радиусе и подсветка.
-     * Тот же путь использует сам блок-терминал из слушателя.
-     */
-    public static void reportTerminal(HahGpsPlugin plugin, Player player, Block block) {
-        TrackerService service = plugin.getTrackerService();
-        if (service == null || block == null) {
-            return;
-        }
-        double radius = plugin.getConfigManager().getItrakTerminalRadius();
-        Location origin = block.getLocation().add(0.5, 0.5, 0.5);
-        List<TrackerService.Nearby> found = service.scanAround(origin, radius);
-        if (found.isEmpty()) {
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-empty",
-                    "radius", String.valueOf((int) radius)));
-            GuiTheme.deny(player);
-            return;
-        }
-        player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-header",
-                "count", String.valueOf(found.size())));
-        int seconds = plugin.getConfigManager().getItrakTerminalHighlightSeconds();
-        for (TrackerService.Nearby nearby : found) {
-            Tracker tracker = nearby.tracker();
-            player.sendMessage(withCarrierHover(plugin, plugin.getMessages().getPrefixed("itrak-terminal-entry",
-                    "name", tracker.getDisplayName(),
-                    "code", tracker.getCode(),
-                    "x", TrackerService.formatCoord(tracker.getX()),
-                    "y", TrackerService.formatCoord(tracker.getY()),
-                    "z", TrackerService.formatCoord(tracker.getZ()),
-                    "distance", LocationUtil.formatDistance(nearby.distance()),
-                    "status", service.statusText(player, tracker)), tracker));
-            sendTrackerAction(plugin, player, tracker);
-            service.highlight(player, tracker, seconds);
-        }
-        player.sendMessage(plugin.getMessages().getComponent("itrak-route-cancel-button"));
-        player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-highlight",
-                "count", String.valueOf(found.size()), "seconds", String.valueOf(seconds)));
-        GuiTheme.click(player);
     }
 
     /** Маршрут к трекеру: путь строится в пуле, навигация ведёт к живой цели. */
@@ -955,46 +914,6 @@ public class ItrakCommand implements SubCommand {
         @Override
         public List<String> tabComplete(Player player, String[] args) {
             return args.length == 1 ? trackerSuggestions(player, args[0]) : List.of();
-        }
-    }
-
-    private static class GiveTerminalCommand implements SubCommand {
-        @Override
-        public String name() {
-            return "give-terminal";
-        }
-
-        @Override
-        public String usage() {
-            return "/gps itrak give-terminal [игрок]";
-        }
-
-        @Override
-        public String permission() {
-            return "gps.itrak.give";
-        }
-
-        @Override
-        public void execute(Player player, String[] args) {
-            HahGpsPlugin plugin = HahGpsPlugin.getInstance();
-            Player target = player;
-            if (args.length >= 1) {
-                Player named = Bukkit.getPlayerExact(args[0]);
-                if (named == null) {
-                    player.sendMessage(plugin.getMessages().getPrefixed("itrak-player-not-found",
-                            "name", args[0]));
-                    return;
-                }
-                target = named;
-            }
-            ItemFactory.give(target, ItemFactory.terminalItem());
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-given",
-                    "player", target.getName()));
-        }
-
-        @Override
-        public List<String> tabComplete(Player player, String[] args) {
-            return args.length == 1 ? SubCommand.filterByPrefix(playerNames(), args[0]) : List.of();
         }
     }
 

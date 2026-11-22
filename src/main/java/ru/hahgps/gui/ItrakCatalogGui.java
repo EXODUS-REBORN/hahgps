@@ -59,7 +59,6 @@ public class ItrakCatalogGui extends GuiScreen {
         int longRadius = plugin.getConfigManager().getItrakLocatorLongRadius();
         inventory.setItem(30, locatorDisplay(radius));
         inventory.setItem(32, locatorDisplay(longRadius));
-        inventory.setItem(34, terminalDisplay());
 
         inventory.setItem(45, GuiTheme.navBack(getMsg("gui.back")));
         inventory.setItem(53, GuiTheme.navClose(getMsg("gui.close")));
@@ -95,20 +94,6 @@ public class ItrakCatalogGui extends GuiScreen {
             meta.displayName(comp("gui.itrak-catalog-locator", "radius", String.valueOf(radius)));
             List<Component> lines = new ArrayList<>();
             lines.add(comp("gui.lore-itrak-catalog-locator"));
-            lines.add(comp("gui.lore-itrak-catalog-entry"));
-            meta.lore(lines);
-            item.setItemMeta(meta);
-        }
-        return item;
-    }
-
-    private ItemStack terminalDisplay() {
-        ItemStack item = ItemFactory.terminalItem();
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(comp("gui.itrak-catalog-terminal"));
-            List<Component> lines = new ArrayList<>();
-            lines.add(comp("gui.lore-itrak-catalog-terminal"));
             lines.add(comp("gui.lore-itrak-catalog-entry"));
             meta.lore(lines);
             item.setItemMeta(meta);
@@ -155,11 +140,6 @@ public class ItrakCatalogGui extends GuiScreen {
         if (slot == 32) {
             giveLocator(plugin.getConfigManager().getItrakLocatorLongRadius());
             return;
-        }
-        if (slot == 34) {
-            ItemFactory.give(player, ItemFactory.terminalItem());
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-received"));
-            GuiTheme.click(player);
         }
     }
 

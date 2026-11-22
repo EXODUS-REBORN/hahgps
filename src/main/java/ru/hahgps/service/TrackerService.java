@@ -126,7 +126,7 @@ public class TrackerService {
     private final Set<String> placingCodes = ConcurrentHashMap.newKeySet();
     /** С какого момента привязанная сущность не находится (для снятия «висящих» трекеров). */
     private final Map<Integer, Long> lostSince = new ConcurrentHashMap<>();
-    /** Подсветка трекеров конкретному игроку: терминал показал координаты. */
+    /** Подсветка трекеров конкретному игроку: локатор или трекер показал координаты. */
     private final Map<UUID, List<Highlight>> highlights = new ConcurrentHashMap<>();
 
     private record Highlight(int trackerId, long until) {
@@ -374,7 +374,7 @@ public class TrackerService {
         return recipients;
     }
 
-    /** Подсветка по нажатию на терминал: цветные частицы вокруг трекеров. */
+    /** Подсветка найденных трекеров: цветные частицы вокруг них. */
     private void spawnHighlights(long now) {
         if (highlights.isEmpty()) {
             return;
@@ -408,7 +408,7 @@ public class TrackerService {
         }
     }
 
-    /** Показать игроку трекер на несколько секунд (после терминала). */
+    /** Показать игроку трекер на несколько секунд (после сканирования). */
     public void highlight(Player player, Tracker tracker, int seconds) {
         if (player == null || tracker == null) {
             return;

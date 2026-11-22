@@ -6,11 +6,11 @@
   * собирает 3D-модели предмета-указателя и блока-знака (свои текстуры
     в namespace `hahgps`, ванильные блоки и их текстуры не переопределяются);
   * рисует 3D-трекеры iTrak (8 цветов × обычный/водонепроницаемый),
-    оба локатора и терминал — «AirTag» с головой крипера, без блика
+    оба локатора — «AirTag» с головой крипера, без блика
     зачарования и с честной моделью на земле;
   * добавляет item definitions с `custom_model_data` и откатом на ваниль:
     `oak_sign` (стрелки), 8 материалов трекеров, `recovery_compass`
-    (локаторы, ванильный компас сохранён в fallback), `lodestone` (терминал);
+    (локаторы, ванильный компас сохранён в fallback);
   * рендерит превью и пакует `dist/hahgps.zip`.
 
 Запуск: python3 respack/build.py   (нужны pillow и numpy)
@@ -43,11 +43,10 @@ ROUTE_BLOCK_BASE = 1820
 
 # CMD должны совпадать с ru.hahgps.item.ItemIds:
 # TRACKER_BASE = 2001 (8 цветов × 2), ITRAK_LOCATOR = 2020,
-# ITRAK_LOCATOR_LONG = 2021, ITRAK_TERMINAL = 2042.
+# ITRAK_LOCATOR_LONG = 2021.
 TRACKER_BASE = 2001
 LOCATOR_CMD = 2020
 LOCATOR_LONG_CMD = 2021
-TERMINAL_CMD = 2042
 
 TRACKER_MATERIALS = {
     "blue": "lapis_lazuli",
@@ -162,22 +161,6 @@ DISPLAY_LOCATOR = {
                              "scale": [0.46, 0.46, 0.46]},
 }
 
-DISPLAY_TERMINAL = {
-    "gui": {"rotation": [30, 225, 0], "translation": [0, 0, 0],
-            "scale": [0.65, 0.65, 0.65]},
-    "ground": {"rotation": [0, 0, 0], "translation": [0, 4, 0],
-               "scale": [0.3, 0.3, 0.3]},
-    "fixed": {"rotation": [0, 180, 0], "translation": [0, 0, 0],
-              "scale": [0.5, 0.5, 0.5]},
-    "thirdperson_righthand": {"rotation": [0, 45, 0], "translation": [0, 3, 0],
-                              "scale": [0.35, 0.35, 0.35]},
-    "thirdperson_lefthand": {"rotation": [0, -45, 0], "translation": [0, 3, 0],
-                             "scale": [0.35, 0.35, 0.35]},
-    "firstperson_righthand": {"rotation": [0, 45, 0], "translation": [0, 2, 0],
-                              "scale": [0.4, 0.4, 0.4]},
-    "firstperson_lefthand": {"rotation": [0, -45, 0], "translation": [0, 2, 0],
-                             "scale": [0.4, 0.4, 0.4]},
-}
 
 
 def model_tracker(color_key: str, waterproof: bool = False) -> dict:
@@ -200,13 +183,19 @@ def model_tracker(color_key: str, waterproof: bool = False) -> dict:
             "back": back,
         },
         "elements": [
-            # Узкий корпус-«таблетка» под крышкой: он спрятан в тени диска.
-            _element((3.2, 0, 3.2, 12.8, 1.8, 12.8), {
+            # Нижний диск — тонкий, чтобы силуэт читался круглым.
+            _element((3.5, 0, 3.5, 12.5, 0.05, 12.5), {
                 "north": "#edge", "south": "#edge", "west": "#edge",
                 "east": "#edge", "up": "#edge", "down": "#back",
             }),
-            # Тонкая крышка-диск шире корпуса: углы прозрачны, силуэт круглый.
-            _element((1.6, 1.8, 1.6, 14.4, 2.0, 14.4), {
+            # Узкий корпус-«таблетка» под крышкой: он спрятан в тени диска.
+            _element((3.2, 0.05, 3.2, 12.8, 1.95, 12.8), {
+                "north": "#edge", "south": "#edge", "west": "#edge",
+                "east": "#edge", "up": "#edge", "down": "#edge",
+            }),
+            # Крышка-диск шире корпуса: углы прозрачны, силуэт круглый,
+            # боковая кромка всего 0.05 — квадратной «рамки» почти не видно.
+            _element((0.9, 1.95, 0.9, 15.1, 2.0, 15.1), {
                 "north": "#edge", "south": "#edge", "west": "#edge",
                 "east": "#edge", "up": "#top", "down": "#edge",
             }),
@@ -264,37 +253,6 @@ def model_locator(long: bool = False) -> dict:
     }
 
 
-def model_terminal() -> dict:
-    """Терминал: плита с экраном и антенной, как маленькая база iTrak."""
-    return {
-        "parent": "minecraft:block/block",
-        "textures": {
-            "particle": "hahgps:item/terminal_front",
-            "front": "hahgps:item/terminal_front",
-            "side": "hahgps:item/terminal_side",
-            "top": "hahgps:item/terminal_top",
-            "back": "hahgps:item/terminal_back",
-        },
-        "elements": [
-            _element((1, 0, 1, 15, 1, 15), {
-                "north": "#side", "south": "#side", "west": "#side",
-                "east": "#side", "up": "#side", "down": "#side",
-            }),
-            _element((2, 1, 2, 14, 5, 14), {
-                "north": "#front", "south": "#back", "west": "#side",
-                "east": "#side", "up": "#top", "down": "#side",
-            }),
-            _element((7.4, 5, 7.4, 8.6, 9, 8.6), {
-                "north": "#side", "south": "#side", "west": "#side",
-                "east": "#side", "up": "#top", "down": "#side",
-            }),
-            _element((7.1, 9, 7.1, 8.9, 9.5, 8.9), {
-                "north": "#top", "south": "#top", "west": "#top",
-                "east": "#top", "up": "#top", "down": "#top",
-            }),
-        ],
-        "display": DISPLAY_TERMINAL,
-    }
 
 
 def vanilla_recovery_compass_model() -> dict:
@@ -434,7 +392,7 @@ def build_pack() -> None:
         tracker_art.tracker_rim(color_key, True).save(
             tex_item / f"tracker_{color_key}_rim_wp.png")
 
-    # --- локаторы и терминал ----------------------------------------------
+    # --- локаторы ----------------------------------------------------------
     tracker_art.locator_front().save(tex_item / "locator_front.png")
     tracker_art.locator_front(True).save(tex_item / "locator_front_long.png")
     tracker_art.locator_side().save(tex_item / "locator_side.png")
@@ -443,10 +401,6 @@ def build_pack() -> None:
     tracker_art.locator_tip().save(tex_item / "locator_tip.png")
     tracker_art.locator_button().save(tex_item / "locator_button.png")
     tracker_art.locator_band().save(tex_item / "locator_band.png")
-    tracker_art.terminal_front().save(tex_item / "terminal_front.png")
-    tracker_art.terminal_side().save(tex_item / "terminal_side.png")
-    tracker_art.terminal_top().save(tex_item / "terminal_top.png")
-    tracker_art.terminal_back().save(tex_item / "terminal_back.png")
 
     # --- модели -----------------------------------------------------------
     sign_entries: list[tuple[int, str]] = []
@@ -474,7 +428,7 @@ def build_pack() -> None:
         },
     })
 
-    # --- диспетчеры CMD для трекеров, локаторов и терминала ---------------
+    # --- диспетчеры CMD для трекеров и локаторов ---------------------------
     for index, color_key in enumerate(tracker_art.COLORS):
         regular_cmd = TRACKER_BASE + index * 2
         waterproof_cmd = regular_cmd + 1
@@ -502,16 +456,6 @@ def build_pack() -> None:
 
     write_json(models_item / "locator.json", model_locator(False))
     write_json(models_item / "locator_long.json", model_locator(True))
-    write_json(models_item / "terminal.json", model_terminal())
-    # Терминал — это блок в мире. Без blockstate на лодестоуне стоял бы
-    # огромный ванильный куб; теперь и предмет, и поставленный блок выглядят
-    # одинаково — маленькая база с экраном и антенной.
-    terminal_block = model_terminal()
-    terminal_block.pop("display", None)
-    write_json(models_block / "terminal.json", terminal_block)
-    write_json(blockstates_dir / "lodestone.json", {
-        "variants": {"": {"model": "hahgps:block/terminal"}},
-    })
     write_json(items_dir / "recovery_compass.json", {
         "model": {
             "type": "minecraft:range_dispatch",
@@ -529,20 +473,6 @@ def build_pack() -> None:
             "fallback": vanilla_recovery_compass_model(),
         },
     })
-    write_json(items_dir / "lodestone.json", {
-        "model": {
-            "type": "minecraft:range_dispatch",
-            "property": "minecraft:custom_model_data",
-            "entries": [
-                {"threshold": float(TERMINAL_CMD),
-                 "model": {"type": "minecraft:model",
-                           "model": "hahgps:item/terminal"}},
-            ],
-            "fallback": {"type": "minecraft:model",
-                         "model": "minecraft:item/lodestone"},
-        },
-    })
-
     write_json(PACK / "pack.mcmeta", {
         "pack": {
             "description": "HahGPS: стрелки, 3D-трекеры и локаторы",
@@ -755,15 +685,14 @@ def build_previews() -> list[Path]:
     sheet.save(path)
     out.append(path)
 
-    # 6. Локаторы и терминал.
+    # 6. Локаторы.
     tile = 250
-    sheet = Image.new("RGB", (3 * (tile + 12) + 12, tile + 58), (17, 19, 24))
+    sheet = Image.new("RGB", (2 * (tile + 12) + 12, tile + 58), (17, 19, 24))
     draw = ImageDraw.Draw(sheet)
-    label(draw, "Локаторы iTrak (CMD 2020/2021) и терминал (CMD 2042)", (14, 10), 20)
+    label(draw, "Локаторы iTrak (CMD 2020/2021)", (14, 10), 20)
     models = (
         ("locator", "локатор · 20", LOCATOR_CMD),
         ("locator_long", "дальний · 30", LOCATOR_LONG_CMD),
-        ("terminal", "терминал", TERMINAL_CMD),
     )
     for i, (name, caption, cmd) in enumerate(models):
         model = json.loads((PACK / "assets/hahgps/models/item" / f"{name}.json")
@@ -820,19 +749,6 @@ def build_previews() -> list[Path]:
     sheet.save(path)
     out.append(path)
 
-    # 8. Терминал в мире: blockstate лодестоуна ведёт на нашу модель.
-    tile = 430
-    sheet = Image.new("RGB", (tile + 28, tile + 58), (17, 19, 24))
-    draw = ImageDraw.Draw(sheet)
-    label(draw, "Терминал в мире: blockstate lodestone → hahgps:block/terminal",
-          (14, 10), 18)
-    model = json.loads((PACK / "assets/hahgps/models/block/terminal.json")
-                       .read_text(encoding="utf-8"))
-    image = render_model(model, images, tile, yaw=-32, pitch=-24, view=1.25)
-    sheet.paste(image, (14, 40))
-    path = PREVIEW / "10-terminal-block.png"
-    sheet.save(path)
-    out.append(path)
     return out
 
 

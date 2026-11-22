@@ -174,14 +174,12 @@ def catalog() -> Path:
         put(image, 19 + i, item_icon(f"tracker_{color}_wp"))
     put(image, 30, item_icon("locator"))
     put(image, 32, item_icon("locator_long"))
-    put(image, 34, item_icon("terminal"))
     put(image, 45, simple_icon("compass"))
     put(image, 53, simple_icon("barrier"))
     image = compose(image, "Каталог выдачи", [
         "8 цветов трекеров",
         "обычный и водонепроницаемый",
         "локатор 20 / дальний 30",
-        "терминал для координат",
         "ЛКМ — получить предмет",
     ])
     path = PREVIEW / "08-gui-catalog.png"

@@ -116,8 +116,6 @@ public class ConfigManager {
         checkRange("itrak.save-interval-seconds", 30, 5, 3600);
         checkRange("itrak.live-route-rebuild-seconds", 10, 2, 300);
         checkRange("itrak.live-route-rebuild-blocks", 16, 2, 256);
-        checkRange("itrak.terminal-radius", 5, 1, 32);
-        checkRange("itrak.terminal-highlight-seconds", 10, 1, 120);
         checkRange("itrak.scan-highlight-seconds", 10, 1, 120);
         checkRange("navigation.walk-max-distance", 128, 8, 512);
         checkRange("navigation.walk-detour-blocks", 24, 0, 512);
@@ -266,6 +264,11 @@ public class ConfigManager {
     }
 
     /** Текст в окне подтверждения установки пака. */
+    /** Автоматически досылать обновлённый пак тем, кто уже ставил старый. */
+    public boolean isResourcePackAutoUpdate() {
+        return config.getBoolean("resource-pack.auto-update", true);
+    }
+
     public String getResourcePackPrompt() {
         String prompt = config.getString("resource-pack.prompt", "HahGPS: стрелки маршрута");
         return prompt == null || prompt.isBlank() ? "HahGPS" : prompt;
@@ -466,14 +469,6 @@ public class ConfigManager {
         return config.getBoolean("itrak.attach-players", true);
     }
 
-    /** Радиус терминала: трекеры в нём показываются по нажатию на блок. */
-    public double getItrakTerminalRadius() {
-        return Math.max(1, Math.min(32, config.getInt("itrak.terminal-radius", 5)));
-    }
-
-    public int getItrakTerminalHighlightSeconds() {
-        return Math.max(1, Math.min(120, config.getInt("itrak.terminal-highlight-seconds", 10)));
-    }
 
     /** Включены ли крафты iTrak. */
     public boolean isItrakCrafting() {

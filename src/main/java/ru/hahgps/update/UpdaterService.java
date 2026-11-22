@@ -739,6 +739,20 @@ public final class UpdaterService {
     static String shortNotes(String body) {
         if (body == null) return "";
         String notes = body.strip();
+        // В релизе после текста идёт раздел со скриншотами. В чат его нельзя:
+        // Minecraft не рисует картинки, и игрок видел бы сырые ссылки.
+        int shots = notes.indexOf("### Скриншоты");
+        if (shots <= 0) shots = notes.indexOf("### Screenshots");
+        if (shots <= 0) shots = notes.indexOf("<h3>Скриншоты");
+        if (shots <= 0) shots = notes.indexOf("<h3>Screenshots");
+        if (shots > 0) notes = notes.substring(0, shots);
+        notes = notes.replaceAll("!\\[[^]]*]\\([^)]*\\)", " "); // markdown-картинки
+        notes = notes.replaceAll("<img[^>]*>", " ");                  // HTML-картинки
+        notes = notes.replaceAll("<[^>]+>", " ");                    // прочий HTML
+        notes = notes.replaceAll("\\[([^]]+)]\\([^)]*\\)", "$1"); // ссылки -> текст
+        notes = notes.replaceAll("(?m)^#{1,6}\\s*", "");            // заголовки
+        notes = notes.replace("**", "").replace("`", "");
+        notes = notes.replaceAll("\\s+", " ").strip();
         if (notes.length() > 500) {
             notes = notes.substring(0, 500).strip() + "…";
         }

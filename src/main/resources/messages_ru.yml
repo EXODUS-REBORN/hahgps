@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Версия схемы палитры: при несовпадении файл заменяется эталоном (старый — в .bak)
-palette-version: 16
+palette-version: 17
 
 no-permission: "<#3f86ff>✖ У вас нет прав для выполнения этой команды.</#3f86ff>"
 player-only: "<#3f86ff>✖ Эта команда доступна только игрокам.</#3f86ff>"
@@ -112,6 +112,7 @@ search-route-button: "  <#66aaff>[построить маршрут]</#66aaff>"
 
 # --- Прочее ---
 reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>Конфигурация HahGps перезагружена.</gray>"
+pack-auto-updated: "<#8fe9f5>✔</#8fe9f5> <gray>Ресурспак обновлён до новой версии.</gray>"
 pack-sent: "<#8fe9f5>✔</#8fe9f5> <gray>Ресурспак отправлен — подтвердите установку в окне Minecraft.</gray>"
 pack-unavailable: "<#3f86ff>✖ Ресурспак недоступен: проверьте resource-pack в config.yml.</#3f86ff>"
 pack-disabled: "<#3f86ff>✖ Раздача ресурспака выключена в config.yml.</#3f86ff>"
@@ -182,7 +183,6 @@ itrak-given-code: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak</gray> <white><bold>{code}
 itrak-received: "<#8fe9f5>✔</#8fe9f5> <gray>Получен iTrak</gray> <white><bold>{code}</bold></white> <dark_gray>·</dark_gray> <#8fc6ff>{color}</#8fc6ff>"
 itrak-locator-given: "<#8fe9f5>✔</#8fe9f5> <gray>Локатор iTrak ({radius} блоков) выдан:</gray> <white>{player}</white>"
 itrak-locator-received: "<#8fe9f5>✔</#8fe9f5> <gray>Получен локатор iTrak</gray> <dark_gray>·</dark_gray> <#8fc6ff>{radius} блоков</#8fc6ff>"
-itrak-terminal-received: "<#8fe9f5>✔</#8fe9f5> <gray>Получен терминал iTrak</gray>"
 itrak-player-not-found: "<#3f86ff>✖ Игрок <white><bold>{name}</bold></white> не в сети.</#3f86ff>"
 itrak-color-unknown: "<#3f86ff>✖ Неизвестный цвет <white><bold>{color}</bold></white>.</#3f86ff>"
 itrak-no-trackers: "<#3f86ff>✖ Трекеров пока нет — прицепи iTrak к поверхности.</#3f86ff>"
@@ -282,26 +282,12 @@ itrak-item-renamed: "<#8fe9f5>✔</#8fe9f5> <gray>Название трекер�
 input-itrak-rename: "<#66aaff>→</#66aaff> <gray>Напиши новое название для</gray> <white><bold>{name}</bold></white> <dark_gray>·</dark_gray> <gray>дефис снимает название</gray>"
 help-itrak: "Трекеры iTrak, локатор и слежение"
 
-# --- iTrak: бросок, терминал ---
 itrak-thrown: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер брошен</gray>"
 itrak-thrown-failed: "<#3f86ff>✖ Не удалось бросить трекер.</#3f86ff>"
 itrak-tracker-fell: "<#8fe9f5>✔</#8fe9f5> <gray>Блок сломан — трекер выпал</gray>"
 itrak-tracker-fell-owner: "<#66aaff>→</#66aaff> <gray>Твой трекер выпал:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-tracker-fell-entity-owner: "<#66aaff>→</#66aaff> <gray>Твой трекер</gray> <white><bold>{name}</bold></white> <gray>слетел и выпал:</gray> <#8fc6ff>{entity}</#8fc6ff> <dark_gray>·</dark_gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
-itrak-terminal-placed: "<#8fe9f5>✔</#8fe9f5> <gray>Терминал iTrak установлен:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
-itrak-terminal-broken: "<#8fe9f5>✔</#8fe9f5> <gray>Терминал iTrak снят и выпал предметом.</gray>"
-itrak-terminal-occupied: "<#3f86ff>✖ Здесь уже что-то стоит — выбери свободный блок.</#3f86ff>"
-itrak-terminal-failed: "<#3f86ff>✖ Не удалось установить терминал.</#3f86ff>"
-itrak-terminal-use-hint: "<#66aaff>→</#66aaff> <gray>ПКМ по блоку — поставить терминал.</gray>"
-itrak-terminal-given: "<#8fe9f5>✔</#8fe9f5> <gray>Терминал iTrak выдан:</gray> <white>{player}</white>"
-itrak-terminal-header: "<bold><gradient:#2464c8:#8fe9f5>═══ iTrak ТЕРМИНАЛ: ТРЕКЕРЫ РЯДОМ ({count}) ═══</gradient></bold>"
-itrak-terminal-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff>"
-itrak-terminal-empty: "<#3f86ff>✖ В радиусе <white><bold>{radius}</bold></white> блоков трекеров нет.</#3f86ff>"
-itrak-terminal-highlight: "<#66aaff>→</#66aaff> <gray>Подсвечено трекеров:</gray> <#8fc6ff><bold>{count}</bold></#8fc6ff> <gray>на</gray> <white>{seconds}</white> <gray>с.</gray>"
 itrak-craft-one-by-one: "<#66aaff>→</#66aaff> <gray>Трекеры крафтятся по одному: забери результат обычным кликом.</gray>"
-itrak-terminal-item-name: "Терминал"
-itrak-terminal-item-lore: "Показывает координаты трекеров рядом"
-itrak-terminal-item-hint: "ПКМ по блоку — установить"
 itrak-item-remove-hint: "ПКМ пустой рукой — снять"
 
 # --- GUI: все кнопки одного тона, без разноцветья по разделам ---
@@ -389,7 +375,6 @@ gui:
   itrak-catalog-regular: "Обычный"
   itrak-catalog-waterproof: "Водонепроницаемый"
   itrak-catalog-locator: "<#8fc6ff>Локатор · {radius} блоков</#8fc6ff>"
-  itrak-catalog-terminal: "<#8fc6ff>Терминал</#8fc6ff>"
   itrak-detail-title: "<#8fc6ff>Трекер: {name}</#8fc6ff>"
   itrak-route: "<#8fc6ff>Маршрут к трекеру</#8fc6ff>"
   itrak-watch: "<#8fc6ff>Следить</#8fc6ff>"
@@ -406,7 +391,6 @@ gui:
   lore-itrak-catalog-entry: "<gray><italic>ЛКМ — получить предмет</italic></gray>"
   lore-itrak-catalog-info: "<gray><italic>Все трекеры и локаторы в одном меню</italic></gray>"
   lore-itrak-catalog-locator: "<gray><italic>Ищет трекеры в радиусе</italic></gray>"
-  lore-itrak-catalog-terminal: "<gray><italic>Показывает трекеры рядом</italic></gray>"
   lore-itrak-status: "<gray>Состояние: <white>{status}</white></gray>"
   lore-itrak-carrier: "<gray>Игрок: <white>{name}</white></gray>"
   lore-itrak-state: "<gray>Движение: <#8fc6ff>{state}</#8fc6ff></gray>"

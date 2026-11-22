@@ -58,11 +58,5 @@ class ResourcePackBundleTest {
                 "нет диспетчера CMD для синего трекера");
         assertTrue(entries.contains("assets/minecraft/items/recovery_compass.json"),
                 "нет диспетчера CMD для локаторов");
-        assertTrue(entries.contains("assets/minecraft/items/lodestone.json"),
-                "нет диспетчера CMD для терминала");
-        assertTrue(entries.contains("assets/hahgps/models/block/terminal.json"),
-                "нет модели терминала для поставленного блока");
-        assertTrue(entries.contains("assets/minecraft/blockstates/lodestone.json"),
-                "лодестоун в мире снова выглядит ванильным кубом");
     }
 }

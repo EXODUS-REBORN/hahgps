@@ -18,7 +18,7 @@ import ru.hahgps.model.TrackerColor;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Крафты iTrak: «создание проще» — трекер, локатор и терминал
+ * Крафты iTrak: «создание проще» — трекер и локатор
  * собираются в верстаке, а не выдаются только админом.
  *
  * Результат подменяется в {@link PrepareItemCraftEvent}: ванильные рецепты не
@@ -35,7 +35,6 @@ public class ItrakCraftingListener implements Listener {
     private final NamespacedKey waterproofKey;
     private final NamespacedKey locatorKey;
     private final NamespacedKey locatorLongKey;
-    private final NamespacedKey terminalKey;
 
     public ItrakCraftingListener(HahGpsPlugin plugin) {
         this.plugin = plugin;
@@ -43,7 +42,6 @@ public class ItrakCraftingListener implements Listener {
         this.waterproofKey = new NamespacedKey(plugin, "itrak_tracker_waterproof");
         this.locatorKey = new NamespacedKey(plugin, "itrak_locator");
         this.locatorLongKey = new NamespacedKey(plugin, "itrak_locator_long");
-        this.terminalKey = new NamespacedKey(plugin, "itrak_terminal");
     }
 
     /** Регистрация рецептов; повторный вызов (reload) не падает на дубликате. */
@@ -59,7 +57,6 @@ public class ItrakCraftingListener implements Listener {
         // задаёт «дальность»; набор из четырёх предметов не путается с обычным.
         shapeless(locatorLongKey, Material.COMPASS, Material.AMETHYST_SHARD,
                 Material.REDSTONE, Material.ENDER_PEARL);
-        shapeless(terminalKey, Material.LODESTONE, Material.AMETHYST_SHARD, Material.COMPASS);
     }
 
     private void shapeless(NamespacedKey key, Material... ingredients) {
@@ -106,9 +103,6 @@ public class ItrakCraftingListener implements Listener {
                     : plugin.getConfigManager().getItrakLocatorLongRadius();
             return ItemFactory.isLocator(current) && ItemFactory.readLocatorRadius(current) == expected;
         }
-        if (key.equals(terminalKey)) {
-            return ItemFactory.isTerminalItem(current);
-        }
         return false;
     }
 
@@ -128,8 +122,7 @@ public class ItrakCraftingListener implements Listener {
 
     private boolean isOurRecipe(NamespacedKey key) {
         return key.equals(trackerKey) || key.equals(waterproofKey)
-                || key.equals(locatorKey) || key.equals(locatorLongKey)
-                || key.equals(terminalKey);
+                || key.equals(locatorKey) || key.equals(locatorLongKey);
     }
 
     private ItemStack resultFor(NamespacedKey key) {
@@ -144,9 +137,6 @@ public class ItrakCraftingListener implements Listener {
         }
         if (key.equals(locatorLongKey)) {
             return ItemFactory.locatorItem(plugin.getConfigManager().getItrakLocatorLongRadius());
-        }
-        if (key.equals(terminalKey)) {
-            return ItemFactory.terminalItem();
         }
         return null;
     }

@@ -3,7 +3,6 @@ import ru.hahgps.model.Category;
 import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
 import ru.hahgps.model.Tracker;
-import ru.hahgps.model.TrackerTerminal;
 import org.bukkit.Bukkit;
 import ru.hahgps.HahGpsPlugin;
 import java.util.ArrayList;
@@ -443,18 +442,6 @@ public class DataService {
     /** Блок порядковых номеров для уникальных кодов iTrak. */
     public CompletableFuture<Long> reserveTrackerCodes(int count) {
         return async(() -> provider.reserveTrackerCodeBlock(count));
-    }
-
-    public CompletableFuture<List<TrackerTerminal>> getTerminals() {
-        return async(provider::getTerminals);
-    }
-
-    public CompletableFuture<TrackerTerminal> createTerminal(TrackerTerminal terminal) {
-        return async(() -> provider.createTerminal(terminal));
-    }
-
-    public CompletableFuture<Boolean> deleteTerminal(String world, int x, int y, int z) {
-        return async(() -> provider.deleteTerminal(world, x, y, z));
     }
 
     public void runSync(Runnable runnable) {

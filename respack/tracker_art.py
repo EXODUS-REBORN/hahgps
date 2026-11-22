@@ -142,7 +142,7 @@ def tracker_top(color_key: str, waterproof: bool = False,
              fill=mix(color, (255, 255, 255), 0.55) + (255,), width=2 * SS)
 
     # Белая керамическая площадка.
-    inner = [6 * SS, 6 * SS, edge - 6 * SS, edge - 6 * SS]
+    inner = [5 * SS, 5 * SS, edge - 5 * SS, edge - 5 * SS]
     draw.ellipse(inner, fill=_WHITE + (255,))
     draw.ellipse(inner, outline=_WHITE_DARK + (255,), width=1 * SS)
     # Лёгкая тень по нижнему краю площадки.
@@ -158,22 +158,21 @@ def tracker_top(color_key: str, waterproof: bool = False,
     image = _down(big, size)
     draw = ImageDraw.Draw(image)
 
-    # Голова крипера вместо яблока. Рисуем в финальном разрешении, чтобы
-    # грани остались чёткими, как у логотипа.
-    head_box = [17, 16, 46, 45]
-    draw.rounded_rectangle(head_box, radius=5, fill=_GREEN + (255,),
+    # Голова крипера вместо яблока — компактный логотип, а не пол-лица.
+    head_box = [21, 20, 43, 42]
+    draw.rounded_rectangle(head_box, radius=4, fill=_GREEN + (255,),
                            outline=_GREEN_DARK + (255,), width=2)
-    draw.line([20, 19, 42, 19], fill=_GREEN_LIGHT + (255,), width=2)
-    draw.line([19, 20, 19, 40], fill=_GREEN_LIGHT + (255,), width=2)
-    draw.line([20, 43, 43, 43], fill=_GREEN_DARK + (255,), width=2)
+    draw.line([24, 23, 40, 23], fill=_GREEN_LIGHT + (255,), width=1)
+    draw.line([23, 24, 23, 38], fill=_GREEN_LIGHT + (255,), width=1)
+    draw.line([24, 39, 40, 39], fill=_GREEN_DARK + (255,), width=1)
 
     # Глаза.
-    draw.rectangle([21, 23, 26, 28], fill=_FACE + (255,))
-    draw.rectangle([37, 23, 42, 28], fill=_FACE + (255,))
+    draw.rectangle([24, 26, 28, 30], fill=_FACE + (255,))
+    draw.rectangle([36, 26, 40, 30], fill=_FACE + (255,))
     # Рот: центральный блок и две «ножки».
-    draw.rectangle([29, 28, 34, 36], fill=_FACE + (255,))
-    draw.rectangle([22, 36, 29, 43], fill=_FACE + (255,))
-    draw.rectangle([35, 36, 42, 43], fill=_FACE + (255,))
+    draw.rectangle([30, 30, 34, 35], fill=_FACE + (255,))
+    draw.rectangle([25, 35, 30, 39], fill=_FACE + (255,))
+    draw.rectangle([34, 35, 39, 39], fill=_FACE + (255,))
 
     # Светодиод сверху: у водонепроницаемого — холодный белый.
     led = (196, 250, 255) if waterproof else mix(color, (255, 255, 255), 0.6)
@@ -226,13 +225,15 @@ def tracker_edge(color_key: str, waterproof: bool = False,
     color = rgb(COLORS[color_key])
     image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    box = [2, 0, size - 3, size - 1]
-    draw.rounded_rectangle(box, radius=7, fill=color + (255,))
-    draw.rounded_rectangle(box, radius=7, outline=shade(color, 0.5) + (255,), width=1)
+    # Кромка не доходит до углов квадрата: иначе на 3/4 сверху из-за
+    # прозрачных углов круглого лица торчат четыре цветных «крыла».
+    box = [6, 0, size - 7, size - 1]
+    draw.rounded_rectangle(box, radius=5, fill=color + (255,))
+    draw.rounded_rectangle(box, radius=5, outline=shade(color, 0.5) + (255,), width=1)
     for y in range(size):
         t = y / max(1, size - 1)
         shade_color = mix(shade(color, 1.22), shade(color, 0.55), t)
-        draw.line([4, y, size - 5, y], fill=shade_color + (255,))
+        draw.line([8, y, size - 9, y], fill=shade_color + (255,))
     # Блик и шов не доводим до скруглённых концов: иначе на углах лица
     # появляются белые «крылья», которых у AirTag нет.
     draw.line([8, 2, size - 9, 2], fill=mix(color, (255, 255, 255), 0.32) + (255,))
@@ -410,60 +411,12 @@ def locator_band(size: int = 8) -> Image.Image:
     return image
 
 
-def terminal_back(size: int = 16) -> Image.Image:
-    image = Image.new("RGBA", (size, size), (34, 39, 47, 255))
-    draw = ImageDraw.Draw(image)
-    draw.rectangle([0, 0, size - 1, size - 1], outline=(16, 19, 24, 255))
-    for y in range(3, size - 2, 4):
-        draw.line([3, y, size - 4, y], fill=(52, 58, 68, 255))
-    return image
-
-
 def locator_top(size: int = 16) -> Image.Image:
     image = Image.new("RGBA", (size, size), _GRAPHITE + (255,))
     draw = ImageDraw.Draw(image)
     draw.rectangle([0, 0, size - 1, size - 1], outline=_GRAPHITE_DARK + (255,))
     draw.ellipse([6, 6, 9, 9], fill=(12, 14, 18, 255))
     draw.arc([2, 2, size - 3, size - 3], 200, 340, fill=_GRAPHITE_LIGHT + (255,))
-    return image
-
-
-# ---------------------------------------------------------------------------
-# Терминал (предмет-лодестоун)
-# ---------------------------------------------------------------------------
-
-def terminal_front(size: int = 32) -> Image.Image:
-    image = Image.new("RGBA", (size, size), _GRAPHITE + (255,))
-    draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle([1, 1, size - 2, size - 2], radius=3,
-                           fill=(42, 47, 55, 255), outline=(18, 21, 26, 255))
-    draw.rounded_rectangle([4, 4, size - 5, size - 10], radius=2,
-                           fill=(5, 18, 24, 255), outline=(12, 44, 52, 255))
-    # Мини-радар.
-    cx, cy = size // 2, 11
-    for radius in (3, 6, 9):
-        draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius],
-                     outline=_CYAN + (110,))
-    draw.ellipse([cx - 1, cy - 1, cx + 1, cy + 1], fill=(220, 255, 255, 255))
-    pixel_text(draw, "ITRAK", (4, size - 8), (120, 180, 190))
-    return image
-
-
-def terminal_top(size: int = 16) -> Image.Image:
-    image = Image.new("RGBA", (size, size), (52, 58, 67, 255))
-    draw = ImageDraw.Draw(image)
-    draw.rectangle([0, 0, size - 1, size - 1], outline=(20, 23, 28, 255))
-    draw.rectangle([3, 3, size - 4, size - 4], fill=(22, 26, 31, 255))
-    draw.line([3, 3, size - 4, size - 4], fill=(90, 99, 112, 255))
-    return image
-
-
-def terminal_side(size: int = 16) -> Image.Image:
-    image = Image.new("RGBA", (size, size), (45, 50, 58, 255))
-    draw = ImageDraw.Draw(image)
-    for y in range(size):
-        draw.line([0, y, size - 1, y], fill=shade((45, 50, 58), 0.8 + y / size * 0.35) + (255,))
-    draw.rectangle([0, 3, size - 1, 5], fill=(70, 78, 90, 255))
     return image
 
 

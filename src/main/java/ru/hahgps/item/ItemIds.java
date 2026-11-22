@@ -97,7 +97,6 @@ public final class ItemIds {
     public static final int ITRAK_REFRESH = 2038;
     public static final int ITRAK_EMPTY = 2039;
     public static final int ITRAK_CHARGE = 2041;
-    public static final int ITRAK_TERMINAL = 2042;
     public static final int ITRAK_CRAFT = 2043;
     public static final int ITRAK_RENAME = 2044;
 
@@ -162,7 +161,6 @@ public final class ItemIds {
         ids.add(ITRAK_REFRESH);
         ids.add(ITRAK_EMPTY);
         ids.add(ITRAK_CHARGE);
-        ids.add(ITRAK_TERMINAL);
         ids.add(ITRAK_CRAFT);
         ids.add(ITRAK_RENAME);
         return ids;

@@ -63,4 +63,26 @@ class UpdaterServiceTest {
         assertEquals(null, UpdaterService.tokenPath(base, "   "));
         assertEquals(null, UpdaterService.tokenPath(null, "github-token.txt"));
     }
+    @Test
+    void screenshotsAndLinksAreRemovedFromChatNotes() {
+        String body = "Что нового: каталог и 3D-трекеры.\n\n### Скриншоты\n\n"
+                + "![Терминал](https://github.com/x/y/releases/download/v1.0/z.png)\n"
+                + "[Трекеры](https://github.com/x/y/releases/download/v1.0/t.png)";
+        String out = UpdaterService.shortNotes(body);
+        assertEquals("Что нового: каталог и 3D-трекеры.", out);
+    }
+
+    @Test
+    void markdownImagesBeforeHeadingAreRemoved() {
+        String body = "Релиз ![скрин](https://example.com/a.png) готов.";
+        assertEquals("Релиз готов.", UpdaterService.shortNotes(body));
+    }
+
+    @Test
+    void htmlScreenshotSectionIsNotSentToChat() {
+        String body = "Коротко о релизе.\n\n<h3>Скриншоты</h3>\n"
+                + "<p><img src=\"https://example.com/a.png\" width=\"720\"></p>";
+        assertEquals("Коротко о релизе.", UpdaterService.shortNotes(body));
+    }
+
 }

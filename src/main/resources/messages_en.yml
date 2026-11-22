@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Palette schema version: a mismatch replaces the file with the bundled one (old -> .bak)
-palette-version: 16
+palette-version: 17
 
 no-permission: "<#3f86ff>✖ You don't have permission to run this command.</#3f86ff>"
 player-only: "<#3f86ff>✖ This command is for players only.</#3f86ff>"
@@ -112,6 +112,7 @@ search-route-button: "  <#66aaff>[build route]</#66aaff>"
 
 # --- Misc ---
 reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>HahGps configuration reloaded.</gray>"
+pack-auto-updated: "<#8fe9f5>✔</#8fe9f5> <gray>Resource pack updated to the new version.</gray>"
 pack-sent: "<#8fe9f5>✔</#8fe9f5> <gray>Resource pack sent — confirm the install in Minecraft.</gray>"
 pack-unavailable: "<#3f86ff>✖ Resource pack is unavailable: check resource-pack in config.yml.</#3f86ff>"
 pack-disabled: "<#3f86ff>✖ Resource pack sharing is disabled in config.yml.</#3f86ff>"
@@ -182,7 +183,6 @@ itrak-given-code: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak</gray> <white><bold>{code}
 itrak-received: "<#8fe9f5>✔</#8fe9f5> <gray>Received iTrak</gray> <white><bold>{code}</bold></white> <dark_gray>·</dark_gray> <#8fc6ff>{color}</#8fc6ff>"
 itrak-locator-given: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak locator ({radius} blocks) given to</gray> <white>{player}</white>"
 itrak-locator-received: "<#8fe9f5>✔</#8fe9f5> <gray>Received iTrak locator</gray> <dark_gray>·</dark_gray> <#8fc6ff>{radius} blocks</#8fc6ff>"
-itrak-terminal-received: "<#8fe9f5>✔</#8fe9f5> <gray>Received iTrak terminal</gray>"
 itrak-player-not-found: "<#3f86ff>✖ Player <white><bold>{name}</bold></white> is offline.</#3f86ff>"
 itrak-color-unknown: "<#3f86ff>✖ Unknown color <white><bold>{color}</bold></white>.</#3f86ff>"
 itrak-no-trackers: "<#3f86ff>✖ No trackers yet — attach an iTrak to a surface.</#3f86ff>"
@@ -282,26 +282,12 @@ itrak-item-renamed: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker name:</gray> <white><b
 input-itrak-rename: "<#66aaff>→</#66aaff> <gray>Type a new name for</gray> <white><bold>{name}</bold></white> <dark_gray>·</dark_gray> <gray>a dash clears the name</gray>"
 help-itrak: "iTrak trackers, locator and live tracking"
 
-# --- iTrak: throwing, terminal ---
 itrak-thrown: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker thrown</gray>"
 itrak-thrown-failed: "<#3f86ff>✖ Could not throw the tracker.</#3f86ff>"
 itrak-tracker-fell: "<#8fe9f5>✔</#8fe9f5> <gray>Block broken — tracker dropped</gray>"
 itrak-tracker-fell-owner: "<#66aaff>→</#66aaff> <gray>Your tracker dropped:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-tracker-fell-entity-owner: "<#66aaff>→</#66aaff> <gray>Your tracker</gray> <white><bold>{name}</bold></white> <gray>fell off</gray> <#8fc6ff>{entity}</#8fc6ff> <gray>and dropped:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
-itrak-terminal-placed: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak terminal placed:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
-itrak-terminal-broken: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak terminal removed and dropped as an item.</gray>"
-itrak-terminal-occupied: "<#3f86ff>✖ Something is already there — choose a free block.</#3f86ff>"
-itrak-terminal-failed: "<#3f86ff>✖ Could not place the terminal.</#3f86ff>"
-itrak-terminal-use-hint: "<#66aaff>→</#66aaff> <gray>Right-click a block to place the terminal.</gray>"
-itrak-terminal-given: "<#8fe9f5>✔</#8fe9f5> <gray>iTrak terminal given to</gray> <white>{player}</white>"
-itrak-terminal-header: "<bold><gradient:#2464c8:#8fe9f5>═══ iTrak TERMINAL: NEARBY TRACKERS ({count}) ═══</gradient></bold>"
-itrak-terminal-entry: "<#8fc6ff>•</#8fc6ff> <white><bold>{name}</bold></white> <dark_gray>|</dark_gray> <#8fc6ff>{code}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{distance}</#8fc6ff> <dark_gray>|</dark_gray> <#8fc6ff>{x}, {y}, {z}</#8fc6ff>"
-itrak-terminal-empty: "<#3f86ff>✖ No trackers within <white><bold>{radius}</bold></white> blocks.</#3f86ff>"
-itrak-terminal-highlight: "<#66aaff>→</#66aaff> <gray>Highlighted trackers:</gray> <#8fc6ff><bold>{count}</bold></#8fc6ff> <gray>for</gray> <white>{seconds}</white> <gray>s.</gray>"
 itrak-craft-one-by-one: "<#66aaff>→</#66aaff> <gray>Trackers are crafted one at a time: take the result with a normal click.</gray>"
-itrak-terminal-item-name: "Terminal"
-itrak-terminal-item-lore: "Shows nearby tracker coordinates"
-itrak-terminal-item-hint: "Right-click a block to place"
 itrak-item-remove-hint: "Right-click the block with an empty hand to detach"
 
 # --- GUI: every button in one tone, no rainbow per section ---
@@ -389,7 +375,6 @@ gui:
   itrak-catalog-regular: "Regular"
   itrak-catalog-waterproof: "Waterproof"
   itrak-catalog-locator: "<#8fc6ff>Locator · {radius} blocks</#8fc6ff>"
-  itrak-catalog-terminal: "<#8fc6ff>Terminal</#8fc6ff>"
   itrak-detail-title: "<#8fc6ff>Tracker: {name}</#8fc6ff>"
   itrak-route: "<#8fc6ff>Route to tracker</#8fc6ff>"
   itrak-watch: "<#8fc6ff>Watch</#8fc6ff>"
@@ -406,7 +391,6 @@ gui:
   lore-itrak-catalog-entry: "<gray><italic>LMB — receive the item</italic></gray>"
   lore-itrak-catalog-info: "<gray><italic>All trackers and locators in one menu</italic></gray>"
   lore-itrak-catalog-locator: "<gray><italic>Finds trackers in range</italic></gray>"
-  lore-itrak-catalog-terminal: "<gray><italic>Shows trackers nearby</italic></gray>"
   lore-itrak-status: "<gray>Status: <white>{status}</white></gray>"
   lore-itrak-carrier: "<gray>Player: <white>{name}</white></gray>"
   lore-itrak-state: "<gray>Motion: <#8fc6ff>{state}</#8fc6ff></gray>"

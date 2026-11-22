@@ -4,11 +4,17 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerResourcePackStatusEvent;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.config.ConfigManager;
 import ru.hahgps.config.MessagesManager;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -16,9 +22,13 @@ import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Collections;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
@@ -31,9 +41,11 @@ import java.util.logging.Level;
  * конфига, либо встроенный {@code hahgps.zip} из jar, который раздаёт
  * маленький HTTP-сервер на {@code resource-pack.port}.
  */
-public class ResourcePackService {
+public class ResourcePackService implements Listener {
 
     static final String RESOURCE = "hahgps.zip";
+    /** Стабильный UUID пака: по нему Paper отличает наш статус от чужого пака. */
+    static final UUID PACK_ID = UUID.nameUUIDFromBytes("hahgps-pack".getBytes(StandardCharsets.UTF_8));
 
     /**
      * Публичный адрес пака: GitHub-репозиторий ресурспака (он публичный,
@@ -51,8 +63,12 @@ public class ResourcePackService {
     private volatile ExecutorService executor;
     private volatile byte[] pack;
     private volatile byte[] sha1;
+    private volatile String sha1Hex = "";
     private volatile String url;
     private volatile boolean enabled;
+    /** UUID -> хэш версии, которую игрок уже видел (загрузил или отклонил). */
+    private final Map<UUID, String> seenHashes = new ConcurrentHashMap<>();
+    private File seenFile;
 
     public ResourcePackService(HahGpsPlugin plugin, ConfigManager config, MessagesManager messages) {
         this.plugin = plugin;
@@ -71,6 +87,9 @@ public class ResourcePackService {
 
         pack = readPack();
         sha1 = pack == null ? null : sha1(pack);
+        sha1Hex = sha1 == null ? "" : hex(sha1);
+        loadSeen();
+        scheduleRefresh();
 
         String configured = config.getResourcePackUrl();
         // "local" — поднять свой HTTP-сервер; пусто — публичный адрес из репозитория
@@ -120,34 +139,171 @@ public class ResourcePackService {
         return enabled;
     }
 
-    /** Отправить пак конкретному игроку; вызывается только из команды. */
+    /** Отправить пак конкретному игроку; вызывается из команды. */
     public void send(Player player) {
-        if (!isAvailable()) {
+        if (!send(player, false) && player != null) {
             player.sendMessage(messages.getPrefixed(enabled ? "pack-unavailable" : "pack-disabled"));
-            return;
+        }
+    }
+
+    /**
+     * Отправить пак и вернуть, ушёл ли он. {@code auto} — обновление игроку,
+     * который уже ставил пак: команду ему вводить не нужно.
+     */
+    private boolean send(Player player, boolean auto) {
+        if (player == null || !isAvailable()) {
+            return false;
         }
         Component prompt = Component.text(config.getResourcePackPrompt());
-        if (server != null) {
-            // Адрес берём тот, через который игрок зашёл на сервер: в Docker
-            // автоопределение находило 172.x.x.x контейнера, и клиент не мог
-            // скачать пак («Не удалось загрузить 1 из 1 наборов»).
-            String playerUrl = urlFor(player);
-            if (playerUrl == null) {
-                plugin.getLogger().warning("HahGps: не удалось определить адрес сервера для "
-                        + player.getName() + " — задайте resource-pack.host в config.yml.");
-                player.sendMessage(messages.getPrefixed("pack-unavailable"));
-                return;
-            }
-            if (sha1 != null) {
-                player.setResourcePack(playerUrl, sha1, prompt, false);
-            } else {
-                player.setResourcePack(playerUrl);
-            }
-        } else {
-            // Внешний URL может указывать на другой файл: хэш и prompt не навязываем.
-            player.setResourcePack(url);
+        String base = server != null ? urlFor(player) : url;
+        if (base == null || base.isBlank()) {
+            plugin.getLogger().warning("HahGps: не удалось определить адрес сервера для "
+                    + player.getName() + " — задайте resource-pack.host в config.yml.");
+            return false;
         }
-        player.sendMessage(messages.getPrefixed("pack-sent"));
+        boolean versioned = server != null || PUBLIC_URL.equals(base);
+        String target = versioned ? versionedUrl(base) : base;
+        boolean hashKnown = sha1 != null && versioned;
+        try {
+            if (hashKnown) {
+                player.setResourcePack(PACK_ID, target, sha1, prompt, false);
+            } else {
+                // Внешний URL может указывать на другой файл: хэш не навязываем.
+                player.setResourcePack(PACK_ID, target, (byte[]) null, prompt, false);
+            }
+        } catch (Throwable t) {
+            plugin.getLogger().log(Level.FINE, "HahGps: пак не отправлен " + player.getName(), t);
+            return false;
+        }
+        if (auto) {
+            player.sendMessage(messages.getPrefixed("pack-auto-updated"));
+        } else {
+            player.sendMessage(messages.getPrefixed("pack-sent"));
+        }
+        return true;
+    }
+
+    /** Сменить версию в URL: клиент не должен брать старый пак из кэша. */
+    private String versionedUrl(String base) {
+        String hash = sha1Hex;
+        if (hash == null || hash.isBlank()) {
+            return base;
+        }
+        String version = hash.substring(0, Math.min(12, hash.length()));
+        return base + (base.contains("?") ? "&" : "?") + "v=" + version;
+    }
+
+    private static String hex(byte[] digest) {
+        StringBuilder out = new StringBuilder(digest.length * 2);
+        for (byte b : digest) {
+            out.append(String.format(java.util.Locale.ROOT, "%02x", b));
+        }
+        return out.toString();
+    }
+
+    private void scheduleRefresh() {
+        if (!enabled || !config.isResourcePackAutoUpdate()) {
+            return;
+        }
+        try {
+            Bukkit.getScheduler().runTaskLater(plugin, this::refreshOnline, 60L);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** После старта/обновления плагина досылаем новый пак тем, кто ставил старый. */
+    private void refreshOnline() {
+        if (!enabled || !config.isResourcePackAutoUpdate() || !isAvailable()) {
+            return;
+        }
+        String current = sha1Hex;
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            String seen = seenHashes.get(player.getUniqueId());
+            if (seen != null && !seen.equals(current)) {
+                send(player, true);
+            } else if (seen == null && player.hasResourcePack()
+                    && !current.equals(player.getResourcePackHash())) {
+                // Первый запуск с отслеживанием: игрок ставил пак старой
+                // версией плагина, когда pack-seen.yml ещё не было.
+                send(player, true);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        if (!enabled || !config.isResourcePackAutoUpdate() || !isAvailable()) {
+            return;
+        }
+        Player player = event.getPlayer();
+        String seen = seenHashes.get(player.getUniqueId());
+        if (seen == null && !player.hasResourcePack()) {
+            return;
+        }
+        if (seen != null && seen.equals(sha1Hex)) {
+            return;
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline()) {
+                send(player, true);
+            }
+        }, 40L);
+    }
+
+    @EventHandler
+    public void onStatus(PlayerResourcePackStatusEvent event) {
+        if (event == null || !PACK_ID.equals(event.getID())) {
+            return;
+        }
+        Player player = event.getPlayer();
+        if (player == null) {
+            return;
+        }
+        String hash = event.getHash();
+        if (hash == null || hash.isBlank()) {
+            hash = sha1Hex;
+        }
+        if (hash != null && !hash.isBlank()) {
+            hash = hash.trim().toLowerCase(java.util.Locale.ROOT);
+            seenHashes.put(player.getUniqueId(), hash);
+            saveSeen();
+        }
+    }
+
+    private void loadSeen() {
+        seenHashes.clear();
+        seenFile = new File(plugin.getDataFolder(), "pack-seen.yml");
+        if (!seenFile.isFile()) {
+            return;
+        }
+        try {
+            YamlConfiguration yaml = YamlConfiguration.loadConfiguration(seenFile);
+            for (String key : yaml.getKeys(false)) {
+                try {
+                    String hash = yaml.getString(key);
+                    if (hash != null && !hash.isBlank()) {
+                        seenHashes.put(UUID.fromString(key), hash);
+                    }
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+        } catch (Throwable t) {
+            plugin.getLogger().log(Level.FINE, "HahGps: не удалось прочитать pack-seen.yml", t);
+        }
+    }
+
+    private synchronized void saveSeen() {
+        File file = seenFile;
+        if (file == null) {
+            return;
+        }
+        YamlConfiguration yaml = new YamlConfiguration();
+        seenHashes.forEach((id, hash) -> yaml.set(id.toString(), hash));
+        try {
+            yaml.save(file);
+        } catch (IOException e) {
+            plugin.getLogger().log(Level.FINE, "HahGps: не удалось сохранить pack-seen.yml", e);
+        }
     }
 
     /**

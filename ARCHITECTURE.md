@@ -27,7 +27,7 @@ ru.hahgps
 │   └── MessagesManager.java   — локализация (messages_ru/en.yml)
 ├── item/                      — предметы и кастомные ID моделей
 │   ├── ItemIds.java           — CustomModelData всех предметов (ресурспак)
-│   ├── ItemFactory.java       — iTrak, локатор (с радиусом), терминал; PDC-данные
+│   ├── ItemFactory.java       — iTrak и локатор (с радиусом); PDC-данные
 │   └── TrackerCodes.java      — уникальные коды трекеров из счётчика БД
 ├── gui/                       — графический интерфейс
 │   ├── GuiManager.java        — реестр открытых GUI
@@ -41,14 +41,14 @@ ru.hahgps
 │   ├── SearchGui.java         — поиск точек
 │   ├── SettingsGui.java       — настройки
 │   ├── TransportSelectGui.java— выбор транспорта
-│   ├── ItrakCatalogGui.java   — каталог выдачи трекеров, локаторов и терминала
+│   ├── ItrakCatalogGui.java   — каталог выдачи трекеров и локаторов
 │   ├── ItrakMenuGui.java      — список трекеров iTrak (живое обновление)
 │   ├── TrackerDetailGui.java  — карточка трекера: координаты, маршрут, слежение
 │   └── CategoriesGui.java     — категории
 ├── listener/                  — обработчики событий
 │   ├── ChatInputListener.java — перехват ввода в чате
 │   ├── GuiListener.java       — клики в GUI
-│   ├── TrackerListener.java   — установка/бросок/снятие iTrak, заряд, терминал
+│   ├── TrackerListener.java   — установка/бросок/снятие iTrak
 │   ├── ItrakCraftingListener.java — крафты iTrak и подмена результата
 │   └── PlayerQuitListener.java— очистка при выходе, трекеры игрока → офлайн
 ├── model/                     — модели данных
@@ -61,7 +61,6 @@ ru.hahgps
 │   ├── Route.java             — маршрут
 │   ├── Tracker.java           — установленный трекер iTrak (опорный блок, сигнал)
 │   ├── TrackerColor.java      — 8 цветов трекера
-│   ├── TrackerTerminal.java   — блок-терминал iTrak
 │   └── TransportType.java     — тип транспорта
 ├── service/                   — бизнес-логика
 │   ├── CategoryService.java   — операции с категориями
@@ -76,7 +75,6 @@ ru.hahgps
 │   ├── RouteRecordingService.java — запись пути игрока для графа
 │   ├── RouteService.java      — построение маршрутов (свой пул потоков)
 │   ├── SearchService.java     — поиск с fuzzy-matching
-│   ├── ItrakTerminalService.java — реестр блоков-терминалов
 │   ├── TrackerService.java    — трекеры iTrak: координаты, бросок, подсветка
 │   └── VisualizationService.java — визуализация графа
 ├── storage/                   — слой данных
@@ -124,7 +122,7 @@ ru.hahgps
 - **EdgeCommand** — управление рёбрами графа
 - **VisualCommand** — визуализация дорожной сети
 - **ItrakCommand** — трекеры iTrak: give, give-locator (радиус/long),
-  give-terminal, scan, find (меню своих трекеров), list, info, route, name
+  scan, find (меню своих трекеров), list, info, route, name
   (переименование), open (карточка), take, remove, watch
 
 ### 3. Слой данных (Storage)
@@ -135,8 +133,7 @@ ru.hahgps
 
 Схема БД — **v5**: к таблицам точек, категорий, оценок, маршрутов и рёбер
 добавлены `trackers` (уникальный код, цвет, водозащита, координаты, привязка к
-сущности, опорный блок, время последнего движения) и `itrak_terminals` (блоки-
-терминалы по координатам). В `meta` лежит порядковый счётчик кодов трекеров и
+сущности, опорный блок, время последнего движения). В `meta` лежит порядковый счётчик кодов трекеров и
 версия схемы. Старые базы мигрируют при открытии, недостающие колонки
 дозаполняются, дубли кодов трекеров вычищаются перед созданием уникального
 индекса.

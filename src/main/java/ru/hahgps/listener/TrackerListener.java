@@ -1,7 +1,6 @@
 package ru.hahgps.listener;
 
 import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
@@ -21,12 +20,10 @@ import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import io.papermc.paper.event.player.PlayerPickBlockEvent;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.subcommands.ItrakCommand;
 import ru.hahgps.item.ItemFactory;
 import ru.hahgps.model.Tracker;
-import ru.hahgps.service.ItrakTerminalService;
 import ru.hahgps.service.TrackerService;
 import ru.hahgps.util.EntityNames;
 
@@ -35,9 +32,7 @@ import ru.hahgps.util.EntityNames;
  * <ul>
  *   <li>ПКМ трекером по блоку — прицепить, ПКМ в воздух — бросить (Shift — аккуратно);</li>
  *   <li>ПКМ пустой рукой по блоку с трекером — снять; Shift+ПКМ по существу — снять с него;</li>
- *   <li>ПКМ по терминалу — координаты трекеров рядом и подсветка;</li>
- *   <li>средний клик по терминалу в креативе — скопировать сам терминал;</li>
- *   <li>поломка блока/терминала — предмет возвращается в мир.</li>
+ *   <li>поломка опорного блока — предмет возвращается в мир.</li>
  * </ul>
  * События отменяются: трекер — предмет-устройство, а не блок и не инструмент.
  */
@@ -73,26 +68,7 @@ public class TrackerListener implements Listener {
         boolean rightClick = event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK
                 || event.getAction() == org.bukkit.event.block.Action.RIGHT_CLICK_AIR;
 
-        if (ItemFactory.isTerminalItem(item)) {
-            denyUse(event);
-            if (!rightClick) {
-                return;
-            }
-            if (clicked == null) {
-                player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-use-hint"));
-                return;
-            }
-            placeTerminal(player, clicked, event.getBlockFace());
-            return;
-        }
-
         if (clicked != null && rightClick && player.hasPermission("gps.itrak")) {
-            ItrakTerminalService terminals = plugin.getTerminalService();
-            if (terminals != null && terminals.isTerminal(clicked)) {
-                denyUse(event);
-                ItrakCommand.reportTerminal(plugin, player, clicked);
-                return;
-            }
             TrackerService service = plugin.getTrackerService();
             if (service != null) {
                 Tracker onBlock = service.trackerOnBlock(clicked);
@@ -369,79 +345,6 @@ public class TrackerListener implements Listener {
     }
 
     // ------------------------------------------------------------------
-    // Терминал
-    // ------------------------------------------------------------------
-
-    /**
-     * Средний клик (pick block) по установленному терминалу в креативе копирует
-     * не лодестоун, а сам предмет терминала: в мире это обычный лодестоун, и
-     * ваниль знает только его. Событие отменяем и кладём предмет сами, иначе
-     * ваниль успевает подставить лодестоун и предмет терминала не вернуть.
-     */
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onPickBlock(PlayerPickBlockEvent event) {
-        if (!plugin.getConfigManager().isItrakEnabled()) {
-            return;
-        }
-        ItrakTerminalService terminals = plugin.getTerminalService();
-        if (terminals == null || !terminals.isTerminal(event.getBlock())) {
-            return;
-        }
-        Player player = event.getPlayer();
-        if (player.getGameMode() != GameMode.CREATIVE || !player.hasPermission("gps.itrak")) {
-            return;
-        }
-        event.setCancelled(true);
-        int slot = event.getTargetSlot();
-        if (slot < 0 || slot > 8) {
-            slot = player.getInventory().getHeldItemSlot();
-        }
-        player.getInventory().setItem(slot, ItemFactory.terminalItem());
-        player.getInventory().setHeldItemSlot(slot);
-        player.updateInventory();
-    }
-
-    private void placeTerminal(Player player, Block clicked, BlockFace face) {
-        ItrakTerminalService terminals = plugin.getTerminalService();
-        if (terminals == null) {
-            player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
-            return;
-        }
-        if (!checkAllowed(player)) {
-            return;
-        }
-        Block target = clicked.getRelative(face == null ? BlockFace.UP : face);
-        terminals.place(player, target).whenComplete((outcome, error) ->
-                plugin.getDataService().runSync(() -> {
-                    if (!player.isOnline()) {
-                        return;
-                    }
-                    if (error != null) {
-                        plugin.getLogger().log(java.util.logging.Level.WARNING,
-                                "HahGps: терминал iTrak не установлен", error);
-                        player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-failed"));
-                        return;
-                    }
-                    ItrakTerminalService.PlaceResult result = outcome == null
-                            ? ItrakTerminalService.PlaceResult.FAILED : outcome.result();
-                    if (result != ItrakTerminalService.PlaceResult.OK) {
-                        player.sendMessage(plugin.getMessages().getPrefixed(switch (result) {
-                            case OCCUPIED -> "itrak-terminal-occupied";
-                            case DISABLED -> "itrak-disabled";
-                            default -> "itrak-terminal-failed";
-                        }));
-                        return;
-                    }
-                    ItemFactory.consumeTerminalItem(player);
-                    player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-placed",
-                            "world", target.getWorld() == null ? "?" : target.getWorld().getName(),
-                            "x", String.valueOf(target.getX()),
-                            "y", String.valueOf(target.getY()),
-                            "z", String.valueOf(target.getZ())));
-                }));
-    }
-
-    // ------------------------------------------------------------------
     // Наковальня: имя трекера до установки
     // ------------------------------------------------------------------
 
@@ -496,17 +399,6 @@ public class TrackerListener implements Listener {
     public void onBlockBreak(BlockBreakEvent event) {
         Block block = event.getBlock();
         Player player = event.getPlayer();
-        ItrakTerminalService terminals = plugin.getTerminalService();
-        if (terminals != null && terminals.isTerminal(block)) {
-            event.setDropItems(false);
-            terminals.remove(block);
-            if (block.getWorld() != null) {
-                block.getWorld().dropItemNaturally(block.getLocation().add(0.5, 0.5, 0.5),
-                        ItemFactory.terminalItem());
-            }
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-terminal-broken"));
-            return;
-        }
         TrackerService service = plugin.getTrackerService();
         Tracker tracker = service == null ? null : service.trackerOnBlock(block);
         if (tracker == null) {
