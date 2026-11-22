@@ -89,7 +89,6 @@ public class ResourcePackService implements Listener {
         sha1 = pack == null ? null : sha1(pack);
         sha1Hex = sha1 == null ? "" : hex(sha1);
         loadSeen();
-        scheduleRefresh();
 
         String configured = config.getResourcePackUrl();
         // "local" — поднять свой HTTP-сервер; пусто — публичный адрес из репозитория
@@ -101,6 +100,7 @@ public class ResourcePackService implements Listener {
                 return;
             }
             startServer();
+            scheduleRefresh();
             return;
         }
 
@@ -111,6 +111,9 @@ public class ResourcePackService implements Listener {
             plugin.getLogger().warning("HahGps: в jar нет " + RESOURCE
                     + " — внешний URL всё равно будет отправлен, но хэш проверить нечем.");
         }
+        // Версия в URL — хэш того файла, который клиент реально скачает, а не
+        // jar: сверяем в фоне, затем рассылаем автообновление.
+        checkRemote(() -> scheduleRefresh());
     }
 
     public synchronized void reload() {
@@ -163,12 +166,16 @@ public class ResourcePackService implements Listener {
         }
         boolean versioned = server != null || PUBLIC_URL.equals(base);
         String target = versioned ? versionedUrl(base) : base;
-        boolean hashKnown = sha1 != null && versioned;
+        // Хэш навязываем только за свой HTTP-сервер: там уходит ровно тот файл,
+        // что лежит в jar. Публичный адрес с GitHub живёт отдельно от сборки
+        // плагина и может отставать — тогда клиент скачивает другой файл и
+        // падает с «Не удалось загрузить 1 из 1 наборов». Без хэша клиент
+        // принимает то, что отдал сервер, а свежесть обеспечивает ?v= в URL.
+        boolean hashKnown = sha1 != null && server != null;
         try {
             if (hashKnown) {
                 player.setResourcePack(PACK_ID, target, sha1, prompt, false);
             } else {
-                // Внешний URL может указывать на другой файл: хэш не навязываем.
                 player.setResourcePack(PACK_ID, target, (byte[]) null, prompt, false);
             }
         } catch (Throwable t) {
@@ -257,6 +264,17 @@ public class ResourcePackService implements Listener {
         }
         Player player = event.getPlayer();
         if (player == null) {
+            return;
+        }
+        PlayerResourcePackStatusEvent.Status status = event.getStatus();
+        if (status == PlayerResourcePackStatusEvent.Status.FAILED_DOWNLOAD
+                || status == PlayerResourcePackStatusEvent.Status.INVALID_URL
+                || status == PlayerResourcePackStatusEvent.Status.FAILED_RELOAD) {
+            // Скачивание сорвалось: версию «увиденной» не помечаем, иначе игрок
+            // больше не получит автоповтор. В лог — адрес, по нему видно причину
+            // (обычно сеть или рассинхрон хэша).
+            plugin.getLogger().warning("HahGps: игрок " + player.getName()
+                    + " не смог загрузить ресурспак (" + status + "): " + url);
             return;
         }
         String hash = event.getHash();
@@ -351,6 +369,66 @@ public class ResourcePackService implements Listener {
             return in == null ? null : in.readAllBytes();
         } catch (IOException e) {
             plugin.getLogger().log(Level.WARNING, "HahGps: не удалось прочитать " + RESOURCE, e);
+            return null;
+        }
+    }
+
+    /**
+     * Сверить встроенный пак с файлом по внешнему адресу.
+     *
+     * Клиент качает не jar, а этот файл, поэтому версия {@code ?v=} должна
+     * быть хэшем именно его: иначе после обновления пака в репозитории клиенты
+     * продолжат брать старую версию из кэша. Расхождение с jar не ломает
+     * установку (хэш для внешнего адреса не навязывается), но это сигнал,
+     * что пак в репозиторий забыли положить.
+     */
+    private void checkRemote(Runnable after) {
+        String target = url;
+        if (target == null || server != null) {
+            return;
+        }
+        Thread thread = new Thread(() -> {
+            try {
+                byte[] remote = download(target);
+                if (remote == null) {
+                    plugin.getLogger().warning("HahGps: не удалось проверить ресурспак по адресу "
+                            + target + " — оставляю версию из jar.");
+                } else {
+                    String remoteHex = hex(sha1(remote));
+                    if (pack != null && !remoteHex.equals(sha1Hex)) {
+                        plugin.getLogger().warning("HahGps: ресурспак по адресу " + target
+                                + " отличается от встроенного в jar (" + remoteHex.substring(0, 12)
+                                + " != " + sha1Hex.substring(0, Math.min(12, sha1Hex.length()))
+                                + "). Обновите EXODUS-REBORN/hahgps-pack или пересоберите плагин.");
+                    }
+                    sha1Hex = remoteHex;
+                }
+            } catch (Throwable t) {
+                plugin.getLogger().log(Level.FINE, "HahGps: проверка адреса пака не удалась", t);
+            } finally {
+                if (after != null) {
+                    try {
+                        Bukkit.getScheduler().runTask(plugin, after::run);
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
+        }, "HahGps-Pack-Check");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /** Скачать файл по адресу (для сверки хэша); null — не вышло. */
+    private static byte[] download(String address) {
+        try {
+            java.net.URLConnection connection = java.net.URI.create(address).toURL().openConnection();
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(15000);
+            connection.setRequestProperty("User-Agent", "HahGps");
+            try (InputStream in = connection.getInputStream()) {
+                return in.readAllBytes();
+            }
+        } catch (Exception e) {
             return null;
         }
     }

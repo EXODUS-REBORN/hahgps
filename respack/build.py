@@ -528,14 +528,26 @@ def validate() -> list[str]:
 
 
 def zip_pack(name: str = "hahgps.zip") -> Path:
+    """Собрать zip байт-в-байт воспроизводимо.
+
+    SHA-1 этого файла уходит клиенту Minecraft как хэш пака, и клиент
+    отказывается ставить пак, если скачанный файл не совпал: mtime файлов
+    (разный на CI и локально) раньше давал другой sha1 при том же содержимом.
+    Поэтому дату фиксируем, права — 0644.
+    """
     DIST.mkdir(parents=True, exist_ok=True)
     out = DIST / name
     if out.exists():
         out.unlink()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in sorted(PACK.rglob("*")):
-            if path.is_file():
-                archive.write(path, path.relative_to(PACK).as_posix())
+            if not path.is_file():
+                continue
+            # фиксированная дата (1980-01-01 — минимум формата zip)
+            info = zipfile.ZipInfo(path.relative_to(PACK).as_posix(), (1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, path.read_bytes())
     return out
 
 
