@@ -4,6 +4,7 @@ import org.bukkit.boss.BarStyle;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.map.MapView;
 import ru.hahgps.HahGpsPlugin;
+import ru.hahgps.util.ArrowStyle;
 
 import java.util.Arrays;
 import java.util.List;
@@ -53,6 +54,7 @@ public class ConfigManager {
         }
         checkEnum("navigation.bossbar-color", "BLUE", BarColor::valueOf, v -> v != null);
         checkEnum("navigation.bossbar-style", "SOLID", BarStyle::valueOf, v -> v != null);
+        checkEnum("navigation.arrow-style", "AUTO", ArrowStyle::valueOf, v -> v != null);
         checkEnum("map.zoom", "CLOSE", MapView.Scale::valueOf, v -> v != null);
 
         String language = config.getString("language", "ru");
@@ -217,6 +219,19 @@ public class ConfigManager {
     public String getBossbarStyle() {
         String name = config.getString("navigation.bossbar-style", "SOLID");
         return isEnumValue(name, BarStyle.values()) ? name.toUpperCase(Locale.ROOT) : "SOLID";
+    }
+
+    /** Как рисовать стрелку: auto — глифы только если клиент загрузил пак. */
+    public ArrowStyle getArrowStyle() {
+        String name = config.getString("navigation.arrow-style", "AUTO");
+        if (name == null) {
+            return ArrowStyle.AUTO;
+        }
+        try {
+            return ArrowStyle.valueOf(name.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ignored) {
+            return ArrowStyle.AUTO;
+        }
     }
 
     private static boolean isEnumValue(String name, Object[] values) {

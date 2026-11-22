@@ -1,19 +1,19 @@
 package ru.hahgps.service;
+import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.boss.BarColor;
-import org.bukkit.boss.BarStyle;
-import org.bukkit.boss.BossBar;
 import org.bukkit.entity.Player;
+import org.bukkit.event.player.PlayerResourcePackStatusEvent;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.config.ConfigManager;
 import ru.hahgps.config.MessagesManager;
 import ru.hahgps.model.NavigationSession;
 import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TransportType;
-import ru.hahgps.util.DirectionUtil;
+import ru.hahgps.util.ArrowStyle;
 import ru.hahgps.util.LocationUtil;
+import ru.hahgps.util.RouteArrow;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
@@ -58,8 +58,11 @@ public class NavigationService {
                 hud.clearHud(player);
             }
         }
-        for (BossBar bar : bossBars.values()) {
-            bar.removeAll();
+        for (Map.Entry<UUID, BossBar> entry : bossBars.entrySet()) {
+            Player player = Bukkit.getPlayer(entry.getKey());
+            if (player != null && player.isOnline()) {
+                player.hideBossBar(entry.getValue());
+            }
         }
         bossBars.clear();
         sessions.clear();
@@ -100,11 +103,10 @@ public class NavigationService {
         }
         sessions.put(player.getUniqueId(), session);
 
-        BarColor color = parseColor(config.getBossbarColor());
-        BarStyle style = parseStyle(config.getBossbarStyle());
-        BossBar bar = Bukkit.createBossBar("GPS", color, style);
-        bar.setProgress(1.0f);
-        bar.addPlayer(player);
+        BossBar.Color color = parseColor(config.getBossbarColor());
+        BossBar.Overlay style = parseStyle(config.getBossbarStyle());
+        BossBar bar = BossBar.bossBar(Component.text("GPS"), 1.0f, color, style);
+        player.showBossBar(bar);
         bossBars.put(player.getUniqueId(), bar);
 
         // Гарантируем, что по центру экрана ничего не висит от прошлой навигации
@@ -139,7 +141,7 @@ public class NavigationService {
         sessions.remove(player.getUniqueId());
         BossBar bar = bossBars.remove(player.getUniqueId());
         if (bar != null) {
-            bar.removePlayer(player);
+            player.hideBossBar(bar);
         }
         player.sendActionBar(Component.empty());
         HudService hud = plugin.getHudService();
@@ -171,10 +173,8 @@ public class NavigationService {
             Map.Entry<UUID, NavigationSession> entry = it.next();
             Player player = Bukkit.getPlayer(entry.getKey());
             if (player == null || !player.isOnline()) {
-                BossBar bar = bossBars.remove(entry.getKey());
-                if (bar != null) {
-                    bar.removeAll();
-                }
+                // Игрок вышел: боссбар у него уже не показывается, скрывать нечего.
+                bossBars.remove(entry.getKey());
                 it.remove();
                 continue;
             }
@@ -203,7 +203,7 @@ public class NavigationService {
                 || !LocationUtil.sameWorld(playerLoc.getWorld(), target.getWorld())) {
             BossBar crossWorldBar = bossBars.get(player.getUniqueId());
             if (crossWorldBar != null) {
-                crossWorldBar.setTitle(title("⚠", targetName, ""));
+                crossWorldBar.name(title(Component.text("⚠"), targetName, ""));
             }
             // HUD и последнее расстояние из прошлого мира убираем: иначе
             // боссбар говорит «другой мир», а HUD продолжает показывать старое.
@@ -227,23 +227,29 @@ public class NavigationService {
         double facing = LocationUtil.normalizeAngle(-playerLoc.getYaw());
         double delta = LocationUtil.normalizeAngle(angleToTarget - facing);
 
-        String arrow = config.isShowArrow() ? DirectionUtil.getArrow(delta) : "";
+        RouteArrow arrow = config.isShowArrow() ? RouteArrow.of(delta) : null;
+        boolean glyphs = useGlyphs(player);
 
         BossBar bar = bossBars.get(player.getUniqueId());
         if (bar != null) {
             // Отправляем пакет только если строка/полоса действительно
             // изменились: стоящий на месте игрок получал их дважды в секунду.
-            String nextTitle = title(arrow, targetName,
-                    LocationUtil.formatDistance(distanceToTarget));
+            String distanceText = LocationUtil.formatDistance(distanceToTarget);
+            Component nextTitle = title(arrow == null ? null
+                    : (glyphs ? arrow.glyphComponent() : Component.text(arrow.unicode())),
+                    targetName, distanceText);
+            // Ключ сравнения: режим (глиф/юникод), направление, цель, расстояние.
+            String nextKey = (arrow == null ? "-" : (glyphs ? "g" : "u") + arrow.key())
+                    + "|" + targetName + "|" + distanceText;
             float progress = session.getTotalDistance() > 0
                     ? (float) Math.max(0.0, Math.min(1.0, distanceToTarget / session.getTotalDistance()))
                     : 0.0f;
             progress = Math.round(progress * 100.0f) / 100.0f;
-            if (!nextTitle.equals(session.getLastBarTitle()) || progress != session.getLastBarProgress()) {
-                session.setLastBarTitle(nextTitle);
+            if (!nextKey.equals(session.getLastBarKey()) || progress != session.getLastBarProgress()) {
+                session.setLastBarKey(nextKey);
                 session.setLastBarProgress(progress);
-                bar.setTitle(nextTitle);
-                bar.setProgress(progress);
+                bar.name(nextTitle);
+                bar.progress(progress);
             }
         }
 
@@ -253,7 +259,7 @@ public class NavigationService {
         }
 
         if (session.isLoggingEnabled()) {
-            String hintKey = DirectionUtil.getHintKey(delta);
+            String hintKey = RouteArrow.of(delta).hintKey();
             if (!hintKey.equals(session.getLastHint())) {
                 session.setLastHint(hintKey);
                 player.sendMessage(messages.getPrefixed(hintKey));
@@ -332,38 +338,63 @@ public class NavigationService {
      * {@code стрелка + цель + расстояние}. Порядок именно такой: стрелка
      * первая, чтобы она читалась сразу.
      *
-     * Эмодзи-иконки транспорта (👣🚗🚌🚁🚢) отсюда убраны: они лежат за
-     * пределами BMP, а шрифт Minecraft их не содержит — на клиенте вместо
-     * иконки рисовался пустой квадрат. Остались только глифы из BMP
-     * (стрелки, ⚠).
+     * Стрелка — либо компонент с нарисованным глифом (шрифт
+     * {@code hahgps:arrow} из ресурспака), либо ванильный символ BMP.
+     * Эмодзи-иконки транспорта (👣🚗🚌🚁🚢) по-прежнему не используются:
+     * они вне BMP, и шрифт Minecraft рисует вместо них пустой квадрат.
      */
-    private String title(String arrow, String targetName, String distance) {
-        StringBuilder sb = new StringBuilder(48);
-        if (arrow != null && !arrow.isEmpty()) sb.append(arrow).append(' ');
-        if (targetName != null && !targetName.isEmpty()) sb.append(targetName);
-        if (distance != null && !distance.isEmpty()) sb.append(' ').append(distance);
-        return sb.toString().trim();
+    private Component title(Component lead, String targetName, String distance) {
+        Component out = Component.empty();
+        if (lead != null) {
+            out = out.append(lead).append(Component.text(" "));
+        }
+        if (targetName != null && !targetName.isEmpty()) {
+            out = out.append(Component.text(targetName));
+        }
+        if (distance != null && !distance.isEmpty()) {
+            out = out.append(Component.text(" " + distance));
+        }
+        return out;
     }
 
-    private BarColor parseColor(String name) {
+    /**
+     * Глифы из пака вместо ванильных стрелок. В режиме AUTO — только если
+     * клиент подтвердил загрузку серверного ресурспака: на непропатченном
+     * клиенте символ из приватной области Unicode превратился бы в квадрат.
+     */
+    private boolean useGlyphs(Player player) {
+        ArrowStyle style = config.getArrowStyle();
+        if (style == ArrowStyle.GLYPHS) {
+            return true;
+        }
+        if (style == ArrowStyle.UNICODE) {
+            return false;
+        }
+        return player.getResourcePackStatus()
+                == PlayerResourcePackStatusEvent.Status.SUCCESSFULLY_LOADED;
+    }
+
+    private BossBar.Color parseColor(String name) {
         if (name == null) {
-            return BarColor.BLUE;
+            return BossBar.Color.BLUE;
         }
         try {
-            return BarColor.valueOf(name.toUpperCase(java.util.Locale.ROOT));
+            return BossBar.Color.valueOf(name.toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            return BarColor.BLUE;
+            return BossBar.Color.BLUE;
         }
     }
 
-    private BarStyle parseStyle(String name) {
+    private BossBar.Overlay parseStyle(String name) {
         if (name == null) {
-            return BarStyle.SOLID;
+            return BossBar.Overlay.PROGRESS;
         }
-        try {
-            return BarStyle.valueOf(name.toUpperCase(java.util.Locale.ROOT));
-        } catch (IllegalArgumentException e) {
-            return BarStyle.SOLID;
-        }
+        return switch (name.toUpperCase(java.util.Locale.ROOT)) {
+            case "SEGMENTED_6" -> BossBar.Overlay.NOTCHED_6;
+            case "SEGMENTED_10" -> BossBar.Overlay.NOTCHED_10;
+            case "SEGMENTED_12" -> BossBar.Overlay.NOTCHED_12;
+            case "SEGMENTED_20" -> BossBar.Overlay.NOTCHED_20;
+            default -> BossBar.Overlay.PROGRESS;
+        };
     }
 }
