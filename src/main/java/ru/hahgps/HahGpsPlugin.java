@@ -56,6 +56,7 @@ public class HahGpsPlugin extends JavaPlugin {
     private RouteRecordingService routeRecordingService;
     private TrackerService trackerService;
     private ItrakTerminalService terminalService;
+    private ResourcePackService resourcePackService;
 
     private volatile boolean hotSwapping;
 
@@ -79,7 +80,10 @@ public class HahGpsPlugin extends JavaPlugin {
         messagesManager = new MessagesManager(this);
         messagesManager.load(configManager.getLanguage());
 
-
+        // Ресурспак не навязывается при входе: сервис только готовит раздачу,
+        // а отправляет пак команда /gps pack.
+        resourcePackService = new ResourcePackService(this, configManager, messagesManager);
+        resourcePackService.start();
 
         registerPendingCommand();
         registerPendingItrakCommand();
@@ -405,6 +409,14 @@ public class HahGpsPlugin extends JavaPlugin {
         }
 
         try {
+            if (resourcePackService != null) {
+                resourcePackService.stop();
+            }
+        } catch (Throwable t) {
+            getLogger().log(Level.WARNING, "HahGps: resource pack stop failed", t);
+        }
+
+        try {
             if (trackerService != null) {
                 trackerService.stop();
             }
@@ -576,6 +588,10 @@ public class HahGpsPlugin extends JavaPlugin {
 
     public ItrakTerminalService getTerminalService() {
         return terminalService;
+    }
+
+    public ResourcePackService getResourcePackService() {
+        return resourcePackService;
     }
 
     public boolean isHotSwapping() {

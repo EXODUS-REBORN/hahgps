@@ -259,12 +259,29 @@ public class NavigationService {
         }
 
         if (session.isLoggingEnabled()) {
-            String hintKey = RouteArrow.of(delta).hintKey();
+            RouteArrow hintArrow = RouteArrow.of(delta);
+            String hintKey = hintArrow.hintKey();
             if (!hintKey.equals(session.getLastHint())) {
                 session.setLastHint(hintKey);
-                player.sendMessage(messages.getPrefixed(hintKey));
+                player.sendMessage(hintMessage(player, hintArrow, hintKey));
             }
         }
+    }
+
+    /**
+     * Подсказка в чате: префикс, стрелка направления и текст.
+     *
+     * Стрелка — тот же глиф из пака, что и в боссбаре (или ванильный символ
+     * в режиме unicode/без пака), поэтому в чате и наверху экрана направление
+     * выглядит одинаково. В messages_*.yml стрелок больше нет — иначе они
+     * дублировались бы.
+     */
+    private Component hintMessage(Player player, RouteArrow arrow, String hintKey) {
+        Component prefix = messages.getComponent("prefix");
+        Component icon = useGlyphs(player) ? arrow.glyphComponent() : Component.text(arrow.unicode());
+        return prefix.append(icon)
+                .append(Component.text(" "))
+                .append(messages.getComponent(hintKey));
     }
 
     /**

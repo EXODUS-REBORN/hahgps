@@ -123,6 +123,7 @@ public class ConfigManager {
         checkRange("itrak.scan-highlight-seconds", 10, 1, 120);
         checkRange("map.refresh-seconds", 5, 1, 60);
         checkRange("navigation.walk-max-distance", 128, 8, 512);
+        checkRange("resource-pack.port", 8123, 1024, 65535);
     }
 
     /** Числовая настройка с диапазоном: опечатка не должна ронять игру. */
@@ -232,6 +233,38 @@ public class ConfigManager {
         } catch (IllegalArgumentException ignored) {
             return ArrowStyle.AUTO;
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Ресурспак стрелок (/gps pack)
+    // ------------------------------------------------------------------
+
+    /** Раздача пака по команде; при входе он не отправляется. */
+    public boolean isResourcePackEnabled() {
+        return config.getBoolean("resource-pack.enabled", true);
+    }
+
+    /** Внешний URL на hahgps.zip; пусто — плагин раздаёт пак из jar сам. */
+    public String getResourcePackUrl() {
+        String url = config.getString("resource-pack.url", "");
+        return url == null ? "" : url.trim();
+    }
+
+    /** Порт встроенного HTTP-сервера, если внешний URL не задан. */
+    public int getResourcePackPort() {
+        return Math.max(1024, Math.min(65535, config.getInt("resource-pack.port", 8123)));
+    }
+
+    /** Адрес сервера в ссылке на пак; пусто — определить автоматически. */
+    public String getResourcePackHost() {
+        String host = config.getString("resource-pack.host", "");
+        return host == null ? "" : host.trim();
+    }
+
+    /** Текст в окне подтверждения установки пака. */
+    public String getResourcePackPrompt() {
+        String prompt = config.getString("resource-pack.prompt", "HahGPS: стрелки маршрута");
+        return prompt == null || prompt.isBlank() ? "HahGPS" : prompt;
     }
 
     private static boolean isEnumValue(String name, Object[] values) {

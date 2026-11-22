@@ -61,6 +61,9 @@ permissions:
   gps.reload:
     description: Reload config
     default: op
+  gps.pack:
+    description: Download the HahGPS resource pack in game (/gps pack)
+    default: true
   gps.edge:
     description: Manage graph edges
     default: op

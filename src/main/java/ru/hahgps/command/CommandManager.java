@@ -30,6 +30,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         register(new RouteCommand());
         register(new LogCommand());
         register(new ReloadCommand());
+        register(new PackCommand());
         register(new UpdateCommand());
         register(new HelpCommand());
         register(new EdgeCommand());
@@ -57,6 +58,9 @@ public class CommandManager implements CommandExecutor, TabCompleter {
                 }
                 plugin.getConfigManager().reload();
                 plugin.getMessages().reload(plugin.getConfigManager().getLanguage());
+                if (plugin.getResourcePackService() != null) {
+                    plugin.getResourcePackService().reload();
+                }
                 sender.sendMessage("HahGps: конфигурация и сообщения перезагружены.");
                 return true;
             }

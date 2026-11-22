@@ -48,6 +48,19 @@ jobs:
             exit 1
           fi
 
+
+      - name: Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Ресурспак (кладётся в jar для /gps pack)
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pillow numpy
+          python3 respack/build.py
+          test -f respack/dist/hahgps.zip
+
       - name: Сборка
         run: ./mvnw -B --no-transfer-progress package
 
@@ -77,12 +90,6 @@ jobs:
             exit 1
           fi
 
-      - name: Ресурспак
-        run: |
-          set -euo pipefail
-          python3 -m pip install --quiet pillow numpy
-          python3 respack/build.py
-          test -f respack/dist/hahgps.zip
 
       - name: Публикация релиза с jar и паком
         env:

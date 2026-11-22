@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Palette schema version: a mismatch replaces the file with the bundled one (old -> .bak)
-palette-version: 14
+palette-version: 15
 
 no-permission: "<#3f86ff>✖ You don't have permission to run this command.</#3f86ff>"
 player-only: "<#3f86ff>✖ This command is for players only.</#3f86ff>"
@@ -90,14 +90,14 @@ route-exists: "<#3f86ff>✖ A route named <white><bold>{name}</bold></white> alr
 arrival: "<#8fe9f5><bold>✔ DESTINATION REACHED</bold></#8fe9f5>"
 
 # --- Hints: the same blue ladder, from light to dark ---
-hint-straight: "<#8fe9f5><bold>↑ Go straight</bold></#8fe9f5>"
-hint-slight-right: "<#8fc6ff><bold>↗ Slightly right</bold></#8fc6ff>"
-hint-right: "<#66aaff><bold>→ Turn right</bold></#66aaff>"
-hint-sharp-right: "<#4fd1e0><bold>↘ Sharp right</bold></#4fd1e0>"
-hint-back: "<#3f86ff><bold>↩ Turn around</bold></#3f86ff>"
-hint-sharp-left: "<#4fd1e0><bold>↙ Sharp left</bold></#4fd1e0>"
-hint-left: "<#66aaff><bold>← Turn left</bold></#66aaff>"
-hint-slight-left: "<#8fc6ff><bold>↖ Slightly left</bold></#8fc6ff>"
+hint-straight: "<#8fe9f5><bold>Go straight</bold></#8fe9f5>"
+hint-slight-right: "<#8fc6ff><bold>Slightly right</bold></#8fc6ff>"
+hint-right: "<#66aaff><bold>Turn right</bold></#66aaff>"
+hint-sharp-right: "<#4fd1e0><bold>Sharp right</bold></#4fd1e0>"
+hint-back: "<#3f86ff><bold>Turn around</bold></#3f86ff>"
+hint-sharp-left: "<#4fd1e0><bold>Sharp left</bold></#4fd1e0>"
+hint-left: "<#66aaff><bold>Turn left</bold></#66aaff>"
+hint-slight-left: "<#8fc6ff><bold>Slightly left</bold></#8fc6ff>"
 
 # --- Logging ---
 log-enabled: "<#8fe9f5>✔</#8fe9f5> <gray>Chat hints enabled.</gray>"
@@ -127,6 +127,9 @@ map-scale-16: "whole world, 16 blocks/pixel"
 
 # --- Misc ---
 reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>HahGps configuration reloaded.</gray>"
+pack-sent: "<#8fe9f5>✔</#8fe9f5> <gray>Resource pack sent — confirm the install in Minecraft.</gray>"
+pack-unavailable: "<#3f86ff>✖ Resource pack is unavailable: check resource-pack in config.yml.</#3f86ff>"
+pack-disabled: "<#3f86ff>✖ Resource pack sharing is disabled in config.yml.</#3f86ff>"
 loading-data: "<gray><italic>Loading data…</italic></gray>"
 error-occurred: "<#3f86ff>✖ An error occurred:</#3f86ff> <white>{error}</white>"
 world-not-found: "<#3f86ff>✖ World <white><bold>{world}</bold></white> not found.</#3f86ff>"

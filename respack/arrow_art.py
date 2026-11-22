@@ -189,20 +189,26 @@ def _put_arrow(base: Image.Image, mask: Image.Image) -> Image.Image:
 
 
 def glyph(direction: str) -> Image.Image:
-    """8×8 глиф для BossBar: жёлтая стрелка, тень рисует сама игра.
+    """10×10 глиф для BossBar и чата: жёлтая стрелка с тёмным контуром.
 
-    Высота строки боссбара — 8 пикселей; собственный контур или тень в такой
-    сетке только съедают стрелку, поэтому её добавляет drawTextWithShadow.
+    Тело 8×8, контур 1 px: в чате глиф ростом 10 px с посадкой 9 px влезает
+    в строку (1 px уходит в выносную часть), в боссбаре тоже не задевает полосу.
     """
     if direction in _GLYPH_MIRROR:
         return glyph(_GLYPH_MIRROR[direction]).transpose(Image.FLIP_LEFT_RIGHT)
     rows = _GLYPHS[direction]
-    img = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
+    body = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
     for y, row in enumerate(rows):
         for x, cell in enumerate(row):
             if cell == "#":
-                img.putpixel((x, y), YELLOW + (255,))
-    return img
+                body.putpixel((x, y), YELLOW + (255,))
+    mask = Image.new("L", (10, 10), 0)
+    mask.paste(body.split()[3], (1, 1))
+    outline = mask.filter(ImageFilter.MaxFilter(3))
+    out = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
+    out.paste(Image.new("RGBA", (10, 10), (16, 18, 22, 255)), (0, 0), outline)
+    out.paste(body, (1, 1), body.split()[3])
+    return out
 
 
 def sign_face(direction: str) -> Image.Image:
@@ -281,10 +287,10 @@ def steel(kind: str = "post") -> Image.Image:
 
 
 def font_atlas() -> Image.Image:
-    """Все 8 глифов в ряд: 8 × 8 пикселей на глиф."""
-    atlas = Image.new("RGBA", (8 * len(DIRECTIONS), 8), (0, 0, 0, 0))
+    """Все 8 глифов в ряд: 10 × 10 пикселей на глиф."""
+    atlas = Image.new("RGBA", (10 * len(DIRECTIONS), 10), (0, 0, 0, 0))
     for i, direction in enumerate(DIRECTIONS):
-        atlas.paste(glyph(direction), (i * 8, 0))
+        atlas.paste(glyph(direction), (i * 10, 0))
     return atlas
 
 
