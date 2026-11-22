@@ -20,7 +20,7 @@ import java.util.Set;
  *   <li>1500–1599 — поиск;</li>
  *   <li>1600–1699 — настройки;</li>
  *   <li>1700–1799 — транспорт;</li>
- *   <li>1800–1899 — карта;</li>
+ *   <li>1800–1899 — карта и знаки маршрута (1810–1817 предмет, 1820–1827 блок);</li>
  *   <li>2000–2099 — iTrak.</li>
  * </ul>
  */
@@ -70,6 +70,16 @@ public final class ItemIds {
     public static final int TRANSPORT_BASE = 1701;
 
     public static final int MAP_ITEM = 1801;
+
+    /**
+     * 8 номеров 3D-предмета «знак-указатель» (стрелка на чёрной плите).
+     * Номера рисует ресурспак (`respack/build.py`), выдаче в игре они пока не
+     * нужны: пак сам подставляет модель на `minecraft:oak_sign` по CMD.
+     */
+    public static final int ROUTE_SIGN_BASE = 1810;
+
+    /** 8 номеров 3D-блока-знака: та же стрелка на бетонной опоре. */
+    public static final int ROUTE_BLOCK_BASE = 1820;
 
     /** 16 номеров: 8 цветов × (обычный, водонепроницаемый). */
     public static final int TRACKER_BASE = 2001;
@@ -134,6 +144,10 @@ public final class ItemIds {
             ids.add(TRANSPORT_BASE + i);
         }
         ids.add(MAP_ITEM);
+        for (int i = 0; i < 8; i++) {
+            ids.add(ROUTE_SIGN_BASE + i);
+            ids.add(ROUTE_BLOCK_BASE + i);
+        }
         for (TrackerColor color : TrackerColor.values()) {
             ids.add(tracker(color, false));
             ids.add(tracker(color, true));

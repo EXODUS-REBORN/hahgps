@@ -59,6 +59,13 @@ jobs:
           echo "проверено классов: $(wc -l < /tmp/classes.txt)"
           exit $fail
 
+      - name: Ресурспак собирается
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pillow numpy
+          python3 respack/build.py
+          test -f respack/dist/hahgps.zip
+
       - name: Jar артефактом
         uses: actions/upload-artifact@v4
         with:

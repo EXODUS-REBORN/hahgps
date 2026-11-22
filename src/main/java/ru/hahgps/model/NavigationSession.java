@@ -31,8 +31,8 @@ public class NavigationSession {
     private double remainingDistance;
     private boolean loggingEnabled;
     private String lastHint;
-    /** Последнее, что реально ушло в боссбар: пакет шлём только при изменении. */
-    private String lastBarTitle;
+    /** Ключ последней строки боссбара: пакет шлём только при изменении. */
+    private String lastBarKey;
     private float lastBarProgress = -1.0f;
 
     public NavigationSession(UUID playerId, String targetName, Location target,
@@ -164,12 +164,12 @@ public class NavigationSession {
         this.lastHint = lastHint;
     }
 
-    public String getLastBarTitle() {
-        return lastBarTitle;
+    public String getLastBarKey() {
+        return lastBarKey;
     }
 
-    public void setLastBarTitle(String lastBarTitle) {
-        this.lastBarTitle = lastBarTitle;
+    public void setLastBarKey(String lastBarKey) {
+        this.lastBarKey = lastBarKey;
     }
 
     public float getLastBarProgress() {
