@@ -263,6 +263,15 @@ public class ConfigManager {
         return host == null ? "" : host.trim();
     }
 
+    /**
+     * Каталог веб-раздачи на этом же хосте (его отдаёт nginx через Cloudflare
+     * Tunnel). Плагин копирует туда собранный hahgps.zip; пусто — не копировать.
+     */
+    public String getResourcePackPublish() {
+        String dir = config.getString("resource-pack.publish", "");
+        return dir == null ? "" : dir.trim();
+    }
+
     /** Текст в окне подтверждения установки пака. */
     /** Автоматически досылать обновлённый пак тем, кто уже ставил старый. */
     public boolean isResourcePackAutoUpdate() {

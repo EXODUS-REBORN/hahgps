@@ -48,12 +48,12 @@ public class ResourcePackService implements Listener {
     static final UUID PACK_ID = UUID.nameUUIDFromBytes("hahgps-pack".getBytes(StandardCharsets.UTF_8));
 
     /**
-     * Публичный адрес пака: GitHub-репозиторий ресурспака (он публичный,
-     * поэтому клиенты качают без авторизации). Плагин подставляет его, если
-     * в config.yml не задан свой `resource-pack.url`.
+     * Публичный адрес пака. Файл лежит на нашем сервере и отдаётся nginx'ом
+     * через Cloudflare Tunnel (`hahgps-pack.service`), поэтому качается без
+     * авторизации и за NAT. Плагин подставляет его, если в config.yml не
+     * задан свой `resource-pack.url`.
      */
-    static final String PUBLIC_URL =
-            "https://raw.githubusercontent.com/EXODUS-REBORN/hahgps-pack/main/hahgps.zip";
+    static final String PUBLIC_URL = "https://hahgps.hakerone.ru/hahgps.zip";
 
     private final HahGpsPlugin plugin;
     private final ConfigManager config;
@@ -66,6 +66,8 @@ public class ResourcePackService implements Listener {
     private volatile String sha1Hex = "";
     private volatile String url;
     private volatile boolean enabled;
+    /** Каталог веб-раздачи на этом же хосте; пусто — пак никуда не копируется. */
+    private volatile String publishDir = "";
     /** UUID -> хэш версии, которую игрок уже видел (загрузил или отклонил). */
     private final Map<UUID, String> seenHashes = new ConcurrentHashMap<>();
     private File seenFile;
@@ -91,8 +93,10 @@ public class ResourcePackService implements Listener {
         loadSeen();
 
         String configured = config.getResourcePackUrl();
-        // "local" — поднять свой HTTP-сервер; пусто — публичный адрес из репозитория
-        // ресурспака; иначе — используется указанный URL как есть.
+        publishDir = config.getResourcePackPublish();
+        // "local" — поднять свой HTTP-сервер; пусто — публичный адрес с нашего
+        // сервера (nginx + Cloudflare Tunnel); иначе — используется указанный
+        // URL как есть.
         if ("local".equalsIgnoreCase(configured)) {
             if (pack == null) {
                 plugin.getLogger().warning("HahGps: в jar нет " + RESOURCE
@@ -110,6 +114,10 @@ public class ResourcePackService implements Listener {
         if (pack == null) {
             plugin.getLogger().warning("HahGps: в jar нет " + RESOURCE
                     + " — внешний URL всё равно будет отправлен, но хэш проверить нечем.");
+        } else {
+            // Плагин мог подняться рядом с веб-раздачей: обновляем файл, который
+            // отдаёт nginx, иначе игроки продолжат качать старую версию.
+            publish();
         }
         // Версия в URL — хэш того файла, который клиент реально скачает, а не
         // jar: сверяем в фоне, затем рассылаем автообновление.
@@ -374,17 +382,88 @@ public class ResourcePackService implements Listener {
     }
 
     /**
+     * Обновить файл веб-раздачи: nginx на этом же хосте отдаёт его через
+     * Cloudflare Tunnel. Копируем, только если байты отличаются, — лишняя
+     * запись меняет mtime и сбивает кэш. На машине без веб-раздачи ключ
+     * `resource-pack.publish` просто не задан.
+     */
+    public void publish() {
+        String dir = publishDir;
+        byte[] data = pack;
+        if (dir == null || dir.isBlank() || data == null) {
+            return;
+        }
+        File target = new File(dir, RESOURCE);
+        try {
+            if (writeIfDifferent(target, data)) {
+                plugin.getLogger().info("HahGps: ресурспак опубликован — " + target
+                        + " (" + data.length + " байт)");
+            }
+        } catch (IOException e) {
+            plugin.getLogger().log(Level.WARNING,
+                    "HahGps: не удалось опубликовать ресурспак в " + target, e);
+        }
+    }
+
+    /** Хэш файла веб-раздачи; пусто — каталог не задан или файла нет. */
+    private String publishedHash() {
+        String dir = publishDir;
+        if (dir == null || dir.isBlank()) {
+            return "";
+        }
+        File target = new File(dir, RESOURCE);
+        if (!target.isFile()) {
+            return "";
+        }
+        try {
+            return hex(sha1(java.nio.file.Files.readAllBytes(target.toPath())));
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
+    /** Записать байты, если они отличаются от лежащих в файле; true — обновлён. */
+    static boolean writeIfDifferent(File target, byte[] data) throws IOException {
+        if (target.isFile()) {
+            byte[] current = java.nio.file.Files.readAllBytes(target.toPath());
+            if (java.util.Arrays.equals(current, data)) {
+                return false;
+            }
+        }
+        File parent = target.getParentFile();
+        if (parent != null && !parent.isDirectory() && !parent.mkdirs() && !parent.isDirectory()) {
+            throw new IOException("нет каталога " + parent);
+        }
+        java.nio.file.Files.write(target.toPath(), data);
+        return true;
+    }
+
+    /**
      * Сверить встроенный пак с файлом по внешнему адресу.
      *
      * Клиент качает не jar, а этот файл, поэтому версия {@code ?v=} должна
-     * быть хэшем именно его: иначе после обновления пака в репозитории клиенты
+     * быть хэшем именно его: иначе после обновления пака на сервере клиенты
      * продолжат брать старую версию из кэша. Расхождение с jar не ломает
      * установку (хэш для внешнего адреса не навязывается), но это сигнал,
-     * что пак в репозиторий забыли положить.
+     * что в раздачу забыли положить свежий файл.
      */
     private void checkRemote(Runnable after) {
         String target = url;
         if (target == null || server != null) {
+            return;
+        }
+        String published = publishedHash();
+        if (!published.isBlank()) {
+            // Файл раздачи лежит на этом же хосте — берём хэш у него и не
+            // тратим трафик на скачивание через туннель.
+            if (pack != null && !published.equals(sha1Hex)) {
+                plugin.getLogger().warning("HahGps: в раздаче " + publishDir
+                        + " лежит другой файл, чем в jar (" + published.substring(0, 12)
+                        + " != " + sha1Hex.substring(0, Math.min(12, sha1Hex.length()))
+                        + ") — проверьте, что nginx отдаёт именно " + RESOURCE + ".");
+            }
+            sha1Hex = published;
+            runLater(after);
             return;
         }
         Thread thread = new Thread(() -> {
@@ -399,23 +478,29 @@ public class ResourcePackService implements Listener {
                         plugin.getLogger().warning("HahGps: ресурспак по адресу " + target
                                 + " отличается от встроенного в jar (" + remoteHex.substring(0, 12)
                                 + " != " + sha1Hex.substring(0, Math.min(12, sha1Hex.length()))
-                                + "). Обновите EXODUS-REBORN/hahgps-pack или пересоберите плагин.");
+                                + "). Проверьте раздачу или пересоберите плагин.");
                     }
                     sha1Hex = remoteHex;
                 }
             } catch (Throwable t) {
                 plugin.getLogger().log(Level.FINE, "HahGps: проверка адреса пака не удалась", t);
             } finally {
-                if (after != null) {
-                    try {
-                        Bukkit.getScheduler().runTask(plugin, after::run);
-                    } catch (Throwable ignored) {
-                    }
-                }
+                runLater(after);
             }
         }, "HahGps-Pack-Check");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    /** Выполнить на главном потоке; из потока проверки это обязательно. */
+    private void runLater(Runnable task) {
+        if (task == null) {
+            return;
+        }
+        try {
+            Bukkit.getScheduler().runTask(plugin, task);
+        } catch (Throwable ignored) {
+        }
     }
 
     /** Скачать файл по адресу (для сверки хэша); null — не вышло. */

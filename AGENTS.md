@@ -34,9 +34,14 @@
   Без него игрок видит ванильный предмет, даже если код обновлён.
 - После правок: `python3 respack/build.py` (собирает `dist/hahgps.zip`, кладёт
   копию в `src/main/resources/hahgps.zip` и рендерит превью), затем собрать jar.
-- Публичный пак для `/gps pack` живёт отдельно: обновить
-  `EXODUS-REBORN/hahgps-pack` (`hahgps.zip` + скриншоты) и запушить, иначе
-  игроки продолжат качать старую версию по старому URL.
+- Публичный пак для `/gps pack` раздаётся нашим сервером `192.168.0.64`:
+  файл `/var/www/hahgpspack/hahgps.zip`, nginx `127.0.0.1:8124`, наружу —
+  Cloudflare Tunnel `hahgps-pack.service` (`hahgps.hakerone.ru`). После сборки
+  пака сразу обновить файл раздачи (`cp respack/dist/hahgps.zip
+  /var/www/hahgpspack/hahgps.zip`), иначе игроки продолжат качать старую версию;
+  если плагин запущен на этом же хосте, он делает это сам по ключу
+  `resource-pack.publish`. Проверка:
+  `curl -x socks5h://127.0.0.1:2080 -o /dev/null -w '%{http_code}\n' https://hahgps.hakerone.ru/hahgps.zip`.
 - Предметы, которые ставятся блоком, требуют `blockstate`; одного item-диска
   недостаточно.
 - В релиз прикладывать **реальные скриншоты** из `respack/preview/` (и копии в

@@ -71,7 +71,7 @@ ru.hahgps
 │   ├── WalkGrid.java          — A* по клеткам мира (обход стен, без Bukkit)
 │   ├── WalkPathService.java   — пеший маршрут по блокам в главном потоке порциями
 │   ├── PoiService.java        — операции с точками
-│   ├── ResourcePackService.java — раздача hahgps.zip по /gps pack (HTTP/URL)
+│   ├── ResourcePackService.java — раздача hahgps.zip по /gps pack (публичный URL, HTTP/URL)
 │   ├── RouteRecordingService.java — запись пути игрока для графа
 │   ├── RouteService.java      — построение маршрутов (свой пул потоков)
 │   ├── SearchService.java     — поиск с fuzzy-matching
@@ -168,12 +168,18 @@ ru.hahgps
 
 **ResourcePackService** — раздача пака стрелок:
 - Читает встроенный `hahgps.zip` из jar (или берёт `resource-pack.url`)
+- Публичный адрес — `https://hahgps.hakerone.ru/hahgps.zip`: файл лежит на
+  сервере `192.168.0.64`, его отдаёт nginx (`127.0.0.1:8124`) через Cloudflare
+  Tunnel (`hahgps-pack.service`), поэтому пак качается за NAT без открытых портов
+- `resource-pack.publish` — каталог веб-раздачи на этом же хосте: плагин
+  копирует туда свежий zip при старте/reload, если байты отличаются
 - Поднимает HTTP-сервер на `resource-pack.port` и отдаёт только этот файл
+  (`resource-pack.url: local`)
 - `resource-pack.host` или адрес интерфейса default-маршрута попадает в URL
 - Пак отправляет только команда `/gps pack`; при входе — никогда
 - Хэш навязывает только для своего HTTP-сервера; для публичного адреса версию
-  в `?v=` берёт из скачанного файла (а расхождение с jar пишет в лог) — чужой
-  файл с другим sha1 иначе роняет установку у клиента
+  в `?v=` берёт из файла раздачи (локально — без скачивания) — чужой файл с
+  другим sha1 иначе роняет установку у клиента
 - `PlayerResourcePackStatusEvent` с FAILED_DOWNLOAD/INVALID_URL не считается
   «увиденной версией»: игрок получит пак повторно, а причина попадёт в лог
 
