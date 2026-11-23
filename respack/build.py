@@ -336,6 +336,22 @@ def build_pack() -> None:
     tracker_art.pack_icon().save(PACK / "pack.png")
 
 
+def _face_refs(node) -> list[str]:
+    """Все ссылки граней на переменные текстуры («#map_side»)."""
+    refs: list[str] = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "texture" and isinstance(value, str) \
+                    and value.startswith("#"):
+                refs.append(value)
+            else:
+                refs.extend(_face_refs(value))
+    elif isinstance(node, list):
+        for value in node:
+            refs.extend(_face_refs(value))
+    return refs
+
+
 def validate() -> list[str]:
     problems: list[str] = []
     known = {p.relative_to(PACK).as_posix() for p in PACK.rglob("*") if p.is_file()}
@@ -353,6 +369,25 @@ def validate() -> list[str]:
         data = json.loads(path.read_text(encoding="utf-8"))
         relative = path.relative_to(PACK).as_posix()
 
+        # Карта textures модели: сюда смотрят грани через «#имя». Раньше этот
+        # блок не проверялся вовсе, и модель с «#map_side» уезжала в пак без
+        # файла текстуры — клиент рисовал фиолетово-чёрную клетку.
+        declared: set[str] = set()
+        texture_map = data.get("textures")
+        if isinstance(texture_map, dict):
+            for key, value in texture_map.items():
+                declared.add(key)
+                if isinstance(value, str) and not value.startswith("#") \
+                        and not exists("textures", value):
+                    problems.append(
+                        f"{relative}: нет текстуры {value} (textures.{key})")
+        if "/models/" in relative:
+            for ref in _face_refs(data):
+                if ref[1:] not in declared:
+                    problems.append(
+                        f"{relative}: грань ссылается на {ref}, "
+                        f"а такой переменной нет в textures")
+
         def walk(node) -> None:
             if isinstance(node, dict):
                 for key, value in node.items():
@@ -369,6 +404,8 @@ def validate() -> list[str]:
                     elif key == "layer0" and isinstance(value, str):
                         if not exists("textures", value):
                             problems.append(f"{relative}: нет текстуры {value}")
+                    elif key == "textures":
+                        continue
                     else:
                         walk(value)
             elif isinstance(node, list):

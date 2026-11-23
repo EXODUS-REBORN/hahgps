@@ -172,24 +172,6 @@ def _merge_dispatch(path: Path, entries: list[tuple[int, str]],
     _write_json(path, payload)
 
 
-def _model_refs(model: dict) -> set[str]:
-    refs: set[str] = set()
-
-    def walk(node) -> None:
-        if isinstance(node, dict):
-            for key, value in node.items():
-                if key in ("texture", "particle") and isinstance(value, str):
-                    refs.add(value.lstrip("#"))
-                else:
-                    walk(value)
-        elif isinstance(node, list):
-            for value in node:
-                walk(value)
-
-    walk(model)
-    return refs
-
-
 def build(pack: Path) -> list[str]:
     """Нарисовать карточки и 3D-иконки меню, дополнить диспетчеры CMD."""
     tex_gui = pack / "assets/hahgps/textures/gui"
@@ -214,19 +196,24 @@ def build(pack: Path) -> list[str]:
         })
 
     # --- 3D-иконки главного меню -------------------------------------------
+    # Текстуры берём из карты самой модели, а не из граней: наши элементы
+    # ссылаются на переменные («#map_side»), поэтому нужны цели, а не имена.
+    # Раньше в пак попадали только текстуры, прописанные полным именем в
+    # `particle`, а остальные клиент рисовал фиолетово-чёрными.
     used_textures: set[str] = set()
     for name in set(MAIN_ICONS.values()):
         model = ui_models.MODELS[name]()
         _write_json(models / f"{name}.json", model)
-        used_textures.update(ref for ref in _model_refs(model)
-                             if ref.startswith("hahgps:item/"))
+        used_textures.update(
+            ref for ref in (model.get("textures") or {}).values()
+            if isinstance(ref, str) and ref.startswith("hahgps:item/"))
     for ref in sorted(used_textures):
         short = ref.split("/", 1)[1]
         if short.startswith("tracker") or short in ("locator", "locator_long"):
             continue  # уже нарисованы build.py
         painter = ui_art.MAIN_TEXTURES.get(short)
         if painter is None:
-            continue
+            raise SystemExit(f"ui_kit: нет художника для текстуры {ref}")
         painter().save(tex_item / f"{short}.png")
 
     # --- диспетчеры CMD -----------------------------------------------------
