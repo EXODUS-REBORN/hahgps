@@ -55,9 +55,9 @@ public class TransportSelectGui extends GuiScreen {
 
     private static Material iconFor(TransportType type) {
         return switch (type) {
-            case FOOT -> Material.LEATHER_BOOTS;
+            case FOOT -> Material.LEATHER;
             case CAR -> Material.MINECART;
-            case TRANSIT -> Material.CLOCK;
+            case TRANSIT -> Material.RAIL;
             case AIR -> Material.FEATHER;
             case WATER -> Material.OAK_BOAT;
         };

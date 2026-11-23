@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -38,10 +39,12 @@ class ResourcePackBundleTest {
         assertTrue(entries.contains("pack.png"), "в паке нет pack.png");
         assertTrue(entries.contains("assets/hahgps/font/arrow.json"), "нет шрифта стрелок");
         assertTrue(entries.contains("assets/hahgps/textures/font/arrow.png"), "нет атласа глифов");
-        assertTrue(entries.contains("assets/hahgps/models/item/arrow_sign_straight.json"),
-                "нет 3D-предмета");
-        assertTrue(entries.contains("assets/hahgps/models/block/arrow_block_straight.json"),
-                "нет 3D-блока");
+        assertTrue(entries.contains("assets/hahgps/models/item/gui_settings.json"),
+                "нет иконки настроек");
+        assertTrue(entries.contains("assets/hahgps/models/item/gui_category.json"),
+                "нет иконки категории");
+        assertTrue(entries.contains("assets/hahgps/textures/gui/category.png"),
+                "нет текстуры иконки категории");
         assertTrue(entries.contains("assets/hahgps/models/item/tracker_blue.json"),
                 "нет 3D-трекера");
         assertTrue(entries.contains("assets/hahgps/models/item/tracker_blue_wp.json"),
@@ -52,11 +55,16 @@ class ResourcePackBundleTest {
                 "нет дальнего локатора");
         assertTrue(entries.contains("assets/hahgps/textures/item/tracker_blue.png"),
                 "нет текстуры трекера");
-        assertTrue(entries.contains("assets/minecraft/items/oak_sign.json"),
-                "нет диспетчера CMD для oak_sign");
+        assertTrue(entries.contains("assets/minecraft/items/paper.json"),
+                "нет диспетчера CMD для иконок поиска");
         assertTrue(entries.contains("assets/minecraft/items/lapis_lazuli.json"),
                 "нет диспетчера CMD для синего трекера");
         assertTrue(entries.contains("assets/minecraft/items/recovery_compass.json"),
                 "нет диспетчера CMD для локаторов");
+        assertFalse(entries.contains("assets/minecraft/items/oak_sign.json"),
+                "знаки маршрута убраны — диспетчер oak_sign не должен возвращаться");
+        assertFalse(entries.stream().anyMatch(e -> e.contains("arrow_sign_")
+                        || e.contains("arrow_block_")),
+                "знаки маршрута убраны — моделей и текстур знаков быть не должно");
     }
 }

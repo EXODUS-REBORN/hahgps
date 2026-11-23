@@ -47,6 +47,12 @@ def item_icon(name: str, size: int = 64) -> Image.Image:
                               view=1.05, transparent=True)
 
 
+def gui_icon(name: str, size: int = 64) -> Image.Image:
+    """Иконка меню из собранного пака (32×32), увеличенная без сглаживания."""
+    path = PACK / "assets/hahgps/textures/gui" / f"{name}.png"
+    return Image.open(path).convert("RGBA").resize((size, size), Image.NEAREST)
+
+
 def simple_icon(kind: str, size: int = 64) -> Image.Image:
     """Простые иконки служебных кнопок: книга, барьер, компас, стрелка."""
     image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
@@ -154,11 +160,20 @@ def compose(gui: Image.Image, heading: str, lines: list[str]) -> Image.Image:
     return canvas
 
 
-def fill_panes(image: Image.Image, occupied: set[int]) -> None:
-    pane = simple_icon("glass")
-    for slot in range(54):
+def fill_panes(image: Image.Image, occupied: set[int],
+               rows: int = 6) -> None:
+    pane = gui_icon("filler")
+    for slot in range(rows * 9):
         if slot not in occupied:
             put(image, slot, pane)
+
+
+def pane() -> Image.Image:
+    return gui_icon("filler")
+
+
+def brand() -> Image.Image:
+    return gui_icon("brand")
 
 
 def catalog() -> Path:
@@ -168,21 +183,22 @@ def catalog() -> Path:
     occupied.update(10 + i for i in range(8))
     occupied.update(19 + i for i in range(8))
     fill_panes(image, occupied)
-    put(image, 4, simple_icon("book"))
+    put(image, 4, gui_icon("ui_itrak_catalog"))
     for i, color in enumerate(colors):
         put(image, 10 + i, item_icon(f"tracker_{color}"))
         put(image, 19 + i, item_icon(f"tracker_{color}_wp"))
     put(image, 30, item_icon("locator"))
     put(image, 32, item_icon("locator_long"))
-    put(image, 45, simple_icon("compass"))
-    put(image, 53, simple_icon("barrier"))
+    put(image, 44, brand())
+    put(image, 45, gui_icon("nav_back"))
+    put(image, 53, gui_icon("nav_close"))
     image = compose(image, "Каталог выдачи", [
         "8 цветов трекеров",
         "обычный и водонепроницаемый",
         "локатор 20 / дальний 30",
         "ЛКМ — получить предмет",
     ])
-    path = PREVIEW / "08-gui-catalog.png"
+    path = PREVIEW / "06-gui-catalog.png"
     image.save(path)
     return path
 
@@ -199,12 +215,13 @@ def my_trackers() -> Path:
     fill_panes(image, occupied)
     for i, (model, label) in enumerate(samples):
         put(image, i, item_icon(model))
-    put(image, 45, simple_icon("compass"))
-    put(image, 48, simple_icon("compass"))
-    put(image, 49, simple_icon("book"))
-    put(image, 50, simple_icon("lapis"))
-    put(image, 51, simple_icon("spyglass"))
-    put(image, 53, simple_icon("barrier"))
+    put(image, 44, brand())
+    put(image, 45, gui_icon("nav_back"))
+    put(image, 48, gui_icon("ui_itrak_scan"))
+    put(image, 49, gui_icon("page_info"))
+    put(image, 50, gui_icon("ui_itrak_give"))
+    put(image, 51, gui_icon("ui_itrak_refresh"))
+    put(image, 53, gui_icon("nav_close"))
     _text(draw, (slot_xy(49)[0] + 4 * SCALE, slot_xy(49)[1] + 6 * SCALE),
           "1/1", 11 * SCALE, (40, 40, 40), bold=True)
     image = compose(image, "Мои трекеры", [
@@ -214,14 +231,84 @@ def my_trackers() -> Path:
         "карточка по клику на трекер",
         "отдельная кнопка в главном меню",
     ])
-    path = PREVIEW / "09-gui-my-trackers.png"
+    path = PREVIEW / "07-gui-my-trackers.png"
+    image.save(path)
+    return path
+
+
+def main_menu() -> Path:
+    """Главное меню: 3D-иконки разделов и плоские служебные кнопки."""
+    image, draw, width, height = gui_frame("HahGPS", rows=3)
+    occupied = {10, 12, 14, 16, 22, 24, 26}
+    fill_panes(image, occupied, rows=3)
+    put(image, 10, item_icon("main_points"))
+    put(image, 12, gui_icon("categories"))
+    put(image, 14, item_icon("main_catalog"))
+    put(image, 16, gui_icon("search"))
+    put(image, 22, gui_icon("settings"))
+    put(image, 24, item_icon("main_trackers"))
+    put(image, 26, brand())
+    image = compose(image, "Главное меню", [
+        "мои точки · категории · каталог",
+        "поиск · настройки · мои трекеры",
+        "объёмные иконки у разделов",
+        "плоские кнопки у служебных",
+    ])
+    path = PREVIEW / "10-gui-main-menu.png"
+    image.save(path)
+    return path
+
+
+def poi_card() -> Path:
+    """Карточка точки: 2D-карточка досье и кнопки действий."""
+    image, draw, width, height = gui_frame("Точка: Хайсовская 10", rows=3)
+    occupied = {10, 12, 14, 16, 22, 26}
+    fill_panes(image, occupied, rows=3)
+    put(image, 10, gui_icon("ui_poi_info"))
+    put(image, 12, gui_icon("ui_poi_goto"))
+    put(image, 14, gui_icon("ui_poi_rate"))
+    put(image, 16, gui_icon("ui_poi_delete"))
+    put(image, 22, gui_icon("nav_back"))
+    put(image, 26, brand())
+    image = compose(image, "Карточка точки", [
+        "досье: координаты и оценка",
+        "маршрут к точке",
+        "поставить оценку 1–10",
+        "удалить (с правом gps.point.delete)",
+    ])
+    path = PREVIEW / "11-gui-poi-card.png"
+    image.save(path)
+    return path
+
+
+def tracker_card() -> Path:
+    """Карточка трекера: 3D-модель жетона и 2D-кнопки действий."""
+    image, draw, width, height = gui_frame("Трекер: Хайсовская 10", rows=3)
+    occupied = {4, 10, 12, 13, 14, 16, 22, 26}
+    fill_panes(image, occupied, rows=3)
+    put(image, 4, item_icon("tracker_blue"))
+    put(image, 10, gui_icon("ui_itrak_route"))
+    put(image, 12, gui_icon("ui_itrak_watch"))
+    put(image, 13, gui_icon("ui_itrak_rename"))
+    put(image, 14, gui_icon("ui_itrak_take"))
+    put(image, 16, gui_icon("ui_itrak_remove"))
+    put(image, 22, gui_icon("nav_back"))
+    put(image, 26, brand())
+    image = compose(image, "Карточка трекера", [
+        "сам трекер — 3D-модель",
+        "маршрут, слежение, переименование",
+        "забрать или удалить",
+        "слежение: глаз / перечёркнутый",
+    ])
+    path = PREVIEW / "12-gui-tracker-card.png"
     image.save(path)
     return path
 
 
 def main() -> None:
     PREVIEW.mkdir(parents=True, exist_ok=True)
-    for path in (catalog(), my_trackers()):
+    for path in (catalog(), my_trackers(), main_menu(), poi_card(),
+                 tracker_card()):
         print("макет:", path)
 
 

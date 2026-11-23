@@ -57,16 +57,10 @@ class ItemIdsTest {
     }
 
     @Test
-    void routeArrowsSitInTheReservedEighteenHundredRange() {
+    void routeSignRangeIsGoneAndStaysFree() {
         Set<Integer> all = ItemIds.all();
-        assertTrue(ItemIds.ROUTE_SIGN_BASE >= 1800);
-        assertTrue(ItemIds.ROUTE_SIGN_BASE + 7 < ItemIds.ROUTE_BLOCK_BASE);
-        assertTrue(ItemIds.ROUTE_BLOCK_BASE + 7 < 1900);
-        for (int i = 0; i < 8; i++) {
-            assertTrue(all.contains(ItemIds.ROUTE_SIGN_BASE + i),
-                    "нет номера предмета-указателя: " + i);
-            assertTrue(all.contains(ItemIds.ROUTE_BLOCK_BASE + i),
-                    "нет номера блока-знака: " + i);
+        for (int id = 1800; id < 2000; id++) {
+            assertTrue(!all.contains(id), "номер из диапазона знаков занят: " + id);
         }
     }
 }

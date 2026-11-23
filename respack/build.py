@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Сборка ресурспака HahGPS: стрелки, 3D-трекеры и локаторы (Minecraft 1.21.11+).
+"""Сборка ресурспака HahGPS: HUD-стрелки, иконки меню, 3D-трекеры и локаторы.
 
 Что делает:
   * рисует 8 HUD-глифов 8×8 и шрифт `hahgps:arrow`;
-  * собирает 3D-модели предмета-указателя и блока-знака (свои текстуры
-    в namespace `hahgps`, ванильные блоки и их текстуры не переопределяются);
-  * рисует 3D-трекеры iTrak (8 цветов × обычный/водонепроницаемый),
-    оба локатора — «AirTag» с головой крипера, без блика
-    зачарования и с честной моделью на земле;
-  * добавляет item definitions с `custom_model_data` и откатом на ваниль:
-    `oak_sign` (стрелки), 8 материалов трекеров, `recovery_compass`
-    (локаторы, ванильный компас сохранён в fallback);
+  * рисует 32×32 иконки меню (категории, поиск, настройки, транспорт) и
+    диспетчеры `custom_model_data` на их материалы-носители;
+  * рисует 3D-трекеры iTrak (8 цветов × обычный/водонепроницаемый) и оба
+    локатора — «AirTag» с головой крипера, без блика зачарования и с честной
+    моделью на земле;
+  * оставляет ванильные предметы работоспособными: у материалов добавлен
+    только диспетчер CMD, откат — ванильная модель (`recovery_compass` —
+    полная ванильная модель со стрелкой на точку смерти);
   * рендерит превью и пакует `dist/hahgps.zip`.
 
 Запуск: python3 respack/build.py   (нужны pillow и numpy)
@@ -25,7 +25,9 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 import arrow_art
+import gui_art
 import mc_render
+import ui_kit
 import tracker_art
 
 ROOT = Path(__file__).resolve().parent
@@ -36,10 +38,6 @@ PREVIEW = ROOT / "preview"
 PACK_FORMAT = 75
 MAX_FORMAT = 200
 GLYPH_FIRST = 0xE000
-
-# CMD должны совпадать с ru.hahgps.item.ItemIds.ROUTE_SIGN_BASE / ROUTE_BLOCK_BASE.
-ROUTE_SIGN_BASE = 1810
-ROUTE_BLOCK_BASE = 1820
 
 # CMD должны совпадать с ru.hahgps.item.ItemIds:
 # TRACKER_BASE = 2001 (8 цветов × 2), ITRAK_LOCATOR = 2020,
@@ -59,24 +57,17 @@ TRACKER_MATERIALS = {
     "white": "quartz",
 }
 
-OAK_SIGN_FALLBACK = {"type": "minecraft:model", "model": "minecraft:item/oak_sign"}
-
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 
 def write_json(path: Path, data) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(data, ensure_ascii=False, indent=1) + "\n"
-    # Коды шрифта — …: в файле они должны быть экранированы, иначе
+    # Коды шрифта — …: в файле они должны быть экранированы, иначе
     # редакторы и диффы с приватными символами выглядят пустыми.
     for code in range(GLYPH_FIRST, GLYPH_FIRST + 8):
         text = text.replace(chr(code), f"\\u{code:04X}")
     path.write_text(text, encoding="utf-8")
-
-
-def _faces(texture: str, uv=(0, 0, 16, 16)) -> dict:
-    return {face: {"texture": texture, "uv": list(uv)}
-            for face in ("north", "south", "west", "east", "up", "down")}
 
 
 def _element(box, textures: dict[str, str]) -> dict:
@@ -86,43 +77,6 @@ def _element(box, textures: dict[str, str]) -> dict:
     for face, texture in textures.items():
         element["faces"][face] = {"texture": texture, "uv": [0, 0, 16, 16]}
     return element
-
-
-DISPLAY_ITEM = {
-    "gui": {"rotation": [30, 225, 0], "translation": [0, 0, 0],
-            "scale": [0.55, 0.55, 0.55]},
-    "ground": {"rotation": [0, 0, 0], "translation": [0, 1.5, 0],
-               "scale": [0.3, 0.3, 0.3]},
-    "fixed": {"rotation": [0, 180, 0], "translation": [0, 0, 0],
-              "scale": [0.5, 0.5, 0.5]},
-    "thirdperson_righthand": {"rotation": [0, 45, 0], "translation": [0, 2, 0],
-                              "scale": [0.4, 0.4, 0.4]},
-    "thirdperson_lefthand": {"rotation": [0, -45, 0], "translation": [0, 2, 0],
-                             "scale": [0.4, 0.4, 0.4]},
-    "firstperson_righthand": {"rotation": [0, 45, 0], "translation": [0, 2, 0],
-                              "scale": [0.45, 0.45, 0.45]},
-    "firstperson_lefthand": {"rotation": [0, -45, 0], "translation": [0, 2, 0],
-                             "scale": [0.45, 0.45, 0.45]},
-}
-
-DISPLAY_BLOCK_ITEM = {
-    "gui": {"rotation": [30, 225, 0], "translation": [0, 0, 0],
-            "scale": [0.625, 0.625, 0.625]},
-    "ground": {"rotation": [0, 0, 0], "translation": [0, 3, 0],
-               "scale": [0.25, 0.25, 0.25]},
-    "fixed": {"rotation": [0, 0, 0], "translation": [0, 0, 0],
-              "scale": [0.5, 0.5, 0.5]},
-    "on_shelf": {"rotation": [0, 180, 0], "translation": [0, 0, 0],
-                 "scale": [1, 1, 1]},
-    "thirdperson_righthand": {"rotation": [0, 45, 0], "translation": [0, 3, 0],
-                              "scale": [0.35, 0.35, 0.35]},
-    "thirdperson_lefthand": {"rotation": [0, -45, 0], "translation": [0, 3, 0],
-                             "scale": [0.35, 0.35, 0.35]},
-    "firstperson_righthand": {"rotation": [0, 45, 0], "translation": [0, 2, 0],
-                              "scale": [0.4, 0.4, 0.4]},
-    "firstperson_lefthand": {"rotation": [0, -45, 0], "translation": [0, 2, 0],
-                             "scale": [0.4, 0.4, 0.4]},
-}
 
 
 DISPLAY_TRACKER = {
@@ -160,7 +114,6 @@ DISPLAY_LOCATOR = {
     "firstperson_lefthand": {"rotation": [0, -45, 0], "translation": [0, 2, 0],
                              "scale": [0.46, 0.46, 0.46]},
 }
-
 
 
 def model_tracker(color_key: str, waterproof: bool = False) -> dict:
@@ -253,8 +206,6 @@ def model_locator(long: bool = False) -> dict:
     }
 
 
-
-
 def vanilla_recovery_compass_model() -> dict:
     """Ванильная модель recovery_compass — fallback для CMD 0..2019.
 
@@ -279,76 +230,15 @@ def vanilla_recovery_compass_model() -> dict:
     }
 
 
-def model_sign(direction: str) -> dict:
-    """3D-предмет: квадратный знак на короткой стойке."""
-    face = f"hahgps:item/arrow_sign_{direction}"
-    return {
-        "parent": "minecraft:block/block",
-        "textures": {
-            "particle": face,
-            "face": face,
-            "back": "hahgps:item/arrow_sign_back",
-            "edge": "hahgps:item/arrow_sign_edge",
-            "post": "hahgps:item/arrow_sign_post",
-        },
-        "elements": [
-            _element((7, 0, 7, 9, 5, 9), {
-                "north": "#post", "south": "#post", "west": "#post",
-                "east": "#post", "up": "#post", "down": "#post",
-            }),
-            _element((1, 2, 7.4, 15, 16, 8.6), {
-                "north": "#face", "south": "#back", "west": "#edge",
-                "east": "#edge", "up": "#edge", "down": "#edge",
-            }),
-        ],
-        "display": DISPLAY_ITEM,
-    }
-
-
-def model_block(direction: str) -> dict:
-    """Блок-знак: бетонная опора, стойка и квадратная плита со стрелкой."""
-    face = f"hahgps:block/arrow_block_{direction}"
-    return {
-        "parent": "minecraft:block/block",
-        "textures": {
-            "particle": face,
-            "face": face,
-            "back": "hahgps:block/arrow_block_back",
-            "edge": "hahgps:block/arrow_block_edge",
-            "post": "hahgps:block/arrow_block_post",
-            "side": "hahgps:block/arrow_block_side",
-            "bottom": "hahgps:block/arrow_block_bottom",
-        },
-        "elements": [
-            _element((0, 0, 0, 16, 2, 16), {
-                "north": "#side", "south": "#side", "west": "#side",
-                "east": "#side", "up": "#side", "down": "#bottom",
-            }),
-            _element((7, 2, 7, 9, 7, 9), {
-                "north": "#post", "south": "#post", "west": "#post",
-                "east": "#post", "up": "#post", "down": "#post",
-            }),
-            _element((3, 6, 7.4, 13, 16, 8.6), {
-                "north": "#face", "south": "#back", "west": "#edge",
-                "east": "#edge", "up": "#edge", "down": "#edge",
-            }),
-        ],
-    }
-
-
 def build_pack() -> None:
     if PACK.exists():
         shutil.rmtree(PACK)
     tex_item = PACK / "assets/hahgps/textures/item"
-    tex_block = PACK / "assets/hahgps/textures/block"
     tex_font = PACK / "assets/hahgps/textures/font"
     models_item = PACK / "assets/hahgps/models/item"
-    models_block = PACK / "assets/hahgps/models/block"
     font_dir = PACK / "assets/hahgps/font"
     items_dir = PACK / "assets/minecraft/items"
-    blockstates_dir = PACK / "assets/minecraft/blockstates"
-    for path in (tex_item, tex_block, tex_font, models_item, models_block,
-                 font_dir, items_dir, blockstates_dir):
+    for path in (tex_item, tex_font, models_item, font_dir, items_dir):
         path.mkdir(parents=True, exist_ok=True)
 
     # --- HUD-глифы ---------------------------------------------------------
@@ -364,33 +254,14 @@ def build_pack() -> None:
         }],
     })
 
-    # --- текстуры предмета и блока ----------------------------------------
-    arrow_art.sign_back().save(tex_item / "arrow_sign_back.png")
-    arrow_art.steel("edge").save(tex_item / "arrow_sign_edge.png")
-    arrow_art.steel("post").save(tex_item / "arrow_sign_post.png")
-    arrow_art.sign_back().save(tex_block / "arrow_block_back.png")
-    arrow_art.steel("edge").save(tex_block / "arrow_block_edge.png")
-    arrow_art.steel("post").save(tex_block / "arrow_block_post.png")
-    arrow_art.block_side().save(tex_block / "arrow_block_side.png")
-    arrow_art.block_bottom().save(tex_block / "arrow_block_bottom.png")
-    for direction in arrow_art.DIRECTIONS:
-        arrow_art.sign_face(direction).save(tex_item / f"arrow_sign_{direction}.png")
-        arrow_art.sign_face(direction).save(tex_block / f"arrow_block_{direction}.png")
-
     # --- iTrak: трекеры 8 цветов × 2 версии ------------------------------
     tracker_art.tracker_back().save(tex_item / "tracker_back.png")
     for color_key in tracker_art.COLORS:
         tracker_art.tracker_top(color_key).save(tex_item / f"tracker_{color_key}.png")
         tracker_art.tracker_top(color_key, True).save(tex_item / f"tracker_{color_key}_wp.png")
-        tracker_art.tracker_side(color_key).save(tex_item / f"tracker_{color_key}_side.png")
-        tracker_art.tracker_side(color_key, True).save(
-            tex_item / f"tracker_{color_key}_side_wp.png")
         tracker_art.tracker_edge(color_key).save(tex_item / f"tracker_{color_key}_edge.png")
         tracker_art.tracker_edge(color_key, True).save(
             tex_item / f"tracker_{color_key}_edge_wp.png")
-        tracker_art.tracker_rim(color_key).save(tex_item / f"tracker_{color_key}_rim.png")
-        tracker_art.tracker_rim(color_key, True).save(
-            tex_item / f"tracker_{color_key}_rim_wp.png")
 
     # --- локаторы ----------------------------------------------------------
     tracker_art.locator_front().save(tex_item / "locator_front.png")
@@ -403,32 +274,6 @@ def build_pack() -> None:
     tracker_art.locator_band().save(tex_item / "locator_band.png")
 
     # --- модели -----------------------------------------------------------
-    sign_entries: list[tuple[int, str]] = []
-    for i, direction in enumerate(arrow_art.DIRECTIONS):
-        sign_name = f"arrow_sign_{direction}"
-        block_name = f"arrow_block_{direction}"
-        write_json(models_item / f"{sign_name}.json", model_sign(direction))
-        write_json(models_block / f"{block_name}.json", model_block(direction))
-        write_json(models_item / f"{block_name}.json", {
-            "parent": f"hahgps:block/{block_name}",
-            "display": DISPLAY_BLOCK_ITEM,
-        })
-        sign_entries.append((ROUTE_SIGN_BASE + i, f"hahgps:item/{sign_name}"))
-        sign_entries.append((ROUTE_BLOCK_BASE + i, f"hahgps:item/{block_name}"))
-
-    sign_entries.sort(key=lambda item: item[0])
-    write_json(items_dir / "oak_sign.json", {
-        "model": {
-            "type": "minecraft:range_dispatch",
-            "property": "minecraft:custom_model_data",
-            "entries": [{"threshold": float(cmd),
-                         "model": {"type": "minecraft:model", "model": model}}
-                        for cmd, model in sign_entries],
-            "fallback": OAK_SIGN_FALLBACK,
-        },
-    })
-
-    # --- диспетчеры CMD для трекеров и локаторов ---------------------------
     for index, color_key in enumerate(tracker_art.COLORS):
         regular_cmd = TRACKER_BASE + index * 2
         waterproof_cmd = regular_cmd + 1
@@ -473,9 +318,17 @@ def build_pack() -> None:
             "fallback": vanilla_recovery_compass_model(),
         },
     })
+
+    # --- иконки меню ------------------------------------------------------
+    # gui_art — плоские иконки навигации, категорий, поиска и транспорта;
+    # ui_kit — карточки точки/трекера и 3D-иконки главного меню. Второй шаг
+    # читает уже готовые диспетчеры и дополняет их, не затирая чужие пороги.
+    gui_art.build(PACK)
+    ui_kit.build(PACK)
+
     write_json(PACK / "pack.mcmeta", {
         "pack": {
-            "description": "HahGPS: стрелки, 3D-трекеры и локаторы",
+            "description": "HahGPS: стрелки, иконки меню, 3D-трекеры и локаторы",
             "min_format": PACK_FORMAT,
             "max_format": MAX_FORMAT,
         },
@@ -513,6 +366,9 @@ def validate() -> list[str]:
                     elif key == "parent" and isinstance(value, str):
                         if not exists("models", value):
                             problems.append(f"{relative}: нет parent {value}")
+                    elif key == "layer0" and isinstance(value, str):
+                        if not exists("textures", value):
+                            problems.append(f"{relative}: нет текстуры {value}")
                     else:
                         walk(value)
             elif isinstance(node, list):
@@ -524,7 +380,60 @@ def validate() -> list[str]:
     atlas = Image.open(PACK / "assets/hahgps/textures/font/arrow.png")
     if atlas.size != (8 * len(arrow_art.DIRECTIONS), 8):
         problems.append(f"font/arrow.png: {atlas.size}, ожидалось 64×8")
+
+    # Иконки меню: все номера из ItemIds должны получить модель.
+    declared = {cmd for cmds in gui_art.CARRIERS.values() for cmd in cmds}
+    drawn = set(gui_art.ICONS)
+    for cmd in sorted(declared - drawn):
+        problems.append(f"gui: нет иконки для CMD {cmd}")
+    for name in gui_art.ICONS.values():
+        icon = Image.open(PACK / f"assets/hahgps/textures/gui/{name[0]}.png")
+        if icon.size != (gui_art.SIZE, gui_art.SIZE):
+            problems.append(f"gui/{name[0]}.png: {icon.size}, ожидалось 32×32")
+
+    # Карточки и 3D-иконки меню: текстуры 32×32 и пороги CMD на месте.
+    for name in sorted(set(ui_kit.CARD_ICONS.values())
+                       | {variant[1] for variant in ui_kit.CARD_VARIANTS.values()}):
+        icon = Image.open(PACK / f"assets/hahgps/textures/gui/ui_{name}.png")
+        if icon.size != (32, 32):
+            problems.append(f"gui/ui_{name}.png: {icon.size}, ожидалось 32×32")
+    for material, cmds in ui_kit.CARD_CARRIERS.items():
+        data = json.loads((PACK / f"assets/minecraft/items/{material}.json")
+                          .read_text(encoding="utf-8"))
+        thresholds = {int(round(entry["threshold"]))
+                      for entry in _range_entries(data)}
+        for cmd in cmds:
+            if cmd not in thresholds:
+                problems.append(f"items/{material}.json: нет порога {cmd}")
+    for material, cmds in ui_kit.MAIN_CARRIERS.items():
+        data = json.loads((PACK / f"assets/minecraft/items/{material}.json")
+                          .read_text(encoding="utf-8"))
+        thresholds = {int(round(entry["threshold"]))
+                      for entry in _range_entries(data)}
+        for cmd in cmds:
+            if cmd not in thresholds:
+                problems.append(f"items/{material}.json: нет порога {cmd}")
+    for name in set(ui_kit.MAIN_ICONS.values()):
+        if not (PACK / f"assets/hahgps/models/item/{name}.json").is_file():
+            problems.append(f"нет 3D-модели {name}")
     return problems
+
+
+def _range_entries(node):
+    """Все пороги custom_model_data-диспетчера (для проверки CMD)."""
+    found = []
+    if isinstance(node, dict):
+        if (node.get("type") == "minecraft:range_dispatch"
+                and node.get("property") == "minecraft:custom_model_data"):
+            for entry in node.get("entries", []):
+                if isinstance(entry, dict) and "threshold" in entry:
+                    found.append(entry)
+        for value in node.values():
+            found.extend(_range_entries(value))
+    elif isinstance(node, list):
+        for value in node:
+            found.extend(_range_entries(value))
+    return found
 
 
 def zip_pack(name: str = "hahgps.zip") -> Path:
@@ -569,9 +478,8 @@ def label(draw, text, xy, size=18, fill=(214, 220, 232)) -> None:
 
 def load_images() -> dict[str, Image.Image]:
     images = {}
-    for folder in ("item", "block"):
-        for path in (PACK / "assets/hahgps/textures" / folder).glob("*.png"):
-            images[f"hahgps:{folder}/{path.stem}"] = Image.open(path).convert("RGBA")
+    for path in (PACK / "assets/hahgps/textures/item").glob("*.png"):
+        images[f"hahgps:item/{path.stem}"] = Image.open(path).convert("RGBA")
     return images
 
 
@@ -600,7 +508,7 @@ def build_previews() -> list[Path]:
     height = tile + 96
     sheet = Image.new("RGB", (width, height), (17, 19, 24))
     draw = ImageDraw.Draw(sheet)
-    label(draw, "Стрелки — ванильные, перекрашены в жёлтый", (14, 10), 20)
+    label(draw, "Стрелки HUD — ванильные, перекрашены в жёлтый", (14, 10), 20)
     for i, (direction, caption) in enumerate(unique):
         glyph = arrow_art.glyph(direction).resize((tile, tile), Image.NEAREST)
         x = pad + i * (tile + pad)
@@ -615,65 +523,40 @@ def build_previews() -> list[Path]:
     sheet.save(path)
     out.append(path)
 
-    # 2. 3D-предмет, 8 направлений.
-    tile = 210
-    cols = 4
-    width = cols * (tile + 10) + 10
-    height = 2 * (tile + 44) + 52
+    # 2. Иконки меню: по группам ItemIds, с номерами CMD.
+    tile, pad, caption = 96, 10, 26
+    cols = 7
+    head, group_gap = 24, 8
+    groups = gui_art.GROUPS
+    rows_total = sum((len(cmds) + cols - 1) // cols for _, cmds in groups)
+    width = cols * (tile + pad) + pad
+    height = 44 + len(groups) * (head + group_gap) + rows_total * (tile + caption)
     sheet = Image.new("RGB", (width, height), (17, 19, 24))
     draw = ImageDraw.Draw(sheet)
-    label(draw, "Предмет «знак-указатель» (3D, CMD 1810–1817)", (14, 10), 20)
-    for i, direction in enumerate(arrow_art.DIRECTIONS):
-        model = json.loads((PACK / "assets/hahgps/models/item"
-                            / f"arrow_sign_{direction}.json").read_text(encoding="utf-8"))
-        image = render_model(model, images, tile)
-        x = 10 + (i % cols) * (tile + 10)
-        y = 44 + (i // cols) * (tile + 44)
-        sheet.paste(image, (x, y))
-        label(draw, f"{direction} · {ROUTE_SIGN_BASE + i}", (x + 4, y + tile + 2), 14,
-              (198, 204, 216))
-    path = PREVIEW / "02-item.png"
+    label(draw, "Иконки меню HahGPS (32×32, CMD 1001–1705)", (14, 12), 20)
+    y = 44
+    for title, cmds in groups:
+        label(draw, title, (pad + 2, y), 16, (143, 198, 255))
+        draw.line([pad + 2, y + 19, width - pad - 2, y + 19],
+                  fill=(40, 46, 58), width=1)
+        y += head
+        for index, cmd in enumerate(cmds):
+            name, _ = gui_art.ICONS[cmd]
+            icon = Image.open(PACK / f"assets/hahgps/textures/gui/{name}.png").convert("RGBA")
+            icon = icon.resize((tile, tile), Image.NEAREST)
+            x = pad + (index % cols) * (tile + pad)
+            ty = y + (index // cols) * (tile + caption)
+            draw.rounded_rectangle([x, ty, x + tile, ty + tile], radius=4,
+                                   fill=(40, 43, 51), outline=(58, 63, 72))
+            sheet.paste(icon, (x, ty), icon)
+            label(draw, f"{name}", (x + 3, ty + tile + 2), 12, (198, 204, 216))
+            label(draw, str(cmd), (x + 3, ty + tile + 14), 11, (150, 158, 172))
+        y += ((len(cmds) + cols - 1) // cols) * (tile + caption) + group_gap
+    path = PREVIEW / "02-icons.png"
     sheet.save(path)
     out.append(path)
 
-    # 3. Блок-знак: спереди, сбоку, сверху.
-    tile = 260
-    sheet = Image.new("RGB", (3 * (tile + 12) + 12, tile + 52), (17, 19, 24))
-    draw = ImageDraw.Draw(sheet)
-    label(draw, "Блок-знак (3D, CMD 1820–1827; свои текстуры, ванильные не тронуты)",
-          (14, 10), 20)
-    model = json.loads((PACK / "assets/hahgps/models/block"
-                        / "arrow_block_left.json").read_text(encoding="utf-8"))
-    for i, (yaw, pitch, caption) in enumerate((
-            (0, -10, "спереди"), (-42, -24, "три четверти"), (-90, -50, "сверху"))):
-        image = render_model(model, images, tile, yaw=yaw, pitch=pitch, view=1.35)
-        x = 12 + i * (tile + 12)
-        sheet.paste(image, (x, 44))
-        label(draw, caption, (x + 4, tile + 46), 14, (198, 204, 216))
-    path = PREVIEW / "03-block.png"
-    sheet.save(path)
-    out.append(path)
-
-    # 4. Таблица CMD.
-    height = 40 + len(arrow_art.DIRECTIONS) * 24 + 70
-    sheet = Image.new("RGB", (760, height), (17, 19, 24))
-    draw = ImageDraw.Draw(sheet)
-    label(draw, "Номера CustomModelData", (14, 10), 20)
-    label(draw, "направление", (16, 42), 15, (150, 158, 172))
-    label(draw, "глиф HUD", (320, 42), 15, (150, 158, 172))
-    label(draw, "предмет", (470, 42), 15, (150, 158, 172))
-    label(draw, "блок", (620, 42), 15, (150, 158, 172))
-    for i, direction in enumerate(arrow_art.DIRECTIONS):
-        y = 66 + i * 24
-        label(draw, direction, (16, y), 15)
-        label(draw, f"\\u{GLYPH_FIRST + i:04X}", (320, y), 15, (222, 190, 96))
-        label(draw, str(ROUTE_SIGN_BASE + i), (470, y), 15, (222, 190, 96))
-        label(draw, str(ROUTE_BLOCK_BASE + i), (620, y), 15, (222, 190, 96))
-    path = PREVIEW / "04-cmd.png"
-    sheet.save(path)
-    out.append(path)
-
-    # 5. Трекеры: 8 цветов × обычный/водонепроницаемый.
+    # 3. Трекеры: 8 цветов × обычный/водонепроницаемый.
     tile = 188
     cols = 8
     width = cols * (tile + 8) + 8
@@ -693,11 +576,11 @@ def build_previews() -> list[Path]:
             label(draw, f"{color_key}{' · wp' if waterproof else ''} · "
                         f"{TRACKER_BASE + col * 2 + (1 if waterproof else 0)}",
                   (x + 4, y + tile + 2), 13, (198, 204, 216))
-    path = PREVIEW / "05-trackers.png"
+    path = PREVIEW / "03-trackers.png"
     sheet.save(path)
     out.append(path)
 
-    # 6. Локаторы.
+    # 4. Локаторы.
     tile = 250
     sheet = Image.new("RGB", (2 * (tile + 12) + 12, tile + 58), (17, 19, 24))
     draw = ImageDraw.Draw(sheet)
@@ -713,11 +596,11 @@ def build_previews() -> list[Path]:
         x = 12 + i * (tile + 12)
         sheet.paste(image, (x, 42))
         label(draw, f"{caption} · {cmd}", (x + 4, tile + 46), 14, (198, 204, 216))
-    path = PREVIEW / "06-locators.png"
+    path = PREVIEW / "04-locators.png"
     sheet.save(path)
     out.append(path)
 
-    # 7. Выброшенные предметы: 3D на земле, без блика зачарования.
+    # 5. Выброшенные предметы: 3D на земле, без блика зачарования.
     width, height = 1400, 430
     sheet = Image.new("RGB", (width, height), (18, 21, 27))
     draw = ImageDraw.Draw(sheet)
@@ -757,7 +640,61 @@ def build_previews() -> list[Path]:
         sheet.paste(shadow, (x, 314), shadow)
         sheet.paste(image, (x, 318 - size // 2), image)
         x += size + 6
-    path = PREVIEW / "07-dropped.png"
+    path = PREVIEW / "05-dropped.png"
+    sheet.save(path)
+    out.append(path)
+
+    # 6. Карточки точки и трекера: плоские иконки действий.
+    cards: list[tuple[int, str]] = [(cmd, name) for cmd, name in
+                                    sorted(ui_kit.CARD_ICONS.items())]
+    for material in sorted(ui_kit.CARD_VARIANTS):
+        cmd, name = ui_kit.CARD_VARIANTS[material]
+        cards.append((cmd, name))
+    tile, pad = 96, 10
+    cols = 8
+    rows = (len(cards) + cols - 1) // cols
+    width = cols * (tile + pad) + pad
+    height = 60 + rows * (tile + 30)
+    sheet = Image.new("RGB", (width, height), (17, 19, 24))
+    draw = ImageDraw.Draw(sheet)
+    label(draw, "Карточки точки и iTrak (2D, CMD 1301–2044)", (14, 12), 20)
+    for index, (cmd, name) in enumerate(cards):
+        icon = Image.open(PACK / f"assets/hahgps/textures/gui/ui_{name}.png")
+        icon = icon.convert("RGBA").resize((tile, tile), Image.NEAREST)
+        x = pad + (index % cols) * (tile + pad)
+        y = 46 + (index // cols) * (tile + 30)
+        draw.rounded_rectangle([x, y, x + tile, y + tile], radius=4,
+                               fill=(198, 198, 198), outline=(120, 122, 126))
+        sheet.paste(icon, (x, y), icon)
+        label(draw, name, (x + 3, y + tile + 2), 12, (198, 204, 216))
+        label(draw, str(cmd), (x + 3, y + tile + 14), 11, (150, 158, 172))
+    path = PREVIEW / "08-cards.png"
+    sheet.save(path)
+    out.append(path)
+
+    # 7. Главное меню: объёмные иконки на сером слоте.
+    tiles = [
+        ("main_points", "Мои точки · 1101"),
+        ("main_catalog", "Каталог трекеров · 1107"),
+        ("main_trackers", "Мои трекеры · 1106"),
+    ]
+    tile = 220
+    width = len(tiles) * (tile + 12) + 12
+    height = tile + 66
+    sheet = Image.new("RGB", (width, height), (198, 198, 198))
+    draw = ImageDraw.Draw(sheet)
+    label(draw, "Главное меню: 3D-иконки", (14, 10), 20, (40, 40, 40))
+    for index, (name, caption) in enumerate(tiles):
+        model = json.loads((PACK / "assets/hahgps/models/item"
+                            / f"{name}.json").read_text(encoding="utf-8"))
+        image = render_model(model, images, tile, yaw=-32, pitch=-28,
+                             view=1.16, transparent=True)
+        x = 12 + index * (tile + 12)
+        draw.rounded_rectangle([x, 40, x + tile, 40 + tile], radius=6,
+                               fill=(178, 178, 178), outline=(128, 128, 128))
+        sheet.paste(image, (x, 40), image)
+        label(draw, caption, (x + 6, tile + 44), 14, (52, 52, 52))
+    path = PREVIEW / "09-main-3d.png"
     sheet.save(path)
     out.append(path)
 

@@ -70,7 +70,7 @@ public class SearchGui extends GuiScreen {
                 comp("gui.search-input"),
                 lore("gui.lore-search-start"), ru.hahgps.item.ItemIds.SEARCH_INPUT));
 
-        inventory.setItem(15, GuiUtil.item(Material.COMPASS,
+        inventory.setItem(15, GuiUtil.item(Material.PAPER,
                 comp("gui.search-quick"),
                 lore("gui.lore-search-name"), ru.hahgps.item.ItemIds.SEARCH_QUICK));
 
@@ -233,7 +233,7 @@ public class SearchGui extends GuiScreen {
         if (result.poi != null) {
             lines.addAll(lore("gui.lore-search-action"));
         }
-        return GuiUtil.item(Material.COMPASS,
+        return GuiUtil.item(Material.PAPER,
                 GuiUtil.tonedName(9, result.name), lines, ru.hahgps.item.ItemIds.SEARCH_RESULT);
     }
 }

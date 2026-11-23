@@ -191,34 +191,6 @@ def tracker_top(color_key: str, waterproof: bool = False,
         draw.ellipse([46, 18, 50, 22], fill=(206, 248, 255, 255))
 
     return image
-
-
-def tracker_side(color_key: str, waterproof: bool = False,
-                 size: int = SIDE) -> Image.Image:
-    """Боковина: цветной бампер с бликом и швом; у waterproof шов бирюзовый."""
-    color = rgb(COLORS[color_key])
-    image = Image.new("RGBA", (size, size), color + (255,))
-    draw = ImageDraw.Draw(image)
-    for y in range(size):
-        t = y / max(1, size - 1)
-        tone = mix(shade(color, 1.22), shade(color, 0.55), t)
-        draw.line([0, y, size - 1, y], fill=tone + (255,))
-    draw.line([0, 2, size - 1, 2], fill=mix(color, (255, 255, 255), 0.45) + (255,))
-    draw.line([0, size - 3, size - 1, size - 3], fill=shade(color, 0.45) + (255,))
-    seam = _CYAN if waterproof else (232, 235, 238)
-    draw.line([0, size // 2, size - 1, size // 2], fill=seam + (255,), width=1)
-    draw.line([0, size // 2 + 1, size - 1, size // 2 + 1],
-              fill=shade(seam, 0.72) + (255,), width=1)
-    # Пара «заклёпок» на шве.
-    for x in (5, size - 6):
-        draw.ellipse([x - 1, size // 2 - 1, x + 1, size // 2 + 1],
-                     fill=shade(seam, 0.8) + (255,))
-    if waterproof:
-        draw.ellipse([size - 8, 4, size - 4, 8], fill=_CYAN + (255,))
-        draw.ellipse([size - 7, 5, size - 5, 7], fill=(210, 250, 255, 255))
-    return image
-
-
 def tracker_edge(color_key: str, waterproof: bool = False,
                  size: int = SIDE) -> Image.Image:
     """Боковая кромка диска: скруглённые концы, а не квадратная плита."""
@@ -243,27 +215,6 @@ def tracker_edge(color_key: str, waterproof: bool = False,
     if waterproof:
         draw.ellipse([size - 7, 4, size - 3, 8], fill=_CYAN + (255,))
     return image
-
-
-def tracker_rim(color_key: str, waterproof: bool = False,
-                size: int = TRACKER_SIZE) -> Image.Image:
-    """Торец канта под белым лицом: цветное кольцо, видимое в углах крышки."""
-    color = rgb(COLORS[color_key])
-    big, draw = _supersampled(size)
-    edge = size * SS
-    draw.ellipse([2 * SS, 2 * SS, edge - 2 * SS, edge - 2 * SS], fill=color + (255,))
-    draw.ellipse([4 * SS, 4 * SS, edge - 4 * SS, edge - 4 * SS],
-                 fill=shade(color, 0.78) + (255,))
-    draw.arc([3 * SS, 3 * SS, edge - 3 * SS, edge - 3 * SS], 200, 320,
-             fill=mix(color, (255, 255, 255), 0.4) + (255,), width=1 * SS)
-    image = _down(big, size)
-    if waterproof:
-        draw = ImageDraw.Draw(image)
-        draw.ellipse([3, 3, size - 4, size - 4],
-                     outline=_CYAN + (255,), width=1)
-    return image
-
-
 def tracker_back(size: int = SIDE) -> Image.Image:
     """Задняя крышка: шлифованный металл, кольцо, винты и серийник."""
     big, draw = _supersampled(size)

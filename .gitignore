@@ -5,6 +5,7 @@ target/
 *.log
 run/
 test-server/
+test-server-*/
 
 # Ресурспак: собранный пак генерируется, в git — исходники и zip
 /respack/hahgps-pack/
