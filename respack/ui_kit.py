@@ -174,25 +174,24 @@ def _merge_dispatch(path: Path, entries: list[tuple[int, str]],
 
 def build(pack: Path) -> list[str]:
     """Нарисовать карточки и 3D-иконки меню, дополнить диспетчеры CMD."""
-    tex_gui = pack / "assets/hahgps/textures/gui"
     tex_item = pack / "assets/hahgps/textures/item"
     models = pack / "assets/hahgps/models/item"
     items = pack / "assets/minecraft/items"
-    for path in (tex_gui, tex_item, models, items):
+    for path in (tex_item, models, items):
         path.mkdir(parents=True, exist_ok=True)
 
     # --- 2D-иконки карточек -------------------------------------------------
     for cmd, name in CARD_ICONS.items():
-        ui_art.ICONS[name]().save(tex_gui / f"ui_{name}.png")
+        ui_art.ICONS[name]().save(tex_item / f"gui_ui_{name}.png")
         _write_json(models / f"gui_ui_{name}.json", {
             "parent": "minecraft:item/generated",
-            "textures": {"layer0": f"hahgps:gui/ui_{name}"},
+            "textures": {"layer0": f"hahgps:item/gui_ui_{name}"},
         })
     for material, (cmd, name) in CARD_VARIANTS.items():
-        ui_art.ICONS[name]().save(tex_gui / f"ui_{name}.png")
+        ui_art.ICONS[name]().save(tex_item / f"gui_ui_{name}.png")
         _write_json(models / f"gui_ui_{name}.json", {
             "parent": "minecraft:item/generated",
-            "textures": {"layer0": f"hahgps:gui/ui_{name}"},
+            "textures": {"layer0": f"hahgps:item/gui_ui_{name}"},
         })
 
     # --- 3D-иконки главного меню -------------------------------------------

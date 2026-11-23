@@ -756,7 +756,7 @@ FOREIGN = {
 
 def _model(name: str) -> dict:
     return {"parent": "minecraft:item/generated",
-            "textures": {"layer0": f"hahgps:gui/{name}"}}
+            "textures": {"layer0": f"hahgps:item/gui_{name}"}}
 
 
 def vanilla_compass_model() -> dict:
@@ -808,14 +808,18 @@ def _dispatch(entries: list[tuple[float, dict]], fallback: dict) -> dict:
 
 def build(pack: Path) -> list[str]:
     """Нарисовать иконки, модели и диспетчеры CMD. Возвращает имена иконок."""
-    tex = pack / "assets/hahgps/textures/gui"
+    # Текстуры иконок лежат в textures/item: у Minecraft атлас предметов
+    # собирается из каталога textures/item (атлас items.json), и всё, что
+    # лежит в textures/gui, в него не попадает — модель остаётся «без
+    # текстуры» и рисуется фиолетово-чёрной клеткой.
+    tex = pack / "assets/hahgps/textures/item"
     models = pack / "assets/hahgps/models/item"
     items = pack / "assets/minecraft/items"
     for path in (tex, models, items):
         path.mkdir(parents=True, exist_ok=True)
 
     for cmd, (name, draw) in ICONS.items():
-        draw().save(tex / f"{name}.png")
+        draw().save(tex / f"gui_{name}.png")
         (models / f"gui_{name}.json").write_text(
             json.dumps(_model(name), ensure_ascii=False, indent=1) + "\n",
             encoding="utf-8")

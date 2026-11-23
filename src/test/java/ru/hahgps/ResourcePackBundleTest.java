@@ -42,7 +42,7 @@ class ResourcePackBundleTest {
                 "нет иконки настроек");
         assertTrue(entries.contains("assets/hahgps/models/item/gui_category.json"),
                 "нет иконки категории");
-        assertTrue(entries.contains("assets/hahgps/textures/gui/category.png"),
+        assertTrue(entries.contains("assets/hahgps/textures/item/gui_category.png"),
                 "нет текстуры иконки категории");
         assertTrue(entries.contains("assets/hahgps/models/item/tracker_blue.json"),
                 "нет 3D-трекера");
@@ -115,8 +115,13 @@ class ResourcePackBundleTest {
                 for (Map.Entry<String, JsonElement> texture : textures.entrySet()) {
                     declared.add(texture.getKey());
                     String value = texture.getValue().getAsString();
-                    if (!value.startsWith("#") && !hasTexture(entries, value)) {
-                        problems.add(model.getKey() + ": нет текстуры " + value);
+                    if (!value.startsWith("#")) {
+                        if (!hasTexture(entries, value)) {
+                            problems.add(model.getKey() + ": нет текстуры " + value);
+                        } else if (!inItemAtlas(value)) {
+                            problems.add(model.getKey() + ": текстура " + value
+                                    + " вне атласа предметов (не textures/item и не textures/block)");
+                        }
                     }
                 }
             }
@@ -156,6 +161,18 @@ class ResourcePackBundleTest {
             return true;
         }
         return entries.contains("assets/" + namespace + "/textures/" + path + ".png");
+    }
+
+    /**
+     * Атлас предметов Minecraft собирается из каталогов textures/item и
+     * textures/block. Текстура из другого каталога в атлас не попадает, и
+     * модель рисуется фиолетово-чёрной клеткой — так сломались иконки меню,
+     * лежавшие в textures/gui.
+     */
+    private static boolean inItemAtlas(String ref) {
+        int colon = ref.indexOf(':');
+        String path = colon < 0 ? ref : ref.substring(colon + 1);
+        return path.startsWith("item/") || path.startsWith("block/");
     }
 
     private static List<String> faceRefs(JsonElement node) {

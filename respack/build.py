@@ -336,6 +336,15 @@ def build_pack() -> None:
     tracker_art.pack_icon().save(PACK / "pack.png")
 
 
+def _in_item_atlas(ref: str) -> bool:
+    """Текстура попадёт в атлас предметов, только если лежит в textures/item
+    или textures/block: атлас `minecraft:items` (атласы `blocks.json` и
+    `items.json`) собирается источниками directory по этим каталогам, а
+    остальные файлы в него не попадают."""
+    _, _, path = ref.partition(":")
+    return path.startswith(("item/", "block/"))
+
+
 def _face_refs(node) -> list[str]:
     """Все ссылки граней на переменные текстуры («#map_side»)."""
     refs: list[str] = []
@@ -377,10 +386,14 @@ def validate() -> list[str]:
         if isinstance(texture_map, dict):
             for key, value in texture_map.items():
                 declared.add(key)
-                if isinstance(value, str) and not value.startswith("#") \
-                        and not exists("textures", value):
-                    problems.append(
-                        f"{relative}: нет текстуры {value} (textures.{key})")
+                if isinstance(value, str) and not value.startswith("#"):
+                    if not exists("textures", value):
+                        problems.append(
+                            f"{relative}: нет текстуры {value} (textures.{key})")
+                    elif "/models/" in relative and not _in_item_atlas(value):
+                        problems.append(
+                            f"{relative}: текстура {value} вне атласа предметов — "
+                            f"клиент соберёт модель без неё (фиолетово-чёрная клетка)")
         if "/models/" in relative:
             for ref in _face_refs(data):
                 if ref[1:] not in declared:
@@ -424,14 +437,14 @@ def validate() -> list[str]:
     for cmd in sorted(declared - drawn):
         problems.append(f"gui: нет иконки для CMD {cmd}")
     for name in gui_art.ICONS.values():
-        icon = Image.open(PACK / f"assets/hahgps/textures/gui/{name[0]}.png")
+        icon = Image.open(PACK / f"assets/hahgps/textures/item/gui_{name[0]}.png")
         if icon.size != (gui_art.SIZE, gui_art.SIZE):
             problems.append(f"gui/{name[0]}.png: {icon.size}, ожидалось 32×32")
 
     # Карточки и 3D-иконки меню: текстуры 32×32 и пороги CMD на месте.
     for name in sorted(set(ui_kit.CARD_ICONS.values())
                        | {variant[1] for variant in ui_kit.CARD_VARIANTS.values()}):
-        icon = Image.open(PACK / f"assets/hahgps/textures/gui/ui_{name}.png")
+        icon = Image.open(PACK / f"assets/hahgps/textures/item/gui_ui_{name}.png")
         if icon.size != (32, 32):
             problems.append(f"gui/ui_{name}.png: {icon.size}, ожидалось 32×32")
     for material, cmds in ui_kit.CARD_CARRIERS.items():
@@ -579,7 +592,7 @@ def build_previews() -> list[Path]:
         y += head
         for index, cmd in enumerate(cmds):
             name, _ = gui_art.ICONS[cmd]
-            icon = Image.open(PACK / f"assets/hahgps/textures/gui/{name}.png").convert("RGBA")
+            icon = Image.open(PACK / f"assets/hahgps/textures/item/gui_{name}.png").convert("RGBA")
             icon = icon.resize((tile, tile), Image.NEAREST)
             x = pad + (index % cols) * (tile + pad)
             ty = y + (index // cols) * (tile + caption)
@@ -696,7 +709,7 @@ def build_previews() -> list[Path]:
     draw = ImageDraw.Draw(sheet)
     label(draw, "Карточки точки и iTrak (2D, CMD 1301–2044)", (14, 12), 20)
     for index, (cmd, name) in enumerate(cards):
-        icon = Image.open(PACK / f"assets/hahgps/textures/gui/ui_{name}.png")
+        icon = Image.open(PACK / f"assets/hahgps/textures/item/gui_ui_{name}.png")
         icon = icon.convert("RGBA").resize((tile, tile), Image.NEAREST)
         x = pad + (index % cols) * (tile + pad)
         y = 46 + (index // cols) * (tile + 30)

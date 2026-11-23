@@ -49,7 +49,7 @@ def item_icon(name: str, size: int = 64) -> Image.Image:
 
 def gui_icon(name: str, size: int = 64) -> Image.Image:
     """Иконка меню из собранного пака (32×32), увеличенная без сглаживания."""
-    path = PACK / "assets/hahgps/textures/gui" / f"{name}.png"
+    path = PACK / "assets/hahgps/textures/item" / f"gui_{name}.png"
     return Image.open(path).convert("RGBA").resize((size, size), Image.NEAREST)
 
 
