@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 
 public class TransportSelectGui extends GuiScreen {
@@ -25,11 +26,18 @@ public class TransportSelectGui extends GuiScreen {
     };
 
     private final Consumer<TransportType> callback;
+    private final Supplier<GuiScreen> backTarget;
     private final Map<Integer, TransportType> slotToType = new HashMap<>();
 
     public TransportSelectGui(Player player, Consumer<TransportType> callback) {
+        this(player, callback, null);
+    }
+
+    public TransportSelectGui(Player player, Consumer<TransportType> callback,
+                              Supplier<GuiScreen> backTarget) {
         super(player);
         this.callback = callback;
+        this.backTarget = backTarget;
     }
 
     @Override
@@ -78,7 +86,8 @@ public class TransportSelectGui extends GuiScreen {
                     ItemIds.TRANSPORT_BASE + type.ordinal()));
         }
 
-        inventory.setItem(22, GuiTheme.navBack(getMsg("gui.back")));
+        putNavBack();
+        putNavClose();
 
         for (int i = 0; i < size(); i++) {
             if (inventory.getItem(i) == null) {
@@ -90,8 +99,18 @@ public class TransportSelectGui extends GuiScreen {
 
     @Override
     public void onClick(int slot, ClickType clickType) {
-        if (slot == 22) {
+        if (slot == NAV_CLOSE_SMALL) {
             player.closeInventory();
+            return;
+        }
+        if (slot == NAV_BACK_SMALL) {
+            GuiTheme.click(player);
+            GuiScreen target = backTarget == null ? null : backTarget.get();
+            if (target == null) {
+                player.closeInventory();
+            } else {
+                target.open();
+            }
             return;
         }
         TransportType type = slotToType.get(slot);

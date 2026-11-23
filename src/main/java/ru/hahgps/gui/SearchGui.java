@@ -21,7 +21,6 @@ import java.util.List;
 public class SearchGui extends GuiScreen {
 
     private static final int LIMIT_SLOT = 49;
-    private static final int LIMIT_SLOT_PLAIN = 24;
 
     private List<SearchService.SearchResult> results = new ArrayList<>();
     private String query = "";
@@ -74,9 +73,9 @@ public class SearchGui extends GuiScreen {
                 comp("gui.search-quick"),
                 lore("gui.lore-search-name"), ru.hahgps.item.ItemIds.SEARCH_QUICK));
 
-        inventory.setItem(22, GuiTheme.navBack(getMsg("gui.back")));
-        inventory.setItem(LIMIT_SLOT_PLAIN, limitItem());
-        inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));
+        putNavBack();
+        inventory.setItem(LIMIT_SLOT, limitItem());
+        putNavClose();
 
         for (int i = 0; i < size(); i++) {
             if (inventory.getItem(i) == null) {
@@ -89,20 +88,20 @@ public class SearchGui extends GuiScreen {
     @Override
     public void onClick(int slot, ClickType clickType) {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
-        if (slot == 52) {
+        if (slot == NAV_CLOSE_LARGE) {
             player.closeInventory();
             return;
         }
 
-        // В режиме результатов слот 24 — это 25-й результат (лимит до 25 мест),
-        // поэтому кнопка лимита стоит только в стартовом окне поиска.
+        // Лимит результатов — всегда на 49: в режиме результатов слот 24
+        // занят 25-м местом, а не кнопкой лимита.
         if (slot == LIMIT_SLOT) {
             changeLimit(clickType);
             return;
         }
 
         if (showingResults) {
-            if (slot == 53) {
+            if (slot == NAV_BACK_LARGE) {
                 results = new ArrayList<>();
                 query = "";
                 showingResults = false;
@@ -119,19 +118,18 @@ public class SearchGui extends GuiScreen {
                             "point-not-found", "name", result.name));
                     return;
                 }
+                String foundQuery = query;
+                List<SearchService.SearchResult> foundResults = results;
                 new TransportSelectGui(player, transport ->
-                        plugin.getCommandManager().gotoPoi(player, result.poi, transport)).open();
+                        plugin.getCommandManager().gotoPoi(player, result.poi, transport),
+                        () -> new SearchGui(player, foundQuery, foundResults)).open();
             }
             return;
         }
 
-        if (slot == 22) {
+        if (slot == NAV_BACK_LARGE) {
             new MainMenuGui(player).open();
             GuiTheme.click(player);
-            return;
-        }
-        if (slot == LIMIT_SLOT_PLAIN) {
-            changeLimit(clickType);
             return;
         }
         if (slot == 11 || slot == 15) {
@@ -204,9 +202,9 @@ public class SearchGui extends GuiScreen {
                     comp("search-header", "count", String.valueOf(this.results.size())),
                     null, ru.hahgps.item.ItemIds.SEARCH_RESULT));
         }
+        putNavBack();
         inventory.setItem(LIMIT_SLOT, limitItem());
-        inventory.setItem(53, GuiTheme.navBack(getMsg("gui.back")));
-        inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));
+        putNavClose();
         for (int i = 0; i < size(); i++) {
             if (inventory.getItem(i) == null) {
                 inventory.setItem(i, GuiUtil.filler());

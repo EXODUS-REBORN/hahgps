@@ -2,11 +2,13 @@ package ru.hahgps.gui;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import ru.hahgps.HahGpsPlugin;
+import ru.hahgps.item.ItemIds;
 
 import java.util.List;
 public abstract class GuiScreen implements InventoryHolder {
@@ -164,5 +166,52 @@ public abstract class GuiScreen implements InventoryHolder {
 
     protected void fillEmpty() {
         GuiTheme.fill(inventory);
+    }
+
+    /**
+     * Единая сетка навигации: в меню на 54 слота «Назад» — 45, стрелки
+     * страниц — 48/53, номер страницы — 49, «Закрыть» — 52. В меню на 27
+     * слотов «Назад» — 22, «Закрыть» — 24 (бренд остаётся на 26).
+     */
+    protected static final int NAV_BACK_LARGE = 45;
+    protected static final int NAV_PREV = 48;
+    protected static final int NAV_INFO = 49;
+    protected static final int NAV_CLOSE_LARGE = 52;
+    protected static final int NAV_NEXT = 53;
+    protected static final int NAV_BACK_SMALL = 22;
+    protected static final int NAV_CLOSE_SMALL = 24;
+
+    protected int navBackSlot() {
+        return size() >= 54 ? NAV_BACK_LARGE : NAV_BACK_SMALL;
+    }
+
+    protected int navCloseSlot() {
+        return size() >= 54 ? NAV_CLOSE_LARGE : NAV_CLOSE_SMALL;
+    }
+
+    protected void putNavBack() {
+        if (inventory != null) {
+            inventory.setItem(navBackSlot(), GuiTheme.navBack(getMsg("gui.back")));
+        }
+    }
+
+    protected void putNavClose() {
+        if (inventory != null) {
+            inventory.setItem(navCloseSlot(), GuiTheme.navClose(getMsg("gui.close")));
+        }
+    }
+
+    /** Стрелки страниц и номер страницы в общей нижней строке. */
+    protected void putPager(int page, int pages) {
+        if (inventory == null || size() < 54) return;
+        if (page > 0) {
+            inventory.setItem(NAV_PREV, GuiTheme.navBack(getMsg("gui.prev-page")));
+        }
+        inventory.setItem(NAV_INFO, GuiUtil.item(Material.BOOK,
+                comp("gui.page-info", "page", String.valueOf(page + 1),
+                        "pages", String.valueOf(pages)), null, ItemIds.PAGE_INFO));
+        if (page < pages - 1) {
+            inventory.setItem(NAV_NEXT, GuiTheme.navForward(getMsg("gui.next-page")));
+        }
     }
 }

@@ -13,6 +13,7 @@ import ru.hahgps.model.TrackerColor;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Каталог iTrak: все трекеры (8 цветов, обычные и водонепроницаемые) и оба
@@ -26,8 +27,15 @@ public class ItrakCatalogGui extends GuiScreen {
     private static final int REGULAR_FIRST = 10;
     private static final int WATERPROOF_FIRST = 19;
 
+    private final Supplier<GuiScreen> backTarget;
+
     public ItrakCatalogGui(Player player) {
+        this(player, null);
+    }
+
+    public ItrakCatalogGui(Player player, Supplier<GuiScreen> backTarget) {
         super(player);
+        this.backTarget = backTarget;
     }
 
     @Override
@@ -60,8 +68,8 @@ public class ItrakCatalogGui extends GuiScreen {
         inventory.setItem(30, locatorDisplay(radius));
         inventory.setItem(32, locatorDisplay(longRadius));
 
-        inventory.setItem(45, GuiTheme.navBack(getMsg("gui.back")));
-        inventory.setItem(53, GuiTheme.navClose(getMsg("gui.close")));
+        putNavBack();
+        putNavClose();
         putBrand();
     }
 
@@ -104,12 +112,16 @@ public class ItrakCatalogGui extends GuiScreen {
     @Override
     public void onClick(int slot, ClickType clickType) {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
-        if (slot == 45) {
-            new MainMenuGui(player).open();
+        if (slot == NAV_BACK_LARGE) {
+            GuiScreen target = backTarget == null ? null : backTarget.get();
+            if (target == null) {
+                target = new MainMenuGui(player);
+            }
+            target.open();
             GuiTheme.click(player);
             return;
         }
-        if (slot == 53) {
+        if (slot == NAV_CLOSE_LARGE) {
             player.closeInventory();
             return;
         }

@@ -55,7 +55,8 @@ public class PoiActionsGui extends GuiScreen {
                     lore("gui.lore-delete"), ItemIds.POI_DELETE));
         }
 
-        inventory.setItem(22, GuiTheme.navBack(getMsg("gui.back")));
+        putNavBack();
+        putNavClose();
 
         for (int i = 0; i < size(); i++) {
             if (inventory.getItem(i) == null) {
@@ -112,7 +113,8 @@ public class PoiActionsGui extends GuiScreen {
                     plugin.getDataService().runSync(() -> {
                         if (player.isOnline()) {
                             new TransportSelectGui(player, transport ->
-                                    plugin.getCommandManager().gotoPoi(player, loaded, transport)).open();
+                                    plugin.getCommandManager().gotoPoi(player, loaded, transport),
+                                    () -> new PoiActionsGui(player, loaded, categoryId, listPage)).open();
                         }
                     });
                 });
@@ -169,6 +171,7 @@ public class PoiActionsGui extends GuiScreen {
                             new PointsListGui(player, categoryId, listPage).open();
                         }));
             }
+            case NAV_CLOSE_SMALL -> player.closeInventory();
             case 22 -> {
                 new PointsListGui(player, categoryId, listPage).open();
                 GuiTheme.click(player);

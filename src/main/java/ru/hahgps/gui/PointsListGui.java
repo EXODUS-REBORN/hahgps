@@ -47,6 +47,14 @@ public class PointsListGui extends GuiScreen {
         HahGpsPlugin.getInstance().getPoiService().loadAllPoisWithRatings().whenComplete((list, error) -> {
             if (error != null) {
                 reportError(error);
+                // Сбой загрузки не должен оставлять игрока без выхода.
+                HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+                plugin.getDataService().runSync(() -> {
+                    if (player.isOnline() && inventory != null
+                            && GuiManager.getInstance().get(player) == this) {
+                        buildNavOnly();
+                    }
+                });
                 return;
             }
             List<Poi> loaded = list == null ? new ArrayList<>() : list;
@@ -83,25 +91,26 @@ public class PointsListGui extends GuiScreen {
             inventory.setItem(i - start, createPoiItem(poi));
         }
 
-        int navRow = 45;
-        if (page > 0) {
-            inventory.setItem(navRow, GuiTheme.navBack(getMsg("gui.prev-page")));
-        } else {
-            // На первой странице слот 45 — выход назад: в категорию, из которой
-            // пришли, или в главное меню. Раньше здесь не было предмета, а клик
-            // по невидимому filler'у на 49 уводил в меню.
-            inventory.setItem(navRow, GuiTheme.navBack(getMsg("gui.back")));
-        }
-        if (page < pages - 1) {
-            inventory.setItem(navRow + 8, GuiTheme.navForward(getMsg("gui.next-page")));
-        }
-        // Индикатор страницы — на slot 49 (сетка навигации из docs/gui.md).
-        inventory.setItem(navRow + 4, GuiUtil.item(Material.BOOK,
-                comp("gui.page-info",
-                        "page", String.valueOf(page + 1), "pages", String.valueOf(pages)),
-                null, ItemIds.PAGE_INFO));
-        inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));
+        // «Назад» всегда на 45: возврат в категорию/главное меню доступен
+        // с любой страницы, а не только с первой.
+        putNavBack();
+        putPager(page, pages);
+        putNavClose();
 
+        for (int i = 0; i < size(); i++) {
+            if (inventory.getItem(i) == null) {
+                inventory.setItem(i, GuiUtil.filler());
+            }
+        }
+        putBrand();
+    }
+
+    /** Нижняя строка навигации без списка: экран не оставляет без выхода при сбое. */
+    private void buildNavOnly() {
+        if (inventory == null) return;
+        inventory.clear();
+        putNavBack();
+        putNavClose();
         for (int i = 0; i < size(); i++) {
             if (inventory.getItem(i) == null) {
                 inventory.setItem(i, GuiUtil.filler());
@@ -151,23 +160,22 @@ public class PointsListGui extends GuiScreen {
     public void onClick(int slot, ClickType clickType) {
         if (slot >= 45) {
             int pages = Math.max(1, (pois.size() + PER_PAGE - 1) / PER_PAGE);
-            if (slot == 45) {
-                if (page > 0) {
-                    page--;
-                    buildPage();
-                    GuiTheme.page(player);
-                } else if (categoryId != null) {
+            if (slot == NAV_BACK_LARGE) {
+                if (categoryId != null) {
                     new CategoriesGui(player).open();
-                    GuiTheme.click(player);
                 } else {
                     new MainMenuGui(player).open();
-                    GuiTheme.click(player);
                 }
-            } else if (slot == 53 && page < pages - 1) {
+                GuiTheme.click(player);
+            } else if (slot == NAV_PREV && page > 0) {
+                page--;
+                buildPage();
+                GuiTheme.page(player);
+            } else if (slot == NAV_NEXT && page < pages - 1) {
                 page++;
                 buildPage();
                 GuiTheme.page(player);
-            } else if (slot == 52) {
+            } else if (slot == NAV_CLOSE_LARGE) {
                 player.closeInventory();
             }
             return;

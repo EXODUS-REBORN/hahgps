@@ -155,28 +155,20 @@ public class ItrakMenuGui extends GuiScreen {
                     comp("gui.itrak-none"), lore("gui.lore-itrak-none"), ItemIds.ITRAK_EMPTY));
         }
 
-        inventory.setItem(45, GuiTheme.navBack(getMsg("gui.back")));
-        if (page > 0) {
-            inventory.setItem(46, GuiTheme.navBack(getMsg("gui.prev-page")));
-        }
-        if (page < pages - 1) {
-            inventory.setItem(52, GuiTheme.navForward(getMsg("gui.next-page")));
-        }
-        inventory.setItem(48, GuiUtil.item(Material.COMPASS,
+        putNavBack();
+        inventory.setItem(46, GuiUtil.item(Material.COMPASS,
                 comp("gui.itrak-scan"), lore("gui.lore-itrak-scan"), ItemIds.ITRAK_SCAN));
-        inventory.setItem(49, GuiUtil.item(Material.BOOK,
-                comp("gui.page-info", "page", String.valueOf(page + 1),
-                        "pages", String.valueOf(pages)), null, ItemIds.PAGE_INFO));
         if (player.hasPermission("gps.itrak.give")) {
             // Лазурит-блок, а не лазурит: на предмете-лазурите висит модель
             // синего трекера, и кнопка «выдать» выглядела бы маячком.
-            inventory.setItem(50, GuiUtil.item(Material.LAPIS_BLOCK,
+            inventory.setItem(47, GuiUtil.item(Material.LAPIS_BLOCK,
                     comp("gui.itrak-catalog"), lore("gui.lore-itrak-catalog"),
                     ItemIds.MAIN_ITRAK_GIVE));
         }
-        inventory.setItem(51, GuiUtil.item(Material.SPYGLASS,
+        putPager(page, pages);
+        inventory.setItem(50, GuiUtil.item(Material.SPYGLASS,
                 comp("gui.itrak-refresh"), lore("gui.lore-itrak-refresh"), ItemIds.ITRAK_REFRESH));
-        inventory.setItem(53, GuiTheme.navClose(getMsg("gui.close")));
+        putNavClose();
 
         putBrand();
     }
@@ -234,12 +226,12 @@ public class ItrakMenuGui extends GuiScreen {
         if (service == null) {
             return;
         }
-        if (slot == 45) {
+        if (slot == NAV_BACK_LARGE) {
             new MainMenuGui(player).open();
             GuiTheme.click(player);
             return;
         }
-        if (slot == 48) {
+        if (slot == 46) {
             player.closeInventory();
             int radius = (int) plugin.getConfigManager().getItrakScanRadius();
             if (ItrakCommand.prepareScan(plugin, player, radius)) {
@@ -247,30 +239,30 @@ public class ItrakMenuGui extends GuiScreen {
             }
             return;
         }
-        if (slot == 50 && player.hasPermission("gps.itrak.give")) {
-            new ItrakCatalogGui(player).open();
+        if (slot == 47 && player.hasPermission("gps.itrak.give")) {
+            new ItrakCatalogGui(player, () -> new ItrakMenuGui(player, page)).open();
             GuiTheme.click(player);
             return;
         }
-        if (slot == 46 && page > 0) {
+        if (slot == NAV_PREV && page > 0) {
             page--;
             buildPage();
             GuiTheme.page(player);
             return;
         }
-        if (slot == 52 && page < (Math.max(1, (trackers.size() + PER_PAGE - 1) / PER_PAGE)) - 1) {
+        if (slot == NAV_NEXT && page < (Math.max(1, (trackers.size() + PER_PAGE - 1) / PER_PAGE)) - 1) {
             page++;
             buildPage();
             GuiTheme.page(player);
             return;
         }
-        if (slot == 51) {
+        if (slot == 50) {
             page = 0;
             buildPage();
             GuiTheme.click(player);
             return;
         }
-        if (slot == 53) {
+        if (slot == NAV_CLOSE_LARGE) {
             player.closeInventory();
             return;
         }

@@ -12,9 +12,8 @@ public class CategoriesGui extends GuiScreen {
 
 
     private static final int CONTENT_SLOTS = 44;
-    private static final int PREV_PAGE_SLOT = 48;
-    private static final int PAGE_INFO_SLOT = 49;
-    private static final int NEXT_PAGE_SLOT = 50;
+    private static final int CREATE_SLOT = 46;
+    private static final int DELETE_SLOT = 47;
 
     private List<Category> categories = new java.util.ArrayList<>();
     private int page;
@@ -55,8 +54,8 @@ public class CategoriesGui extends GuiScreen {
                     if (inventory == null || GuiManager.getInstance().get(player) != this) {
                         return;
                     }
-                    inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));
-                    inventory.setItem(53, GuiTheme.navBack(getMsg("gui.back")));
+                    inventory.setItem(NAV_CLOSE_LARGE, GuiTheme.navClose(getMsg("gui.close")));
+                    inventory.setItem(NAV_BACK_LARGE, GuiTheme.navBack(getMsg("gui.back")));
                 });
                 return;
             }
@@ -80,26 +79,18 @@ public class CategoriesGui extends GuiScreen {
                             lore("gui.lore-category-count", "count", String.valueOf(count)),
                             ItemIds.CATEGORY_ENTRY));
                 }
-                if (page > 0) {
-                    inventory.setItem(PREV_PAGE_SLOT, GuiTheme.navBack(getMsg("gui.prev-page")));
-                }
-                if (page < pages - 1) {
-                    inventory.setItem(NEXT_PAGE_SLOT, GuiTheme.navForward(getMsg("gui.next-page")));
-                }
-                inventory.setItem(PAGE_INFO_SLOT, GuiUtil.item(Material.BOOK,
-                        comp("gui.page-info", "page", String.valueOf(page + 1),
-                                "pages", String.valueOf(pages)), null, ItemIds.PAGE_INFO));
+                putPager(page, pages);
 
                 if (player.hasPermission("gps.category.create")) {
-                    inventory.setItem(45, GuiUtil.item(Material.EMERALD,
+                    inventory.setItem(CREATE_SLOT, GuiUtil.item(Material.EMERALD,
                             comp("gui.create"), null, ItemIds.CATEGORY_CREATE));
                 }
                 if (player.hasPermission("gps.category.delete")) {
-                    inventory.setItem(46, GuiUtil.item(Material.LAVA_BUCKET,
+                    inventory.setItem(DELETE_SLOT, GuiUtil.item(Material.LAVA_BUCKET,
                             comp("gui.delete"), null, ItemIds.CATEGORY_DELETE));
                 }
-                inventory.setItem(53, GuiTheme.navBack(getMsg("gui.back")));
-                inventory.setItem(52, GuiTheme.navClose(getMsg("gui.close")));
+                putNavBack();
+                putNavClose();
 
                 for (int i = 0; i < size(); i++) {
                     if (inventory.getItem(i) == null) {
@@ -114,29 +105,29 @@ public class CategoriesGui extends GuiScreen {
     @Override
     public void onClick(int slot, ClickType clickType) {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
-        if (slot == 52) {
+        if (slot == NAV_CLOSE_LARGE) {
             player.closeInventory();
             return;
         }
-        if (slot == 53) {
+        if (slot == NAV_BACK_LARGE) {
             new MainMenuGui(player).open();
             GuiTheme.click(player);
             return;
         }
-        if (slot == PREV_PAGE_SLOT && page > 0) {
+        if (slot == NAV_PREV && page > 0) {
             page--;
             new CategoriesGui(player, page).open();
             GuiTheme.page(player);
             return;
         }
         int pages = Math.max(1, (categories.size() + CONTENT_SLOTS - 1) / CONTENT_SLOTS);
-        if (slot == NEXT_PAGE_SLOT && page < pages - 1) {
+        if (slot == NAV_NEXT && page < pages - 1) {
             page++;
             new CategoriesGui(player, page).open();
             GuiTheme.page(player);
             return;
         }
-        if (slot == 45 && player.hasPermission("gps.category.create")) {
+        if (slot == CREATE_SLOT && player.hasPermission("gps.category.create")) {
 
             player.closeInventory();
             InputManager.getInstance().request(player,
@@ -162,7 +153,7 @@ public class CategoriesGui extends GuiScreen {
                     });
             return;
         }
-        if (slot == 46 && player.hasPermission("gps.category.delete")) {
+        if (slot == DELETE_SLOT && player.hasPermission("gps.category.delete")) {
 
             player.closeInventory();
             InputManager.getInstance().request(player,

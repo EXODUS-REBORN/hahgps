@@ -179,7 +179,8 @@ public class TrackerDetailGui extends GuiScreen {
                     ItemIds.ITRAK_REMOVE));
         }
 
-        inventory.setItem(22, GuiTheme.navBack(getMsg("gui.back")));
+        putNavBack();
+        putNavClose();
         for (int i = 0; i < size(); i++) {
             if (inventory.getItem(i) == null) {
                 inventory.setItem(i, GuiUtil.filler());
@@ -265,7 +266,8 @@ public class TrackerDetailGui extends GuiScreen {
             case 10 -> {
                 player.closeInventory();
                 new TransportSelectGui(player, transport ->
-                        ItrakCommand.startRoute(plugin, player, tracker, transport)).open();
+                        ItrakCommand.startRoute(plugin, player, tracker, transport),
+                        () -> new TrackerDetailGui(player, tracker.getId(), listPage)).open();
                 GuiTheme.click(player);
             }
             case 12 -> {
@@ -342,6 +344,7 @@ public class TrackerDetailGui extends GuiScreen {
                             player.sendMessage(plugin.getMessages().getPrefixed("itrak-removed", "name", name));
                         }));
             }
+            case NAV_CLOSE_SMALL -> player.closeInventory();
             case 22 -> {
                 // Возврат туда, откуда пришли: страница списка не сбрасывается.
                 new ItrakMenuGui(player, listPage).open();

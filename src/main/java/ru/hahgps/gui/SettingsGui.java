@@ -41,7 +41,8 @@ public class SettingsGui extends GuiScreen {
                     lore("gui.lore-itrak-catalog"), ItemIds.MAIN_ITRAK_GIVE));
         }
 
-        inventory.setItem(22, GuiTheme.navBack(getMsg("gui.back")));
+        putNavBack();
+        putNavClose();
 
         for (int i = 0; i < size(); i++) {
             if (inventory.getItem(i) == null) {
@@ -74,11 +75,12 @@ public class SettingsGui extends GuiScreen {
             }
             case 15 -> {
                 if (player.hasPermission("gps.itrak.give")) {
-                    new ItrakCatalogGui(player).open();
+                    new ItrakCatalogGui(player, () -> new SettingsGui(player)).open();
                 } else {
                     GuiTheme.deny(player);
                 }
             }
+            case NAV_CLOSE_SMALL -> player.closeInventory();
             case 22 -> {
                 new MainMenuGui(player).open();
                 GuiTheme.click(player);
