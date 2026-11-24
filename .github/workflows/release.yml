@@ -91,7 +91,7 @@ jobs:
           fi
 
 
-      - name: Публикация релиза с jar и паком
+      - name: Публикация релиза с jar
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -101,21 +101,16 @@ jobs:
           # Имя файла берём по версии из pom.xml, а не «первый попавшийся»:
           # иначе в релиз может уехать посторонний jar, случайно лежащий в target/.
           JAR="target/hahgps-${VERSION}.jar"
-          ZIP="respack/dist/hahgps.zip"
           if [ ! -f "$JAR" ]; then
             echo "::error::Не найден $JAR — имя собранного файла разошлось с версией в pom.xml. В target/:"
             ls -la target/*.jar || true
             exit 1
           fi
-          if [ ! -f "$ZIP" ]; then
-            echo "::error::Не найден $ZIP — ресурспак не собрался."
-            exit 1
-          fi
-          echo "публикую $TAG с файлами $JAR и $ZIP"
+          echo "публикую $TAG с файлом $JAR (ресурспак в релиз не кладём: модели — в панели VedaMir)"
           # Тело релиза — короткий текст из release-notes.txt (1–2 предложения):
           # он же печатается в стартовом баннере и строке истории README (см. AGENTS.md).
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$JAR" "$ZIP" --clobber
+            gh release upload "$TAG" "$JAR" --clobber
           else
-            gh release create "$TAG" "$JAR" "$ZIP" --title "HahGPS $TAG" --notes-file src/main/resources/release-notes.txt
+            gh release create "$TAG" "$JAR" --title "HahGPS $TAG" --notes-file src/main/resources/release-notes.txt
           fi

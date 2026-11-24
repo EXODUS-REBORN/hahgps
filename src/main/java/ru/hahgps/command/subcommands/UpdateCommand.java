@@ -17,7 +17,8 @@ import java.util.function.Consumer;
 
 public class UpdateCommand implements SubCommand {
 
-    private static final List<String> SUBS = List.of("status", "check", "install", "apply", "reload");
+    private static final List<String> SUBS =
+            List.of("status", "check", "install", "dev", "devcheck", "apply", "reload");
 
 
     private static final String TEXT = "<white>";
@@ -31,7 +32,7 @@ public class UpdateCommand implements SubCommand {
 
     @Override
     public String usage() {
-        return "/gps update <status|check|install|apply|reload>";
+        return "/gps update <status|check|install|dev|devcheck|apply|reload>";
     }
 
     @Override
@@ -60,8 +61,15 @@ public class UpdateCommand implements SubCommand {
         Consumer<String> feedback = message -> player.sendMessage(text(plugin, message));
         String sub = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
         switch (sub) {
-            case "status" -> updater.statusLines().forEach(
-                    statusLine -> player.sendMessage(line(plugin, ACCENT + "│ " + TEXT + statusLine)));
+            case "status" -> {
+                updater.statusLines().forEach(
+                        statusLine -> player.sendMessage(line(plugin, ACCENT + "│ " + TEXT + statusLine)));
+                var channel = plugin.getDevChannel();
+                if (channel != null) {
+                    channel.statusLines().forEach(
+                            statusLine -> player.sendMessage(line(plugin, ACCENT + "│ " + TEXT + statusLine)));
+                }
+            }
             case "check" -> {
                 player.sendMessage(plugin.getMessages().getPrefixed("update-checking"));
                 updater.checkAsync(feedback, false);
@@ -69,6 +77,15 @@ public class UpdateCommand implements SubCommand {
             case "install" -> {
                 player.sendMessage(plugin.getMessages().getPrefixed("update-downloading"));
                 updater.checkAsync(feedback, true);
+            }
+            case "dev", "devcheck" -> {
+                var channel = plugin.getDevChannel();
+                if (channel == null) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
+                    return;
+                }
+                player.sendMessage(plugin.getMessages().get("dev-checking"));
+                channel.checkAsync(feedback, "dev".equals(sub));
             }
             case "apply" -> {
                 Path staged = updater.stagedJar();
@@ -91,6 +108,10 @@ public class UpdateCommand implements SubCommand {
                         updater.stop();
                         updater.reload();
                         updater.start();
+                        var channel = plugin.getDevChannel();
+                        if (channel != null) {
+                            channel.restart();
+                        }
                     } catch (Throwable t) {
                         plugin.getLogger().warning("HahGps: не удалось перезагрузить обновлятор: " + t);
                     }

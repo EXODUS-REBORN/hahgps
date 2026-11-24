@@ -27,6 +27,73 @@
 - После логотипа максимум 3 строки: статус+версия, команды, «Что нового».
 - Никаких палитр, списков цветов и простыней в консоль.
 
+## Ресурспак с нашего сервера — НИКОГДА (требование владельца, 24.11.2026)
+
+Своя раздача пакета удалена навсегда и на уровне сервера: юнит `hahgps-pack.service` снят, nginx на
+`127.0.0.1:8124` удалён, `/var/www/hahgpspack` удалён, туннель `hahgps-pack` и DNS
+`hahgps.hakerone.ru` удалены (NXDOMAIN). В плагине `resource-pack.enabled: false` — не включать,
+пак не поднимать, файлы никуда не публиковать и не «восстанавливать». Модели (трекеры, локаторы,
+иконки) живут в паке сервера и загружаются через панель
+`https://vedamirs-support.ru/minecraft/vmodels/?server=1` → «Загрузить ресурс-пак» → «Применить всем
+игрокам». В hahtojer аналогично выпилены `/hahtojer pack` и весь `pack/`-код.
+
+## Пререлизы — свой сервер, без GitHub (24.11.2026)
+
+Второй канал обновлений: тестовая сборка кладётся на **наш** сервер и сама ставится на
+тестовый сервер, релиз в GitHub для этого не нужен. Тот же сервис, что у hahtojer.
+
+**Публикация (после `./mvnw -o clean package`):**
+```bash
+python3 docs/devrelease/publish.py --project hahgps --jar target/hahgps-<версия>.jar \
+    --notes "что нового, одной строкой"
+python3 docs/devrelease/publish.py --project hahgps --list
+```
+`docs/devrelease/publish.py` — тонкая обёртка над `/opt/devrelease/publish.py` (единственный
+источник — репозиторий hahtojer, каталог `docs/devrelease/`). Версию инструмент спрашивает у
+сервера: своя последовательность `1.0.0 … 1.0.9 → 1.1.0` (разряды 0..9, перенос на девятке).
+В jar правится `plugin.yml` на `<база>+dev<номер>` (например `1.6.8+dev1.0.2`) и добавляется
+`devbuild.txt`. Ключ — `~/.config/devrelease/key`, прокси `socks5h://127.0.0.1:2080` подставляется
+сам (с этого хоста прямой HTTPS к Cloudflare не ходит).
+
+**Сервер (общий с hahtojer):**
+| Что | Где |
+|---|---|
+| Сервис | `/opt/devrelease/devrelease.py`, `devrelease.service`, `127.0.0.1:8133` |
+| Данные | `/srv/devrelease/data/hahgps/manifest.json` + `jars/` |
+| Ключ | `/etc/devrelease/key` (0640 root:devrel), копия `~/.config/devrelease/key` |
+| Туннель | `hah-dev`, `cf-dev.service`, `/etc/cloudflared/hah-dev.env`; DNS `pre.hakerone.ru` |
+| API | `GET /pre/hahgps/manifest.json`, `/next.json`, `/history.json`, `/jars/<файл>`; `POST /pre/hahgps/publish` + `X-Dev-Key` |
+| Автозапуск | `systemctl enable devrelease cf-dev`; проверка `curl -s https://pre.hakerone.ru/healthz` через прокси |
+
+**Плагин:**
+- Секция `пререлизы:` в `config.yml` (`включено`, `адрес`, `проект` = `hahgps`, `файл-ключа` =
+  `keyydev.txt`, `интервал-минут` 2, `авто-скачивание`, `горячее-обновление`). Мержа конфига здесь
+  нет, поэтому все ключи читаются с дефолтами — старые `config.yml` работают как есть.
+- `update/DevChannel` создаёт `plugins/HahGps/keyydev.txt` с заглушкой; ключ можно не дублировать —
+  если своего нет, берётся `plugins/hahtojer/keyydev.txt`. Env: `HAHTOJER_DEV_KEY`.
+- Гейт базы: сборка ставится только если её `base` не старше установленной версии (иначе «канал
+  отстал»). Сравнение по числам: `1.6.8` не перезапишет `1.6.8+dev…`, а `1.6.9` — заменит.
+- Jar качается в `update/dev/`, проверяется SHA-256 из манифеста + `BuildToken.verify` (сам `HotSwap`
+  токен не проверяет), затем ставится через `HotSwap` под именем `hahgps-<база>+dev<номер>.jar`.
+- Команды: `/gps update dev`, `/gps update devcheck`, состояние — в `/gps update status`.
+- Тексты — в **обоих** `messages_ru.yml`/`messages_en.yml` (`dev-*`), только палитра `GuiTheme.TONES`
+  и `<font:minecraft:uniform>` вокруг `{version}` (иначе `MessageKeysExistTest` и
+  `MessagesPaletteTest` красные).
+
+**Грабли:** `/tmp` — tmpfs с `usrquota`, 19 МБ jar туда не влезает (`publish.py` пишет временный файл
+в `~/.cache/devrelease`); ключи в git не коммитить, `keyydev.txt` живёт только в папке плагина.
+
+**Прокси и HTTPS.** С этого хоста прямой HTTPS к `*.hakerone.ru` таймаутит — тестовому серверу нужен
+`пререлизы.прокси: socks5h://127.0.0.1:2080`. `java.net.http.HttpClient` HTTPS через SOCKS **не умеет**
+(«HTTP connect timed out»), поэтому `update/DevChannel` работает на `HttpURLConnection`; socks задаётся
+системными свойствами `socksProxyHost`/`socksProxyPort` (на всю JVM), http-прокси — через `Proxy` на
+каждое соединение. Env: `HAHTOJER_DEV_PROXY`.
+
+**Проверено (24.11.2026):** канал собран и протестирован на hahtojer (та же логика и те же файлы
+`devrelease`): скачивание по HTTPS через socks, SHA-256, `BuildToken`, `HotSwap` dev→dev — работает,
+в `plugins/` остаётся один jar. hahgps: 228 тестов зелёные, jar `target/hahgps-1.6.8.jar`, пререлиз
+1.0.2 (`1.6.8+dev1.0.2`) лежит на сервере.
+
 ## Ресурспак (обязательно при правках предметов)
 
 - Любое изменение моделей, текстур, `CustomModelData` или блоков-предметов
@@ -34,16 +101,54 @@
   Без него игрок видит ванильный предмет, даже если код обновлён.
 - После правок: `python3 respack/build.py` (собирает `dist/hahgps.zip`, кладёт
   копию в `src/main/resources/hahgps.zip` и рендерит превью), затем собрать jar.
-- Публичный пак для `/gps pack` раздаётся нашим сервером `192.168.0.64`:
-  файл `/var/www/hahgpspack/hahgps.zip`, nginx `127.0.0.1:8124`, наружу —
-  Cloudflare Tunnel `hahgps-pack.service` (`hahgps.hakerone.ru`). После сборки
-  пака сразу обновить файл раздачи (`cp respack/dist/hahgps.zip
-  /var/www/hahgpspack/hahgps.zip`), иначе игроки продолжат качать старую версию;
-  если плагин запущен на этом же хосте, он делает это сам по ключу
-  `resource-pack.publish`. Проверка:
-  `curl -x socks5h://127.0.0.1:2080 -o /dev/null -w '%{http_code}\n' https://hahgps.hakerone.ru/hahgps.zip`.
+- Публичной раздачи пака у нас **больше нет** (24.11.2026): ни `/var/www`, ни nginx, ни туннеля,
+  ни `hahgps.hakerone.ru`. Пак (если он вообще нужен) собирается панелью VedaMir и раздаётся ею.
 - Предметы, которые ставятся блоком, требуют `blockstate`; одного item-диска
   недостаточно.
 - В релиз прикладывать **реальные скриншоты** из `respack/preview/` (и копии в
   `docs/screenshots/`), а не голые ссылки. В чат обновления картинки не
   отправлять: `UpdaterService.shortNotes` вырезает markdown-скриншоты.
+
+## Модели в мире — через панель VedaMir (24.11.2026)
+
+- Новые модели/декор для сервера добавляются **не** в наш `respack/`, а на панели
+  **https://vedamirs-support.ru** → Minecraft → Модели
+  (`/minecraft/vmodels/?server=1`). Там же лежит каталог чужих моделей из других
+  плагинов, а пак сервера сайт собирает сам — игроки ничего не устанавливают.
+- Пошаговый порядок и все поля карточки (ключ, `CustomModelData`, грани
+  пол/потолок/стены, смещения, хитбокс, коллизия, точки «сесть», кнопки
+  «Загрузить ресурс-пак» → «Применить всем игрокам») — в `~/.dsh/AGENTS.md`,
+  раздел «Панель сервера VedaMir (ExodusOS)». Логин, 2FA и сессия — только там,
+  в репозиторий их не тащим.
+- Ключ модели — с префиксом плагина: `hahgps_<что-то>`. `CustomModelData` — не из
+  20001–20240 (этот диапазон занят каталогом сервера).
+- Наш `respack/` (стрелки, иконки меню, 3D-трекеры) — это **иконки предметов**, а
+  не модели в мире, поэтому правило про `respack/build.py` ниже пока в силе;
+  как переносить их на сервер — уточнять у владельца.
+- **Итог переноса 24.11.2026:** в каталог панели ушли все модели пака под ключами
+  `hahgps_<модель>`: 21 3D (16 трекеров, оба локатора, `main_points`,
+  `main_trackers`, `main_catalog`) и 47 GUI-иконок — они переделаны в плоские
+  3D-пластины (16×16×0.2), потому что пак панели берёт только модели с
+  `elements`. `CustomModelData` и предметы оставлены прежними (1001–2044,
+  1101–1107, 2001–2016, 2020, 2021), поэтому плагин менять не пришлось.
+  Пак сервера пересобран (297 моделей) и разослан игрокам.
+- **Раздача своего пака выключена:** `resource-pack.enabled: false`, туннель
+  `hahgps-pack.service` и nginx-сайт `127.0.0.1:8124` остановлены
+  (`/var/www/hahgpspack` оставлен). В своём паке остался только **шрифт стрелок
+  HUD** (`hahgps:arrow`) — панель шрифты не умеет; если стрелки в HUD пропали,
+  вернуть раздачу минимального пака только с `assets/hahgps/font/`.
+- Инструменты переноса (логин в панель, парсинг пака в `item→CMD→модель`,
+  генерация плоских 3D, загрузка): `~/.local/share/vmodels-panel/`.
+- **Откат 24.11.2026:** перенос в панель отменён — панель выкидывает `display`
+  и ставит `oversized_in_gui`, из-за чего иконки/трекеры рисовались мелкими и
+  «шахматкой», а меню теряли фоны. Все `hahgps_*` из каталога удалены, свой пак
+  снова раздаётся (`resource-pack.enabled: true`, туннель и nginx на месте).
+- **Итог 24.11.2026 (вечер):** модели живут только в паке сервера — панель
+  VedaMir (`/minecraft/vmodels/?server=1`), ключи `hahgps_*`: 21 3D + 47 иконок.
+  Иконки и 3D-модели залиты с `parent: minecraft:item/generated` — панель режет
+  блок `display`, и с `block/block` предметы рендерились как блоки; с generated
+  клиент берёт штатные item-трансформации (в GUI плоско, как раньше).
+  Своя раздача `hahgps.zip` удалена полностью: `resource-pack.enabled: false`,
+  юниты `hahgps-pack.service`, nginx-сайт `8124` и туннель сняты (бэкап
+  конфигов — `~/backups/respack-tunnels-20261124.tar.gz`). Шрифт стрелок HUD
+  (`hahgps:arrow`) в пак панели не переносится — панель шрифты не умеет.

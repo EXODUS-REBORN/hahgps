@@ -154,6 +154,18 @@ update-staged: "<#8fe9f5>✔</#8fe9f5> <gray>Update</gray> <font:minecraft:unifo
 update-installed: "<#8fe9f5>✔</#8fe9f5> <gray>Update</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>installed successfully — the server was not restarted.</gray>"
 update-failed: "<#3f86ff>✖ Update failed:</#3f86ff> <white>{error}</white>"
 
+# --- Pre-releases (our own server, key in plugins/HahGps/keyydev.txt) ---
+dev-checking: "<gray><italic>Checking the pre-release channel…</italic></gray>"
+dev-disabled: "<gray>Pre-release channel is off (<white>пререлизы.включено: false</white>).</gray>"
+dev-no-key: "<gray>Pre-releases: no key — put it into</gray> <white>plugins/HahGps/{file}</white><gray>.</gray>"
+dev-none: "<gray>No pre-release builds on the server yet.</gray>"
+dev-latest: "<gray>No newer pre-release: installed</gray> <font:minecraft:uniform><white>{version}</white></font><gray>.</gray>"
+dev-available: "<#8fe9f5><bold>⬆ New pre-release</bold></#8fe9f5> <font:minecraft:uniform><white>{version}</white></font> <dark_gray>·</dark_gray> <gray>base</gray> <white>{base}</white>"
+dev-staged: "<#8fe9f5>✔</#8fe9f5> <gray>Pre-release</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>downloaded and applying on the fly.</gray>"
+dev-behind: "<gray>Pre-release channel is behind: build</gray> <white>{version}</white> <gray>on base</gray> <white>{base}</white><gray>, installed</gray> <white>{current}</white><gray>.</gray>"
+dev-key-rejected: "<#3f86ff>✖ The pre-release server rejected the key</#3f86ff> <gray>— check</gray> <white>plugins/HahGps/keyydev.txt</white><gray>, then</gray> <bold><white>/gps update reload</white></bold>"
+dev-failed: "<#3f86ff>✖ Pre-release channel:</#3f86ff> <white>{error}</white>"
+
 # --- Chat input ---
 input-category-create: "<#66aaff>→</#66aaff> <gray>Type the new category name in chat:</gray>"
 input-category-delete: "<#66aaff>→</#66aaff> <gray>Type the category name to delete in chat:</gray>"
