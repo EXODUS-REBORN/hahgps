@@ -154,6 +154,18 @@ update-staged: "<#8fe9f5>✔</#8fe9f5> <gray>Обновление</gray> <font:m
 update-installed: "<#8fe9f5>✔</#8fe9f5> <gray>Обновление</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>успешно установлено — сервер не перезапускался.</gray>"
 update-failed: "<#3f86ff>✖ Обновление не удалось:</#3f86ff> <white>{error}</white>"
 
+# --- Пререлизы (свой сервер, ключ в plugins/HahGps/keyydev.txt) ---
+dev-checking: "<gray><italic>Проверяю канал пререлизов…</italic></gray>"
+dev-disabled: "<gray>Канал пререлизов выключен (<white>пререлизы.включено: false</white>).</gray>"
+dev-no-key: "<gray>Пререлизы: ключа нет — впиши его в</gray> <white>plugins/HahGps/{file}</white><gray>.</gray>"
+dev-none: "<gray>На сервере пререлизов пока нет сборок.</gray>"
+dev-latest: "<gray>Пререлизов новее нет: установлен</gray> <font:minecraft:uniform><white>{version}</white></font><gray>.</gray>"
+dev-available: "<#8fe9f5><bold>⬆ Новый пререлиз</bold></#8fe9f5> <font:minecraft:uniform><white>{version}</white></font> <dark_gray>·</dark_gray> <gray>база</gray> <white>{base}</white>"
+dev-staged: "<#8fe9f5>✔</#8fe9f5> <gray>Пререлиз</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>скачан и ставится на ходу.</gray>"
+dev-behind: "<gray>Канал пререлизов отстал: сборка</gray> <white>{version}</white> <gray>на базе</gray> <white>{base}</white><gray>, установлено</gray> <white>{current}</white><gray>.</gray>"
+dev-key-rejected: "<#3f86ff>✖ Сервер пререлизов не принял ключ</#3f86ff> <gray>— проверь</gray> <white>plugins/HahGps/keyydev.txt</white><gray>, потом</gray> <bold><white>/gps update reload</white></bold>"
+dev-failed: "<#3f86ff>✖ Канал пререлизов:</#3f86ff> <white>{error}</white>"
+
 # --- Ввод в чат ---
 input-category-create: "<#66aaff>→</#66aaff> <gray>Напиши название новой категории в чат:</gray>"
 input-category-delete: "<#66aaff>→</#66aaff> <gray>Напиши название категории, которую нужно удалить:</gray>"

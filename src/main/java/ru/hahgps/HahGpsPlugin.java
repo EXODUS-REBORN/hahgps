@@ -21,6 +21,7 @@ import ru.hahgps.model.Tracker;
 import ru.hahgps.storage.StorageProvider;
 import ru.hahgps.item.TrackerCodes;
 import ru.hahgps.update.HotSwap;
+import ru.hahgps.update.DevChannel;
 import ru.hahgps.update.UpdaterService;
 import ru.hahgps.util.ConsoleBanner;
 import java.io.File;
@@ -45,6 +46,7 @@ public class HahGpsPlugin extends JavaPlugin {
     private SearchService searchService;
     private CommandManager commandManager;
     private UpdaterService updater;
+    private DevChannel devChannel;
     private GraphService graphService;
     private VisualizationService visualizationService;
     private HudService hudService;
@@ -359,9 +361,12 @@ public class HahGpsPlugin extends JavaPlugin {
     private void initUpdater() {
 
         UpdaterService.ensureTokenFile(this);
+        DevChannel.ensureKeyFile(this);
         HotSwap.prime();
         updater = new UpdaterService(this);
         updater.start();
+        devChannel = new DevChannel(this);
+        devChannel.start();
 
         HotSwap.announceLastResult(this, updater.announcer());
     }
@@ -374,6 +379,11 @@ public class HahGpsPlugin extends JavaPlugin {
         updater = null;
         if (service != null) {
             service.stop();
+        }
+        DevChannel channel = devChannel;
+        devChannel = null;
+        if (channel != null) {
+            channel.stop();
         }
 
         if (visualizationTask != null) {
@@ -510,6 +520,10 @@ public class HahGpsPlugin extends JavaPlugin {
 
     public UpdaterService getUpdater() {
         return updater;
+    }
+
+    public DevChannel getDevChannel() {
+        return devChannel;
     }
 
     public GraphService getGraphService() {
