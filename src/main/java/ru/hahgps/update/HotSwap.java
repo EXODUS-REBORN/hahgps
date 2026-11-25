@@ -313,41 +313,67 @@ public final class HotSwap {
     /**
      * Прогрев классов нового плагина в фоновом потоке.
      *
-     * loadPlugin() в главном потоке загружает и линкует все классы jar, что даёт
-     * 50-200мс лагов. Предварительная загрузка в отдельном classloader'е
-     * переносит эту работу с главного потока. Классы не регистрируются в
+     * loadPlugin() в главном потоке загружает и линкует классы jar, что даёт
+     * заметный лаг. Предварительная загрузка в отдельном classloader'е
+     * переносит часть работы с главного потока. Классы не регистрируются в
      * Bukkit — только загружаются и линкуются, прогревая JIT.
+     *
+     * Греем ТОЛЬКО собственные классы плагина и делаем это в отдельном потоке,
+     * который дожидаемся с ограничением: раньше в главном потоке перебирались
+     * все ~2100 записей шейдед-jar (sqlite, mysql, protobuf) — на холодную это
+     * 2–5 секунд прямо в тик сервера. Зависимости всё равно грузит загрузчик
+     * Bukkit, а прогрев чужих классов ничего не ускорял.
      */
     private static void warmUpClasses(Path jar) {
         try {
-            java.net.URL[] urls = {jar.toUri().toURL()};
-            try (java.net.URLClassLoader warmLoader = new java.net.URLClassLoader(
-                    urls, HotSwap.class.getClassLoader())) {
-                // Загружаем все классы из jar: это прогревает JIT и уменьшает
-                // время loadPlugin в главном потоке
-                try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(jar.toFile(),
-                        java.nio.charset.StandardCharsets.UTF_8)) {
-                    java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zip.entries();
-                    while (entries.hasMoreElements()) {
-                        java.util.zip.ZipEntry entry = entries.nextElement();
-                        String name = entry.getName();
-                        if (!name.endsWith(".class")) continue;
-                        String className = name.substring(0, name.length() - 6)
-                                .replace('/', '.');
+            java.util.List<String> names = ownClassNames(jar);
+            if (names.isEmpty()) {
+                return;
+            }
+            Thread worker = new Thread(() -> {
+                try (java.net.URLClassLoader warmLoader = new java.net.URLClassLoader(
+                        new java.net.URL[]{jar.toUri().toURL()}, HotSwap.class.getClassLoader())) {
+                    for (String className : names) {
                         try {
-                            warmLoader.loadClass(className);
+                            Class.forName(className, false, warmLoader);
                         } catch (Throwable ignored) {
-                            // Класс может зависеть от Bukkit API, который не в
-                            // classpath warmLoader — это нормально, loadPlugin
-                            // загрузит его сам
+                            // Зависимость вне classpath прогревающего загрузчика —
+                            // loadPlugin загрузит класс сам.
                         }
                     }
+                } catch (Throwable t) {
+                    log(Level.FINE, "Горячая подмена: прогрев классов не удался ("
+                            + message(t) + ")", null);
                 }
-            }
+            }, "HahGps-WarmUp");
+            worker.setDaemon(true);
+            worker.start();
+            // Ждём ограниченно: прогрев — оптимизация, а не условие подмены.
+            worker.join(1_500L);
         } catch (Throwable t) {
             log(Level.FINE, "Горячая подмена: прогрев классов не удался ("
                     + message(t) + ")", null);
         }
+    }
+
+    /** Собственные классы плагина из jar — без сторонних библиотек в шейде. */
+    private static java.util.List<String> ownClassNames(Path jar) {
+        java.util.List<String> names = new java.util.ArrayList<>(256);
+        try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(jar.toFile(),
+                java.nio.charset.StandardCharsets.UTF_8)) {
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                String name = entries.nextElement().getName();
+                if (!name.endsWith(".class") || !name.startsWith("ru/hahgps/")) {
+                    continue;
+                }
+                names.add(name.substring(0, name.length() - 6).replace('/', '.'));
+            }
+        } catch (Throwable t) {
+            log(Level.FINE, "Горячая подмена: список классов не прочитан ("
+                    + message(t) + ")", null);
+        }
+        return names;
     }
 
     /**

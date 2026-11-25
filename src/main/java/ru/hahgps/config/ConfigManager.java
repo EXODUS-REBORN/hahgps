@@ -109,6 +109,7 @@ public class ConfigManager {
         checkRange("itrak.signal-region-size", 512, 16, 4096);
         checkRange("itrak.detach-after-minutes", 30, 0, 10080);
         checkRange("itrak.take-radius", 5, 1, 32);
+        checkRange("itrak.brush-hold-ms", 1500, 200, 10000);
         checkRange("itrak.max-per-player", 8, 1, 64);
         checkRange("itrak.watch-interval-seconds", 5, 1, 600);
         checkRange("itrak.save-interval-seconds", 30, 5, 3600);
@@ -417,6 +418,14 @@ public class ConfigManager {
 
     public double getItrakTakeRadius() {
         return Math.max(1, Math.min(32, config.getInt("itrak.take-radius", 5)));
+    }
+
+    /**
+     * Сколько миллисекунд нужно «водить» кисточкой по трекеру, чтобы снять
+     * его. Клик не снимает: иначе случайный ПКМ уносил бы датчик.
+     */
+    public long getItrakBrushHoldMillis() {
+        return Math.max(200, Math.min(10_000, config.getInt("itrak.brush-hold-ms", 1500)));
     }
 
     public int getItrakMaxPerPlayer() {

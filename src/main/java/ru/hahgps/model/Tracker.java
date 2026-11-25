@@ -39,7 +39,11 @@ public class Tracker {
     private final int id;
     private final String code;
     private String name;
-    private final TrackerColor color;
+    /**
+     * Цвет не константа: владелец и те, кому он открыл доступ, меняют цвет
+     * установленного трекера из карточки.
+     */
+    private TrackerColor color;
     private final boolean waterproof;
     private final UUID ownerUuid;
     private final String ownerName;
@@ -62,6 +66,12 @@ public class Tracker {
     /** Смещение, накопленное после последней отметки «сдвинулся». */
     private transient double pendingMove;
     private long updatedAt;
+
+    /**
+     * Часть тела носителя, на которую прицеплен трекер ({@link BodyPart#getKey()}).
+     * null — трекер на блоке, на транспорте или часть не определилась.
+     */
+    private String bodyPart;
 
     /** Живой сигнал: у привязанного к сущности трекера снимается, если сущности нет. */
     private transient boolean signal = true;
@@ -141,6 +151,26 @@ public class Tracker {
 
     public TrackerColor getColor() {
         return color;
+    }
+
+    /** Сменить цвет установленного трекера (модель, частицы, подписи). */
+    public void setColor(TrackerColor color) {
+        this.color = color == null ? TrackerColor.BLUE : color;
+    }
+
+    /** Ключ части тела ({@code head}, {@code chest}, …) или null. */
+    public String getBodyPart() {
+        return bodyPart;
+    }
+
+    /** Часть тела носителя; null — трекер не на теле. */
+    public BodyPart part() {
+        return BodyPart.parse(bodyPart);
+    }
+
+    public void setBodyPart(String bodyPart) {
+        BodyPart parsed = BodyPart.parse(bodyPart);
+        this.bodyPart = parsed == null ? null : parsed.getKey();
     }
 
     public boolean isWaterproof() {

@@ -25,8 +25,10 @@ import ru.hahgps.config.ConfigManager;
 import ru.hahgps.config.MessagesManager;
 import ru.hahgps.item.ItemFactory;
 import ru.hahgps.item.TrackerCodes;
+import ru.hahgps.model.BodyPart;
 import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TrackerColor;
+import ru.hahgps.model.TrackerShare;
 import ru.hahgps.storage.DataService;
 import ru.hahgps.util.EntityNames;
 import ru.hahgps.util.LocationUtil;
@@ -126,6 +128,25 @@ public class TrackerService {
     private final Set<String> placingCodes = ConcurrentHashMap.newKeySet();
     /** С какого момента привязанная сущность не находится (для снятия «висящих» трекеров). */
     private final Map<Integer, Long> lostSince = new ConcurrentHashMap<>();
+    /**
+     * Кому владелец открыл каждый трекер: {@code trackerId -> (uuid -> ник)}.
+     * Живёт только в памяти и грузится из таблицы {@code tracker_shares} при
+     * старте: доступ — это право, а не часть предмета.
+     */
+    private final Map<Integer, Map<UUID, String>> shares = new ConcurrentHashMap<>();
+    /** Трекеры, которые прямо сейчас слетают с умершей сущности: один дроп. */
+    private final Set<Integer> dropping = ConcurrentHashMap.newKeySet();
+    /**
+     * Загруженные трекеры, которым ещё не восстановили производные поля (ник и
+     * тип носителя, вода под маркером). Разбираются по {@link #HYDRATE_BATCH}
+     * за тик: обращения к профилям игроков и блокам не должны съедать один
+     * длинный кусок главного потока сразу после включения плагина.
+     */
+    private final List<Tracker> pendingHydration =
+            java.util.Collections.synchronizedList(new ArrayList<>());
+
+    /** Сколько трекеров доразбирать за один тик. */
+    private static final int HYDRATE_BATCH = 4;
     /** Подсветка трекеров конкретному игроку: локатор или трекер показал координаты. */
     private final Map<UUID, List<Highlight>> highlights = new ConcurrentHashMap<>();
 
@@ -149,11 +170,19 @@ public class TrackerService {
 
     /** Загрузка из БД (главный поток). */
     public void load(List<Tracker> loaded) {
+        load(loaded, Map.of());
+    }
+
+    /** Загрузка из БД вместе с доступами к трекерам (главный поток). */
+    public void load(List<Tracker> loaded, Map<Integer, List<TrackerShare>> loadedShares) {
         trackers.clear();
         lostSince.clear();
         placingCodes.clear();
         lastKnown.clear();
         stationaryNotified.clear();
+        shares.clear();
+        dropping.clear();
+        pendingHydration.clear();
         Set<String> seenCodes = new HashSet<>();
         if (loaded != null) {
             for (Tracker tracker : loaded) {
@@ -175,6 +204,66 @@ public class TrackerService {
                 // сущность может быть в незагруженном чанке.
                 if (tracker.isAttached()) {
                     tracker.setSignal(false);
+                }
+                // Ник носителя, признак «носитель — игрок» и флаг воды требуют
+                // обращений к профилям игроков и к блокам: на десятках трекеров
+                // это заметный кусок тика. Раскладываем на порции (hydrate),
+                // чтобы включение плагина не съедало MSPT одним куском.
+                pendingHydration.add(tracker);
+                trackers.put(tracker.getId(), tracker);
+                // После рестарта не спамим «трекер неподвижен N» по всем
+                // старым маячкам: уведомление — это событие перехода в
+                // неподвижность, а не факт загрузки. Время неподвижности
+                // при этом считается по moved_at и включает простой сервера.
+                // Загруженный трекер считается «уже известным»; после первого
+                // реального движения отметка снимется и следующая остановка
+                // снова даст одно уведомление.
+                stationaryNotified.add(tracker.getId());
+            }
+        }
+        if (loadedShares != null) {
+            for (Map.Entry<Integer, List<TrackerShare>> entry : loadedShares.entrySet()) {
+                // Доступ к уже удалённому трекеру не воскрешаем: после рестарта
+                // такие строки просто игнорируются (и перезаписываются при
+                // следующем удалении трекера).
+                if (!trackers.containsKey(entry.getKey()) || entry.getValue() == null) {
+                    continue;
+                }
+                Map<UUID, String> players = new ConcurrentHashMap<>();
+                for (TrackerShare share : entry.getValue()) {
+                    if (share != null && share.playerId() != null) {
+                        players.put(share.playerId(), share.playerName() == null ? "" : share.playerName());
+                    }
+                }
+                if (!players.isEmpty()) {
+                    shares.put(entry.getKey(), players);
+                }
+            }
+        }
+        plugin.getLogger().info("HahGps: загружено трекеров iTrak — " + trackers.size());
+    }
+
+    /**
+     * Досборка загруженных трекеров порциями по {@link #HYDRATE_BATCH}.
+     *
+     * Сразу после старта всё, что требует обращений к профилям игроков и к
+     * блокам мира (ник носителя, тип носителя, вода под маркером), лучше не
+     * делать: на десятках трекеров это один длинный кусок главного потока.
+     * Каждый тик доразбираем небольшую порцию, пока очередь не кончится.
+     */
+    private void hydrate(int budget) {
+        if (pendingHydration.isEmpty() || budget <= 0) {
+            return;
+        }
+        java.util.Iterator<Tracker> iterator = pendingHydration.iterator();
+        for (int done = 0; done < budget && iterator.hasNext(); done++) {
+            Tracker tracker = iterator.next();
+            iterator.remove();
+            if (!trackers.containsKey(tracker.getId())) {
+                continue;
+            }
+            try {
+                if (tracker.isAttached()) {
                     // Игрок мог выйти до рестарта: тип носителя определяется
                     // один раз, чтобы такой трекер не считался потерянным.
                     tracker.setCarrierPlayer(isKnownPlayer(tracker.getEntityUuid()));
@@ -187,18 +276,10 @@ public class TrackerService {
                     // висел бы неподвижно.
                     tracker.setWater(isWaterUnder(tracker));
                 }
-                trackers.put(tracker.getId(), tracker);
-                // После рестарта не спамим «трекер неподвижен N» по всем
-                // старым маячкам: уведомление — это событие перехода в
-                // неподвижность, а не факт загрузки. Время неподвижности
-                // при этом считается по moved_at и включает простой сервера.
-                // Загруженный трекер считается «уже известным»; после первого
-                // реального движения отметка снимется и следующая остановка
-                // снова даст одно уведомление.
-                stationaryNotified.add(tracker.getId());
+            } catch (Throwable t) {
+                logTickFailure(tracker, t);
             }
         }
-        plugin.getLogger().info("HahGps: загружено трекеров iTrak — " + trackers.size());
     }
 
     /** Стоит ли трекер на воде: проверка под маркером, чанк не грузим. */
@@ -251,6 +332,7 @@ public class TrackerService {
     public synchronized void stop() {
         stopTask();
         thrownVisuals.dispose();
+        pendingHydration.clear();
         // Досохраняем только сдвинувшееся: остальное уже лежит в БД, а полная
         // перезапись всех трекеров не влезала в две секунды shutdown пула.
         List<Tracker> toSave = new ArrayList<>(dirty.size());
@@ -278,6 +360,8 @@ public class TrackerService {
         dirty.clear();
         lostSince.clear();
         placingCodes.clear();
+        shares.clear();
+        dropping.clear();
     }
 
     private void stopTask() {
@@ -300,6 +384,9 @@ public class TrackerService {
         if (!config.isItrakEnabled()) {
             return;
         }
+        // Сначала небольшая порция трекеров, которым не восстановили поля при
+        // загрузке: ника и типа носителя у них ещё нет, но это не мешает.
+        hydrate(HYDRATE_BATCH);
         // Все настройки читаются один раз на тик, а не на каждый трекер:
         // каждый getX() — это разбор пути и обход YAML.
         long now = System.currentTimeMillis();
@@ -365,6 +452,10 @@ public class TrackerService {
         Set<UUID> recipients = new LinkedHashSet<>();
         if (tracker.getOwnerUuid() != null) {
             recipients.add(tracker.getOwnerUuid());
+        }
+        Map<UUID, String> shared = shares.get(tracker.getId());
+        if (shared != null) {
+            recipients.addAll(shared.keySet());
         }
         for (Map.Entry<UUID, Set<Integer>> entry : watchedByPlayer.entrySet()) {
             if (entry.getValue().contains(tracker.getId())) {
@@ -760,6 +851,7 @@ public class TrackerService {
     private void detachLost(Tracker tracker) {
         lostSince.remove(tracker.getId());
         tracker.setEntityUuid(null);
+        tracker.setBodyPart(null);
         tracker.setSignal(false);
         dirty.add(tracker.getId());
         Player owner = tracker.getOwnerUuid() == null ? null : Bukkit.getPlayer(tracker.getOwnerUuid());
@@ -844,6 +936,9 @@ public class TrackerService {
             return;
         }
         lastSaveAt = now;
+        // Снимки собираем пачкой и пишем одной транзакцией: раньше каждый
+        // изменившийся трекер шёл отдельным UPDATE и отдельной задачей в пул БД.
+        List<Tracker> snapshots = new ArrayList<>(dirty.size());
         for (Integer id : new ArrayList<>(dirty)) {
             Tracker live = trackers.get(id);
             if (live == null) {
@@ -852,18 +947,24 @@ public class TrackerService {
             }
             // В БД уходит снимок значений: тик продолжает двигать живой объект,
             // и поток записи иначе мог прочитать новый x со старым y.
-            Tracker snapshot = snapshotOf(live);
+            snapshots.add(snapshotOf(live));
             dirty.remove(id);
-            data.updateTracker(snapshot).whenComplete((ok, error) -> {
-                if (error != null) {
-                    // Запись не прошла — вернём трекер в очередь, иначе позиция
-                    // потеряется до следующего движения.
-                    dirty.add(id);
-                    plugin.getLogger().log(Level.WARNING, "HahGps: не удалось сохранить трекер "
-                            + snapshot.getCode(), error);
-                }
-            });
         }
+        if (snapshots.isEmpty()) {
+            return;
+        }
+        data.updateTrackers(snapshots).whenComplete((saved, error) -> {
+            if (error == null) {
+                return;
+            }
+            // Запись не прошла — вернём трекеры в очередь, иначе позиция
+            // потеряется до следующего движения.
+            for (Tracker snapshot : snapshots) {
+                dirty.add(snapshot.getId());
+            }
+            plugin.getLogger().log(Level.WARNING, "HahGps: не удалось сохранить трекеры iTrak ("
+                    + snapshots.size() + ")", error);
+        });
     }
 
     /** Неизменяемый снимок состояния трекера для фоновой записи в БД. */
@@ -876,6 +977,7 @@ public class TrackerService {
         // Промокание — тоже состояние: без него после рестарта трекер
         // «оживал» бы с сигналом.
         copy.setRuined(tracker.isRuined(), tracker.getRuinedAt());
+        copy.setBodyPart(tracker.getBodyPart());
         return copy;
     }
 
@@ -910,6 +1012,18 @@ public class TrackerService {
     public CompletableFuture<PlaceOutcome> place(Player player, ItemFactory.TrackerSpec spec,
                                                  Block clicked, BlockFace face, Entity target,
                                                  boolean sinkRequested) {
+        return place(player, spec, clicked, face, target, sinkRequested, null);
+    }
+
+    /**
+     * Установка с частью тела носителя (куда игрок попал трекером).
+     *
+     * @param bodyPart ключ {@link BodyPart}; null — трекер на блоке или часть
+     *                 не определилась
+     */
+    public CompletableFuture<PlaceOutcome> place(Player player, ItemFactory.TrackerSpec spec,
+                                                 Block clicked, BlockFace face, Entity target,
+                                                 boolean sinkRequested, String bodyPart) {
         if (spec == null) {
             return CompletableFuture.completedFuture(new PlaceOutcome(null, PlaceResult.FAILED));
         }
@@ -989,6 +1103,7 @@ public class TrackerService {
                 location.getX(), location.getY(), location.getZ(),
                 target == null ? null : target.getUniqueId(), sunk, now, now, now, support);
         candidate.setCarrierPlayer(target instanceof Player);
+        candidate.setBodyPart(target == null ? null : bodyPart);
 
         return data.createTracker(candidate)
                 .whenComplete((created, error) -> placingCodes.remove(spec.code()))
@@ -1142,6 +1257,8 @@ public class TrackerService {
     /** Снять трекер со всех подписок и убрать из памяти (только главный поток). */
     private void forgetTracker(Tracker tracker) {
         if (tracker != null) {
+            shares.remove(tracker.getId());
+            dropping.remove(tracker.getId());
             wetSince.remove(tracker.getId());
             tickFailureLogged.remove(tracker.getId());
             for (Map<Integer, LastKnown> known : lastKnown.values()) {
@@ -1236,17 +1353,6 @@ public class TrackerService {
         return list;
     }
 
-    public List<Tracker> byOwner(UUID owner) {
-        List<Tracker> list = new ArrayList<>();
-        for (Tracker tracker : trackers.values()) {
-            if (owner != null && owner.equals(tracker.getOwnerUuid())) {
-                list.add(tracker);
-            }
-        }
-        list.sort(Comparator.comparing(Tracker::getCode));
-        return list;
-    }
-
     public int countOwned(UUID owner) {
         int count = 0;
         for (Tracker tracker : trackers.values()) {
@@ -1257,10 +1363,145 @@ public class TrackerService {
         return count;
     }
 
+    /**
+     * Может ли игрок распоряжаться трекером: владелец, админ или тот, кому
+     * владелец открыл доступ. Доступ даёт слежение, маршрут, смену имени и
+     * цвета — но не право выдавать доступ дальше.
+     */
     public boolean canManage(Player player, Tracker tracker) {
+        if (player == null || tracker == null) {
+            return false;
+        }
+        if (player.hasPermission("gps.itrak.admin")) {
+            return true;
+        }
+        if (tracker.getOwnerUuid() != null && tracker.getOwnerUuid().equals(player.getUniqueId())) {
+            return true;
+        }
+        return isSharedWith(tracker, player.getUniqueId());
+    }
+
+    /** Добавлять и отзывать доступ может только владелец (и админ). */
+    public boolean canShare(Player player, Tracker tracker) {
         return player != null && tracker != null
                 && (player.hasPermission("gps.itrak.admin")
                 || (tracker.getOwnerUuid() != null && tracker.getOwnerUuid().equals(player.getUniqueId())));
+    }
+
+    public boolean isSharedWith(Tracker tracker, UUID playerId) {
+        if (tracker == null || playerId == null) {
+            return false;
+        }
+        Map<UUID, String> shared = shares.get(tracker.getId());
+        return shared != null && shared.containsKey(playerId);
+    }
+
+    /** Все, кому открыт доступ, в порядке добавления. */
+    public List<TrackerShare> shareList(Tracker tracker) {
+        if (tracker == null) {
+            return List.of();
+        }
+        Map<UUID, String> shared = shares.get(tracker.getId());
+        if (shared == null || shared.isEmpty()) {
+            return List.of();
+        }
+        List<TrackerShare> out = new ArrayList<>(shared.size());
+        for (Map.Entry<UUID, String> entry : shared.entrySet()) {
+            out.add(new TrackerShare(entry.getKey(), entry.getValue()));
+        }
+        return out;
+    }
+
+    /**
+     * Трекеры, которые игрок видит в своём списке: свои и те, к которым ему
+     * открыли доступ. Админ видит все.
+     */
+    public List<Tracker> accessible(Player player) {
+        if (player == null) {
+            return List.of();
+        }
+        if (player.hasPermission("gps.itrak.admin")) {
+            return all();
+        }
+        List<Tracker> out = new ArrayList<>();
+        for (Tracker tracker : trackers.values()) {
+            if (player.getUniqueId().equals(tracker.getOwnerUuid())
+                    || isSharedWith(tracker, player.getUniqueId())) {
+                out.add(tracker);
+            }
+        }
+        out.sort(Comparator.comparing(Tracker::getCode));
+        return out;
+    }
+
+    /**
+     * Открыть доступ к трекеру. Строка сначала пишется в БД и только потом
+     * появляется в памяти: доступ, которого нет в базе, пропал бы после
+     * рестарта молча.
+     */
+    public CompletableFuture<Boolean> share(Tracker tracker, UUID by, UUID targetId, String targetName) {
+        if (tracker == null || targetId == null || by == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+        String name = targetName == null ? "" : targetName;
+        return data.addTrackerShare(tracker.getId(), targetId, name, by).thenApply(ok -> {
+            if (Boolean.TRUE.equals(ok)) {
+                runMain(() -> shares.computeIfAbsent(tracker.getId(), key -> new ConcurrentHashMap<>())
+                        .put(targetId, name));
+                Player target = Bukkit.getPlayer(targetId);
+                if (target != null && target.isOnline()) {
+                    target.sendMessage(plugin.getMessages().getPrefixed("itrak-share-received",
+                            "name", tracker.getDisplayName()));
+                }
+            }
+            return Boolean.TRUE.equals(ok);
+        });
+    }
+
+    /** Отозвать доступ. */
+    public CompletableFuture<Boolean> unshare(Tracker tracker, UUID targetId) {
+        if (tracker == null || targetId == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+        Map<UUID, String> shared = shares.get(tracker.getId());
+        if (shared == null || !shared.containsKey(targetId)) {
+            return CompletableFuture.completedFuture(false);
+        }
+        return data.removeTrackerShare(tracker.getId(), targetId).thenApply(ok -> {
+            if (Boolean.TRUE.equals(ok)) {
+                runMain(() -> {
+                    Map<UUID, String> current = shares.get(tracker.getId());
+                    if (current != null) {
+                        current.remove(targetId);
+                        if (current.isEmpty()) {
+                            shares.remove(tracker.getId(), current);
+                        }
+                    }
+                });
+            }
+            return Boolean.TRUE.equals(ok);
+        });
+    }
+
+    /**
+     * Сменить цвет установленного трекера. Цвет — часть записи (модель,
+     * частицы, подписи), поэтому пишем сразу, а не ждём периодического
+     * сохранения.
+     */
+    public boolean recolor(Tracker tracker, TrackerColor color) {
+        if (tracker == null || color == null || tracker.getColor() == color) {
+            return false;
+        }
+        tracker.setColor(color);
+        dirty.add(tracker.getId());
+        Tracker snapshot = snapshotOf(tracker);
+        data.updateTracker(snapshot).exceptionally(error -> {
+            plugin.getLogger().log(Level.WARNING, "HahGps: не удалось сохранить цвет трекера "
+                    + tracker.getCode(), error);
+            dirty.add(tracker.getId());
+            return false;
+        });
+        return true;
     }
 
     // ------------------------------------------------------------------
@@ -1731,19 +1972,33 @@ public class TrackerService {
                 dirty.add(tracker.getId());
                 continue;
             }
-            String name = tracker.getDisplayName();
-            Player owner = tracker.getOwnerUuid() == null ? null
-                    : Bukkit.getPlayer(tracker.getOwnerUuid());
-            removeDropping(tracker, at);
-            if (owner != null && owner.isOnline()) {
-                owner.sendMessage(plugin.getMessages().getPrefixed("itrak-tracker-fell-entity-owner",
-                        "name", name,
-                        "entity", entityName,
-                        "world", at.getWorld() == null ? "?" : at.getWorld().getName(),
-                        "x", formatCoord(at.getX()),
-                        "y", formatCoord(at.getY()),
-                        "z", formatCoord(at.getZ())));
+            // Смерть может прийти двумя событиями (и повторным вызовом из
+            // тика): без этой отметки предмет выпадал дважды, а запись
+            // оставалась «на зомби». Один трекер — один дроп.
+            if (!dropping.add(tracker.getId())) {
+                continue;
             }
+            // Отвязываем сразу, не дожидаясь удаления строки в БД: иначе
+            // несколько секунд трекер числился на мёртвой сущности и его
+            // можно было «найти» на трупе.
+            tracker.setEntityUuid(null);
+            tracker.setBodyPart(null);
+            tracker.setSignal(false);
+            dirty.add(tracker.getId());
+            for (UUID id : recipientsOf(tracker)) {
+                Player viewer = Bukkit.getPlayer(id);
+                if (viewer != null && viewer.isOnline()) {
+                    viewer.sendMessage(trackerLine("itrak-tracker-fell-entity-owner",
+                            tracker, "entity", entityName));
+                }
+            }
+            removeDropping(tracker, at).whenComplete((ok, error) -> {
+                dropping.remove(tracker.getId());
+                if (error != null || !Boolean.TRUE.equals(ok)) {
+                    plugin.getLogger().log(Level.WARNING, "HahGps: трекер "
+                            + tracker.getCode() + " слетел с сущности, но не удалился из БД", error);
+                }
+            });
         }
     }
 
@@ -1822,7 +2077,7 @@ public class TrackerService {
     public CompletableFuture<PlaceOutcome> placeThrown(Player thrower, ItemFactory.TrackerSpec spec,
                                                        Block hitBlock, BlockFace face,
                                                        Entity hitEntity, Location fallback,
-                                                       boolean sink) {
+                                                       boolean sink, String bodyPart) {
         if (thrower == null || spec == null) {
             return CompletableFuture.completedFuture(new PlaceOutcome(null, PlaceResult.FAILED));
         }
@@ -1831,10 +2086,10 @@ public class TrackerService {
                 && hitEntity.getType() != EntityType.UNKNOWN
                 && (!(hitEntity instanceof Player) || attachPlayers)) {
             return place(thrower, spec, hitEntity.getLocation().getBlock(), BlockFace.UP, hitEntity,
-                    false);
+                    false, bodyPart);
         }
         if (hitBlock != null) {
-            return place(thrower, spec, hitBlock, face == null ? BlockFace.UP : face, null, sink);
+            return place(thrower, spec, hitBlock, face == null ? BlockFace.UP : face, null, sink, null);
         }
         Location landing = fallback;
         if (landing != null && landing.getWorld() != null) {
@@ -1842,7 +2097,7 @@ public class TrackerService {
             // сам блок попадания может быть воздухом. Берём первый блок под
             // точкой падения — воду или землю, иначе трекер завис бы в воздухе
             // и «не заметил» воду.
-            return place(thrower, spec, groundUnder(landing), BlockFace.UP, null, sink);
+            return place(thrower, spec, groundUnder(landing), BlockFace.UP, null, sink, null);
         }
         return CompletableFuture.completedFuture(new PlaceOutcome(null, PlaceResult.FAILED));
     }
@@ -2007,29 +2262,47 @@ public class TrackerService {
         return line.hoverEvent(HoverEvent.showText(hover));
     }
 
-    /** Подсказка-карточка трекера для наведения на строку в чате. */
+    /**
+     * Короткая подсказка к строке трекера в чате: номер и код, цвет, тип,
+     * часть тела и координаты. Больше ничего — ни времени установки, ни
+     * статуса: место не должно утекать лишними строками.
+     */
     public Component hoverCard(Tracker tracker) {
         MessagesManager messages = plugin.getMessages();
         String color = messages.get(tracker.getColor() == null
                 ? TrackerColor.BLUE.messageKey() : tracker.getColor().messageKey());
         String type = messages.get(tracker.isWaterproof()
                 ? "itrak-type-waterproof" : "itrak-type-regular");
-        Component card = messages.getComponent("itrak-hover-name", "name", tracker.getDisplayName())
-                .append(Component.newline())
-                .append(messages.getComponent("itrak-hover-code",
-                        "code", tracker.getCode(), "id", String.valueOf(tracker.getId())))
-                .append(Component.newline())
-                .append(messages.getComponent("itrak-hover-type", "color", color, "type", type))
-                .append(Component.newline())
-                .append(messages.getComponent("itrak-hover-status", "status", statusText(tracker)));
-        String carrier = carrierName(tracker);
-        if (carrier != null) {
-            card = card.append(Component.newline())
-                    .append(messages.getComponent("itrak-hover-carrier", "name", carrier));
+        Location at = tracker.liveLocation();
+        if (at == null) {
+            at = tracker.getLocation();
         }
-        card = card.append(Component.newline())
-                .append(messages.getComponent("itrak-hover-click"));
-        return card;
+        double x = at == null ? tracker.getX() : at.getX();
+        double y = at == null ? tracker.getY() : at.getY();
+        double z = at == null ? tracker.getZ() : at.getZ();
+        Component card = messages.getComponent("itrak-hover-title",
+                        "name", tracker.getDisplayName(), "id", String.valueOf(tracker.getId()))
+                .append(Component.newline())
+                .append(messages.getComponent("itrak-hover-spec",
+                        "code", tracker.getCode(), "color", color, "type", type));
+        BodyPart part = tracker.part();
+        if (part != null) {
+            card = card.append(Component.newline())
+                    .append(messages.getComponent("itrak-hover-part",
+                            "part", messages.get(part.messageKey())));
+        }
+        return card.append(Component.newline())
+                .append(messages.getComponent("itrak-hover-coords",
+                        "x", formatCoord(x), "y", formatCoord(y), "z", formatCoord(z)));
+    }
+
+    /** Название части тела трекера или прочерк для блока/транспорта. */
+    public String partText(Tracker tracker) {
+        BodyPart part = tracker == null ? null : tracker.part();
+        if (part == null) {
+            return plugin.getMessages().get("itrak-part-none");
+        }
+        return plugin.getMessages().get(part.messageKey());
     }
 
     /**

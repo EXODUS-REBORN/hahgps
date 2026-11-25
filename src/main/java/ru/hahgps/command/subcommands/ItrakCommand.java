@@ -22,6 +22,7 @@ import ru.hahgps.util.LocationUtil;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 /**
  * iTrak: выдача, поиск, слежение и маршруты к GPS-трекерам.
@@ -39,7 +40,7 @@ public class ItrakCommand implements SubCommand {
 
     @Override
     public String usage() {
-        return "/gps itrak [give|give-locator|scan|find|list|info|route|name|open|take|remove|watch|unwatch]";
+        return "/gps itrak [give|give-locator|scan|find|list|info|route|name|color|share|unshare|open|take|remove|watch|unwatch]";
     }
 
     @Override
@@ -51,7 +52,8 @@ public class ItrakCommand implements SubCommand {
     public List<SubCommand> children() {
         return List.of(new GiveCommand(), new GiveLocatorCommand(),
                 new ScanCommand(), new FindCommand(), new ListCommand(),
-                new InfoCommand(), new RouteCommand(), new NameCommand(), new OpenCommand(),
+                new InfoCommand(), new RouteCommand(), new NameCommand(), new ColorCommand(),
+                new ShareCommand(), new UnshareCommand(), new OpenCommand(),
                 new TakeCommand(), new RemoveCommand(), new WatchCommand(), new UnwatchCommand());
     }
 
@@ -191,11 +193,10 @@ public class ItrakCommand implements SubCommand {
      * маячок на самом сканирующем — «снять трекер» (маршрут к себе не нужен).
      */
     private static void sendTrackerAction(HahGpsPlugin plugin, Player player, Tracker tracker) {
+        // Кнопки «снять трекер» в чате больше нет: снимают только кисточкой.
+        // Для маячка на себе кнопка маршрута тоже не нужна — маршрут к себе
+        // строить некуда, а координаты уже в строке.
         if (isOnPlayer(player, tracker)) {
-            player.sendMessage(plugin.getMessages().getPrefixed("itrak-scan-self",
-                    "name", tracker.getDisplayName()));
-            player.sendMessage(plugin.getMessages().getComponent("itrak-take-button",
-                    "code", tracker.getCode()));
             return;
         }
         player.sendMessage(plugin.getMessages().getComponent("itrak-route-button",
@@ -295,8 +296,10 @@ public class ItrakCommand implements SubCommand {
         if (tracker == null) {
             return null;
         }
-        if (!plugin.getTrackerService().canManage(player, tracker)) {
-            player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
+        // Снять трекер может только владелец: доступ к трекеру не даёт права
+        // забрать его предмет себе.
+        if (!plugin.getTrackerService().canShare(player, tracker)) {
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-take-owner-only"));
             return null;
         }
         return tracker;
@@ -373,6 +376,8 @@ public class ItrakCommand implements SubCommand {
                 : plugin.getMessages().get("itrak-type-regular");
         String raw = plugin.getMessages().get("itrak-info",
                 "name", tracker.getDisplayName(),
+                "part", service == null ? plugin.getMessages().get("itrak-part-none")
+                        : service.partText(tracker),
                 "id", String.valueOf(tracker.getId()),
                 "code", tracker.getCode(),
                 "color", plugin.getMessages().get(tracker.getColor().messageKey()),
@@ -496,8 +501,7 @@ public class ItrakCommand implements SubCommand {
                 player.sendMessage(plugin.getMessages().getPrefixed("loading-data"));
                 return;
             }
-            boolean admin = player.hasPermission("gps.itrak.admin");
-            List<Tracker> list = admin ? service.all() : service.byOwner(player.getUniqueId());
+            List<Tracker> list = service.accessible(player);
             if (list.isEmpty()) {
                 player.sendMessage(plugin.getMessages().getPrefixed("itrak-no-trackers"));
                 return;
@@ -565,9 +569,7 @@ public class ItrakCommand implements SubCommand {
                 }
                 return;
             }
-            boolean admin = player.hasPermission("gps.itrak.admin");
-            List<Tracker> list = admin ? service.all() : service.byOwner(player.getUniqueId());
-            if (list.isEmpty()) {
+            if (service.accessible(player).isEmpty()) {
                 player.sendMessage(plugin.getMessages().getPrefixed("itrak-no-trackers"));
                 return;
             }
@@ -675,6 +677,226 @@ public class ItrakCommand implements SubCommand {
         }
     }
 
+    /**
+     * Смена цвета установленного трекера: владелец и те, кому открыт доступ.
+     * Цвет — часть записи (модель, частицы, подписи), поэтому меняется и в
+     * мире, и в списке, а не только в предмете.
+     */
+    private static class ColorCommand implements SubCommand {
+        @Override
+        public String name() {
+            return "color";
+        }
+
+        @Override
+        public String usage() {
+            return "/gps itrak color <код|id|имя> <цвет>";
+        }
+
+        @Override
+        public String permission() {
+            return "gps.itrak";
+        }
+
+        @Override
+        public void execute(Player player, String[] args) {
+            HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+            if (args.length < 2) {
+                player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
+                return;
+            }
+            TrackerColor color = TrackerColor.parse(args[args.length - 1]);
+            if (color == null) {
+                player.sendMessage(plugin.getMessages().getPrefixed("itrak-color-unknown",
+                        "color", args[args.length - 1]));
+                return;
+            }
+            Tracker tracker = requireTracker(plugin, player, join(args, 0, args.length - 1));
+            if (tracker == null) {
+                return;
+            }
+            if (!plugin.getTrackerService().canManage(player, tracker)) {
+                player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
+                return;
+            }
+            if (!plugin.getTrackerService().recolor(tracker, color)) {
+                player.sendMessage(plugin.getMessages().getPrefixed("itrak-color-same"));
+                return;
+            }
+            player.sendMessage(plugin.getMessages().getPrefixed("itrak-color-changed",
+                    "color", plugin.getMessages().get(color.messageKey())));
+        }
+
+        @Override
+        public List<String> tabComplete(Player player, String[] args) {
+            if (args.length == 1) {
+                return trackerSuggestions(player, args[0]);
+            }
+            if (args.length == 2) {
+                return SubCommand.filterByPrefix(TrackerColor.keys(), args[1]);
+            }
+            return List.of();
+        }
+    }
+
+    /**
+     * Открыть доступ к трекеру другому игроку. Право выдавать доступ есть
+     * только у владельца: тот, кому доступ уже открыт, может смотреть,
+     * следить, строить маршрут, менять имя и цвет — но не приводить своих.
+     */
+    private static class ShareCommand implements SubCommand {
+        @Override
+        public String name() {
+            return "share";
+        }
+
+        @Override
+        public String usage() {
+            return "/gps itrak share <код|id|имя> <игрок>";
+        }
+
+        @Override
+        public String permission() {
+            return "gps.itrak";
+        }
+
+        @Override
+        public void execute(Player player, String[] args) {
+            HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+            if (args.length < 2) {
+                player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
+                return;
+            }
+            String targetName = args[args.length - 1];
+            Tracker tracker = requireTracker(plugin, player, join(args, 0, args.length - 1));
+            if (tracker == null) {
+                return;
+            }
+            TrackerService service = plugin.getTrackerService();
+            if (!service.canShare(player, tracker)) {
+                player.sendMessage(plugin.getMessages().getPrefixed("itrak-share-owner-only"));
+                return;
+            }
+            UUID targetId = resolvePlayerId(targetName);
+            if (targetId == null) {
+                player.sendMessage(plugin.getMessages().getPrefixed("itrak-player-not-found",
+                        "name", targetName));
+                return;
+            }
+            if (targetId.equals(player.getUniqueId())) {
+                player.sendMessage(plugin.getMessages().getPrefixed("itrak-share-self"));
+                return;
+            }
+            service.share(tracker, player.getUniqueId(), targetId, targetName)
+                    .whenComplete((ok, error) -> plugin.getDataService().runSync(() -> {
+                        if (!player.isOnline()) {
+                            return;
+                        }
+                        if (error != null || !Boolean.TRUE.equals(ok)) {
+                            player.sendMessage(plugin.getMessages().getPrefixed("itrak-share-failed"));
+                            return;
+                        }
+                        player.sendMessage(plugin.getMessages().getPrefixed("itrak-shared",
+                                "name", tracker.getDisplayName(), "player", targetName));
+                    }));
+        }
+
+        @Override
+        public List<String> tabComplete(Player player, String[] args) {
+            if (args.length == 1) {
+                return trackerSuggestions(player, args[0]);
+            }
+            if (args.length == 2) {
+                return SubCommand.filterByPrefix(playerNames(), args[1]);
+            }
+            return List.of();
+        }
+    }
+
+    /** Отозвать доступ: снова только владелец. */
+    private static class UnshareCommand implements SubCommand {
+        @Override
+        public String name() {
+            return "unshare";
+        }
+
+        @Override
+        public String usage() {
+            return "/gps itrak unshare <код|id|имя> <игрок>";
+        }
+
+        @Override
+        public String permission() {
+            return "gps.itrak";
+        }
+
+        @Override
+        public void execute(Player player, String[] args) {
+            HahGpsPlugin plugin = HahGpsPlugin.getInstance();
+            if (args.length < 2) {
+                player.sendMessage(plugin.getMessages().getPrefixed("usage", "usage", usage()));
+                return;
+            }
+            String targetName = args[args.length - 1];
+            Tracker tracker = requireTracker(plugin, player, join(args, 0, args.length - 1));
+            if (tracker == null) {
+                return;
+            }
+            TrackerService service = plugin.getTrackerService();
+            if (!service.canShare(player, tracker)) {
+                player.sendMessage(plugin.getMessages().getPrefixed("itrak-share-owner-only"));
+                return;
+            }
+            UUID targetId = resolvePlayerId(targetName);
+            if (targetId == null) {
+                player.sendMessage(plugin.getMessages().getPrefixed("itrak-player-not-found",
+                        "name", targetName));
+                return;
+            }
+            service.unshare(tracker, targetId)
+                    .whenComplete((ok, error) -> plugin.getDataService().runSync(() -> {
+                        if (!player.isOnline()) {
+                            return;
+                        }
+                        if (error != null || !Boolean.TRUE.equals(ok)) {
+                            player.sendMessage(plugin.getMessages().getPrefixed("itrak-share-none",
+                                    "player", targetName));
+                            return;
+                        }
+                        player.sendMessage(plugin.getMessages().getPrefixed("itrak-unshared",
+                                "player", targetName));
+                    }));
+        }
+
+        @Override
+        public List<String> tabComplete(Player player, String[] args) {
+            if (args.length == 1) {
+                return trackerSuggestions(player, args[0]);
+            }
+            if (args.length == 2) {
+                return SubCommand.filterByPrefix(playerNames(), args[1]);
+            }
+            return List.of();
+        }
+    }
+
+    /** UUID игрока по нику: онлайн или известный серверу профиль. */
+    public static UUID resolvePlayerId(String name) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        Player online = Bukkit.getPlayerExact(name);
+        if (online != null) {
+            return online.getUniqueId();
+        }
+        try {
+            org.bukkit.OfflinePlayer offline = Bukkit.getOfflinePlayer(name);
+            return offline == null || !offline.hasPlayedBefore() ? null : offline.getUniqueId();
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
     private static class RouteCommand implements SubCommand {        @Override
         public String name() {
             return "route";
@@ -767,6 +989,15 @@ public class ItrakCommand implements SubCommand {
                 return;
             }
             TrackerService service = plugin.getTrackerService();
+            // С носителя-игрока трекер снимают только кисточкой (и админ
+            // правом): команда не должна обходить это правило.
+            boolean playerCarrier = tracker.isCarrierPlayer()
+                    || (tracker.getEntityUuid() != null
+                    && Bukkit.getPlayer(tracker.getEntityUuid()) != null);
+            if (playerCarrier && !player.hasPermission("gps.itrak.admin")) {
+                player.sendMessage(plugin.getMessages().getPrefixed("itrak-take-brush-only"));
+                return;
+            }
             if (!service.canTake(player, tracker)) {
                 Location location = tracker.getLocation();
                 double distance = location == null ? Double.MAX_VALUE
@@ -776,7 +1007,6 @@ public class ItrakCommand implements SubCommand {
                         "radius", String.valueOf((int) plugin.getConfigManager().getItrakTakeRadius())));
                 return;
             }
-            String name = tracker.getDisplayName();
             service.take(player, tracker).whenComplete((ok, error) ->
                     plugin.getDataService().runSync(() -> {
                         if (!player.isOnline()) {
@@ -786,7 +1016,9 @@ public class ItrakCommand implements SubCommand {
                             SubCommand.sendError(player, error);
                             return;
                         }
-                        player.sendMessage(plugin.getMessages().getPrefixed("itrak-taken", "name", name));
+                        // Та же короткая строка, что и у кисточки: подробности —
+                        // в подсказке при наведении.
+                        player.sendMessage(plugin.getTrackerService().trackerLine("itrak-taken", tracker));
                     }));
         }
 
@@ -1196,8 +1428,7 @@ public class ItrakCommand implements SubCommand {
             return List.of();
         }
         List<String> out = new ArrayList<>();
-        boolean admin = player.hasPermission("gps.itrak.admin");
-        for (Tracker tracker : admin ? service.all() : service.byOwner(player.getUniqueId())) {
+        for (Tracker tracker : service.accessible(player)) {
             out.add(tracker.getCode());
             out.add(String.valueOf(tracker.getId()));
             if (tracker.getName() != null && !tracker.getName().isBlank()) {

@@ -3,6 +3,7 @@ import ru.hahgps.model.Category;
 import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
 import ru.hahgps.model.Tracker;
+import ru.hahgps.model.TrackerShare;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -84,7 +85,28 @@ public interface StorageProvider extends AutoCloseable {
     /** Обновить координаты и состояние существующего трекера. */
     boolean updateTracker(Tracker tracker);
 
+    /**
+     * Обновить пачку трекеров одной транзакцией.
+     *
+     * Тик iTrak собирает изменившиеся трекеры и пишет их разом: раньше каждый
+     * трекер шёл отдельным UPDATE и отдельным обращением к пулу БД, и на
+     * десятках движущихся маячков пачка записей заметно занимала поток БД.
+     *
+     * @return сколько строк обновлено
+     */
+    int updateTrackers(java.util.Collection<Tracker> trackers);
+
     boolean deleteTracker(int id);
+
+    /** Кому владелец открыл доступ: {@code trackerId -> игроки}. */
+    java.util.Map<Integer, List<TrackerShare>> getTrackerShares();
+
+    /** Открыть доступ к трекеру (повторный вызов обновляет имя). */
+    boolean addTrackerShare(int trackerId, java.util.UUID playerId, String playerName,
+                            java.util.UUID addedBy);
+
+    /** Отозвать доступ. */
+    boolean removeTrackerShare(int trackerId, java.util.UUID playerId);
 
     /**
      * Зарезервировать блок порядковых номеров для кодов трекеров.

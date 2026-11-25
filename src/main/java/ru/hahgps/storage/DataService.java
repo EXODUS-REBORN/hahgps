@@ -3,6 +3,7 @@ import ru.hahgps.model.Category;
 import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
 import ru.hahgps.model.Tracker;
+import ru.hahgps.model.TrackerShare;
 import org.bukkit.Bukkit;
 import ru.hahgps.HahGpsPlugin;
 import java.util.ArrayList;
@@ -435,8 +436,31 @@ public class DataService {
         return async(() -> provider.updateTracker(tracker));
     }
 
+    /** Пачка изменений одной транзакцией: тик iTrak пишет её разом. */
+    public CompletableFuture<Integer> updateTrackers(java.util.Collection<Tracker> trackers) {
+        if (trackers == null || trackers.isEmpty()) {
+            return CompletableFuture.completedFuture(0);
+        }
+        java.util.List<Tracker> snapshot = new java.util.ArrayList<>(trackers);
+        return async(() -> provider.updateTrackers(snapshot));
+    }
+
     public CompletableFuture<Boolean> deleteTracker(int id) {
         return async(() -> provider.deleteTracker(id));
+    }
+
+    /** Доступы к трекерам — один запрос при старте. */
+    public CompletableFuture<Map<Integer, List<TrackerShare>>> getTrackerShares() {
+        return async(provider::getTrackerShares);
+    }
+
+    public CompletableFuture<Boolean> addTrackerShare(int trackerId, UUID playerId,
+                                                      String playerName, UUID addedBy) {
+        return async(() -> provider.addTrackerShare(trackerId, playerId, playerName, addedBy));
+    }
+
+    public CompletableFuture<Boolean> removeTrackerShare(int trackerId, UUID playerId) {
+        return async(() -> provider.removeTrackerShare(trackerId, playerId));
     }
 
     /** Блок порядковых номеров для уникальных кодов iTrak. */

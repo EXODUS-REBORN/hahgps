@@ -7,6 +7,7 @@ import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
 import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TrackerColor;
+import ru.hahgps.model.TrackerShare;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -122,7 +123,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     }
 
     /** Текущая версия схемы: растёт при миграциях. */
-    public static final int SCHEMA_VERSION = 7;
+    public static final int SCHEMA_VERSION = 8;
 
     private void createTables() throws SQLException {
         try (Statement st = connection.createStatement()) {
@@ -199,6 +200,17 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                     "placed_at BIGINT NOT NULL DEFAULT 0, " +
                     "moved_at BIGINT NOT NULL DEFAULT 0, " +
                     "updated_at BIGINT NOT NULL DEFAULT 0)");
+
+            // Схема v8: доступ к трекеру. Владелец открывает трекер другому
+            // игроку: тот видит его в списке, следит, строит маршрут и
+            // редактирует (имя/цвет), но новых игроков добавлять не может.
+            st.execute("CREATE TABLE IF NOT EXISTS tracker_shares (" +
+                    "tracker_id INTEGER NOT NULL, " +
+                    "player_uuid VARCHAR(36) NOT NULL, " +
+                    "player_name VARCHAR(64) NOT NULL DEFAULT '', " +
+                    "added_by VARCHAR(36), " +
+                    "added_at BIGINT NOT NULL DEFAULT 0, " +
+                    "PRIMARY KEY (tracker_id, player_uuid))");
 
             // Схема v6: статистика поиска мест. Строка на пару «место + игрок +
             // запрос»: популярность места считается по разным игрокам, а не по
@@ -284,7 +296,13 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 new ColumnAdd("updated_at", "BIGINT NOT NULL DEFAULT 0"),
                 new ColumnAdd("block_x", "INTEGER"),
                 new ColumnAdd("block_y", "INTEGER"),
-                new ColumnAdd("block_z", "INTEGER")));
+                new ColumnAdd("block_z", "INTEGER"),
+                new ColumnAdd("body_part", "VARCHAR(16)")));
+        spec.put("tracker_shares", List.of(
+                new ColumnAdd("player_uuid", "VARCHAR(36) NOT NULL DEFAULT ''"),
+                new ColumnAdd("player_name", "VARCHAR(64) NOT NULL DEFAULT ''"),
+                new ColumnAdd("added_by", "VARCHAR(36)"),
+                new ColumnAdd("added_at", "BIGINT NOT NULL DEFAULT 0")));
         spec.put("poi_search_stats", List.of(
                 new ColumnAdd("poi_id", "INTEGER NOT NULL DEFAULT 0"),
                 new ColumnAdd("player_uuid", "VARCHAR(36) NOT NULL DEFAULT ''"),
@@ -427,6 +445,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         createIndex("idx_pois_category", "pois", "category_id");
         createIndex("idx_graph_edges_world", "graph_edges", "world");
         createIndex("idx_trackers_owner", "trackers", "owner_uuid");
+        createIndex("idx_tracker_shares_player", "tracker_shares", "player_uuid");
         createIndex("idx_poi_search_poi", "poi_search_stats", "poi_id");
         // Один код — один установленный трекер. Старые базы могли обойтись без
         // уникальности, да и гонка двух установок не должна давать два ряда.
@@ -999,8 +1018,8 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
     public synchronized Tracker createTracker(Tracker tracker) {
         String sql = "INSERT INTO trackers (code, name, owner_uuid, owner_name, color, waterproof, " +
                 "world, x, y, z, entity_uuid, sunk, ruined, ruined_at, placed_at, moved_at, " +
-                "updated_at, block_x, block_y, block_z) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "updated_at, block_x, block_y, block_z, body_part) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try {
             ensureConnected();
             try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -1025,6 +1044,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 ps.setObject(18, support == null ? null : support.x());
                 ps.setObject(19, support == null ? null : support.y());
                 ps.setObject(20, support == null ? null : support.z());
+                ps.setString(21, tracker.getBodyPart());
                 ps.executeUpdate();
                 try (ResultSet rs = ps.getGeneratedKeys()) {
                     if (rs.next()) {
@@ -1035,6 +1055,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                                 tracker.getPlacedAt(), tracker.getMovedAt(), tracker.getUpdatedAt(),
                                 tracker.getSupportBlock());
                         created.setRuined(tracker.isRuined(), tracker.getRuinedAt());
+                        created.setBodyPart(tracker.getBodyPart());
                         return created;
                     }
                 }
@@ -1048,28 +1069,10 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
 
     @Override
     public synchronized boolean updateTracker(Tracker tracker) {
-        String sql = "UPDATE trackers SET name = ?, world = ?, x = ?, y = ?, z = ?, entity_uuid = ?, " +
-                "sunk = ?, ruined = ?, ruined_at = ?, moved_at = ?, updated_at = ?, " +
-                "block_x = ?, block_y = ?, block_z = ? WHERE id = ?";
         try {
             ensureConnected();
-            try (PreparedStatement ps = connection.prepareStatement(sql)) {
-                ps.setString(1, tracker.getName() == null ? "" : tracker.getName());
-                ps.setString(2, tracker.getWorld());
-                ps.setDouble(3, tracker.getX());
-                ps.setDouble(4, tracker.getY());
-                ps.setDouble(5, tracker.getZ());
-                ps.setString(6, tracker.getEntityUuid() == null ? null : tracker.getEntityUuid().toString());
-                ps.setInt(7, tracker.isSunk() ? 1 : 0);
-                ps.setInt(8, tracker.isRuined() ? 1 : 0);
-                ps.setLong(9, tracker.getRuinedAt());
-                ps.setLong(10, tracker.getMovedAt());
-                ps.setLong(11, tracker.getUpdatedAt());
-                Tracker.SupportBlock support = tracker.getSupportBlock();
-                ps.setObject(12, support == null ? null : support.x());
-                ps.setObject(13, support == null ? null : support.y());
-                ps.setObject(14, support == null ? null : support.z());
-                ps.setInt(15, tracker.getId());
+            try (PreparedStatement ps = prepareTrackerUpdate()) {
+                bindTrackerUpdate(ps, tracker);
                 return ps.executeUpdate() > 0;
             }
         } catch (SQLException e) {
@@ -1078,10 +1081,98 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
         }
     }
 
+    /**
+     * Пачка обновлений одной транзакцией и одним подготовленным запросом.
+     *
+     * Тик iTrak накапливает изменившиеся трекеры и пишет их разом: отдельные
+     * UPDATE и отдельные обращения к пулу БД на десятках маячков давали десятки
+     * фиксаций журнала SQLite подряд. Одна транзакция дешевле и по потоку БД,
+     * и по записи на диск.
+     */
+    @Override
+    public synchronized int updateTrackers(java.util.Collection<Tracker> batch) {
+        if (batch == null || batch.isEmpty()) {
+            return 0;
+        }
+        try {
+            ensureConnected();
+            boolean previousAutoCommit = connection.getAutoCommit();
+            if (batch.size() == 1) {
+                // Одиночное обновление не оборачиваем: лишняя фиксация дороже.
+                return updateTracker(batch.iterator().next()) ? 1 : 0;
+            }
+            connection.setAutoCommit(false);
+            try {
+                int updated = 0;
+                try (PreparedStatement ps = prepareTrackerUpdate()) {
+                    for (Tracker tracker : batch) {
+                        bindTrackerUpdate(ps, tracker);
+                        if (ps.executeUpdate() > 0) {
+                            updated++;
+                        }
+                    }
+                }
+                connection.commit();
+                return updated;
+            } catch (SQLException e) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackError) {
+                    e.addSuppressed(rollbackError);
+                }
+                throw e;
+            } finally {
+                try {
+                    connection.setAutoCommit(previousAutoCommit);
+                } catch (SQLException ignored) {
+                }
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to update trackers: " + batch.size(), e);
+        }
+    }
+
+    private PreparedStatement prepareTrackerUpdate() throws SQLException {
+        return connection.prepareStatement(
+                "UPDATE trackers SET name = ?, color = ?, world = ?, x = ?, y = ?, z = ?, " +
+                        "entity_uuid = ?, sunk = ?, ruined = ?, ruined_at = ?, moved_at = ?, updated_at = ?, " +
+                        "block_x = ?, block_y = ?, block_z = ?, body_part = ? WHERE id = ?");
+    }
+
+    private static void bindTrackerUpdate(PreparedStatement ps, Tracker tracker) throws SQLException {
+        ps.setString(1, tracker.getName() == null ? "" : tracker.getName());
+        ps.setString(2, tracker.getColor() == null ? "BLUE" : tracker.getColor().name());
+        ps.setString(3, tracker.getWorld());
+        ps.setDouble(4, tracker.getX());
+        ps.setDouble(5, tracker.getY());
+        ps.setDouble(6, tracker.getZ());
+        ps.setString(7, tracker.getEntityUuid() == null ? null : tracker.getEntityUuid().toString());
+        ps.setInt(8, tracker.isSunk() ? 1 : 0);
+        ps.setInt(9, tracker.isRuined() ? 1 : 0);
+        ps.setLong(10, tracker.getRuinedAt());
+        ps.setLong(11, tracker.getMovedAt());
+        ps.setLong(12, tracker.getUpdatedAt());
+        Tracker.SupportBlock support = tracker.getSupportBlock();
+        ps.setObject(13, support == null ? null : support.x());
+        ps.setObject(14, support == null ? null : support.y());
+        ps.setObject(15, support == null ? null : support.z());
+        ps.setString(16, tracker.getBodyPart());
+        ps.setInt(17, tracker.getId());
+    }
+
     @Override
     public synchronized boolean deleteTracker(int id) {
         try {
             ensureConnected();
+            // Доступ живёт вместе с трекером: отдельного каскада в старых базах
+            // нет, поэтому строки доступа убираем сами — иначе после удаления
+            // трекера в таблице копились бы «доступы» к несуществующему id.
+            try (PreparedStatement shares = connection.prepareStatement(
+                    "DELETE FROM tracker_shares WHERE tracker_id = ?")) {
+                shares.setInt(1, id);
+                shares.executeUpdate();
+            }
             try (PreparedStatement ps = connection.prepareStatement("DELETE FROM trackers WHERE id = ?")) {
                 ps.setInt(1, id);
                 return ps.executeUpdate() > 0;
@@ -1090,6 +1181,81 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
             markStale();
             throw new RuntimeException("Failed to delete tracker: " + id, e);
         }
+    }
+
+    @Override
+    public synchronized Map<Integer, List<TrackerShare>> getTrackerShares() {
+        Map<Integer, List<TrackerShare>> out = new HashMap<>();
+        try {
+            ensureConnected();
+            try (Statement st = connection.createStatement();
+                 ResultSet rs = st.executeQuery(
+                         "SELECT tracker_id, player_uuid, player_name FROM tracker_shares ORDER BY tracker_id")) {
+                while (rs.next()) {
+                    UUID player = parseUuid(rs.getString("player_uuid"));
+                    if (player == null) {
+                        continue;
+                    }
+                    out.computeIfAbsent(rs.getInt("tracker_id"), key -> new ArrayList<>())
+                            .add(new TrackerShare(player, rs.getString("player_name")));
+                }
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to load tracker shares", e);
+        }
+        return out;
+    }
+
+    @Override
+    public synchronized boolean addTrackerShare(int trackerId, UUID playerId, String playerName, UUID addedBy) {
+        if (playerId == null) {
+            return false;
+        }
+        try {
+            ensureConnected();
+            try (PreparedStatement ps = connection.prepareStatement(upsertTrackerShareSql())) {
+                ps.setInt(1, trackerId);
+                ps.setString(2, playerId.toString());
+                ps.setString(3, playerName == null ? "" : playerName);
+                ps.setString(4, addedBy == null ? null : addedBy.toString());
+                ps.setLong(5, System.currentTimeMillis());
+                ps.executeUpdate();
+                return true;
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to add tracker share", e);
+        }
+    }
+
+    @Override
+    public synchronized boolean removeTrackerShare(int trackerId, UUID playerId) {
+        if (playerId == null) {
+            return false;
+        }
+        try {
+            ensureConnected();
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "DELETE FROM tracker_shares WHERE tracker_id = ? AND player_uuid = ?")) {
+                ps.setInt(1, trackerId);
+                ps.setString(2, playerId.toString());
+                return ps.executeUpdate() > 0;
+            }
+        } catch (SQLException e) {
+            markStale();
+            throw new RuntimeException("Failed to remove tracker share", e);
+        }
+    }
+
+    private String upsertTrackerShareSql() {
+        if (mysql) {
+            return "INSERT INTO tracker_shares (tracker_id, player_uuid, player_name, added_by, added_at) " +
+                    "VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE player_name = VALUES(player_name)";
+        }
+        return "INSERT INTO tracker_shares (tracker_id, player_uuid, player_name, added_by, added_at) " +
+                "VALUES (?, ?, ?, ?, ?) " +
+                "ON CONFLICT(tracker_id, player_uuid) DO UPDATE SET player_name = excluded.player_name";
     }
 
     private Tracker mapTracker(ResultSet rs) throws SQLException {
@@ -1119,6 +1285,7 @@ public abstract class AbstractSqlStorageProvider implements StorageProvider {
                 rs.getLong("updated_at"),
                 support);
         tracker.setRuined(rs.getInt("ruined") == 1, rs.getLong("ruined_at"));
+        tracker.setBodyPart(rs.getString("body_part"));
         return tracker;
     }
 
