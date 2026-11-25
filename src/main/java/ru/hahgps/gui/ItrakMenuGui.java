@@ -127,8 +127,10 @@ public class ItrakMenuGui extends GuiScreen {
         if (service == null) {
             return;
         }
-        boolean admin = player.hasPermission("gps.itrak.admin");
-        trackers = admin ? service.all() : service.byOwner(player.getUniqueId());
+        // Свои и те, к которым владелец открыл доступ: такой трекер виден,
+        // следится, переименовывается и перекрашивается, но новых игроков
+        // добавлять в него нельзя.
+        trackers = service.accessible(player);
     }
 
     private void buildPage() {
@@ -186,6 +188,9 @@ public class ItrakMenuGui extends GuiScreen {
             String carrier = service.carrierName(tracker);
             if (carrier != null) {
                 lines.add(comp("gui.lore-itrak-carrier", "name", carrier));
+            }
+            if (tracker.part() != null) {
+                lines.add(comp("gui.lore-itrak-part", "part", service.partText(tracker)));
             }
             // Сигнал уже посчитан выше: statusText/stateText по нему, без
             // повторного поиска сущности и записи «последнего места».

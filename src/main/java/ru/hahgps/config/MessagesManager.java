@@ -17,7 +17,7 @@ public class MessagesManager {
      * messages_ru.yml уже лежит (он не перезаписывается, пока версия файла
      * не ниже текущей). Старая копия сохраняется рядом как {@code .bak}.
      */
-    public static final int PALETTE_VERSION = 18;
+    public static final int PALETTE_VERSION = 19;
 
     private final HahGpsPlugin plugin;
     private volatile YamlConfiguration messages;

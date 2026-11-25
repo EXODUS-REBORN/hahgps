@@ -31,10 +31,30 @@ public final class UpdaterService {
     static final String JAR_PREFIX = "hahgps";
     private final HahGpsPlugin plugin;
     private final UpdateAnnouncer announcer;
-    private final HttpClient http = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
+    /**
+     * HttpClient строится лениво, при первом фоновом запросе. Раньше он
+     * создавался в конструкторе, а конструктор зовётся при включении плагина
+     * в главном потоке: холодная инициализация java.net.http стоит 2–8 секунд
+     * и целиком уходила в скачок MSPT при /reload и /gps update reload.
+     */
+    private volatile HttpClient http;
+
+    private HttpClient http() {
+        HttpClient client = http;
+        if (client == null) {
+            synchronized (this) {
+                client = http;
+                if (client == null) {
+                    client = HttpClient.newBuilder()
+                            .connectTimeout(Duration.ofSeconds(10))
+                            .followRedirects(HttpClient.Redirect.NEVER)
+                            .build();
+                    http = client;
+                }
+            }
+        }
+        return client;
+    }
     private volatile boolean enabled = true;
     private volatile String repo = "";
     private volatile boolean allowPrerelease;
@@ -449,7 +469,7 @@ public final class UpdaterService {
 
     private Release fetchLatest() throws IOException, InterruptedException {
         HttpRequest request = api("/repos/" + repo + "/releases?per_page=20").GET().build();
-        HttpResponse<String> response = http.send(request,
+        HttpResponse<String> response = http().send(request,
                 HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         int code = response.statusCode();
         if (code == 404) {
@@ -595,7 +615,7 @@ public final class UpdaterService {
                 .timeout(Duration.ofMinutes(5))
                 .GET()
                 .build();
-        HttpResponse<Path> response = http.send(request, HttpResponse.BodyHandlers.ofFile(tmp));
+        HttpResponse<Path> response = http().send(request, HttpResponse.BodyHandlers.ofFile(tmp));
         followAssetRedirect(response, tmp);
     }
 
@@ -617,7 +637,7 @@ public final class UpdaterService {
                     .header("User-Agent", "hahgps-updater")
                     .GET()
                     .build();
-            HttpResponse<Path> second = http.send(follow, HttpResponse.BodyHandlers.ofFile(tmp));
+            HttpResponse<Path> second = http().send(follow, HttpResponse.BodyHandlers.ofFile(tmp));
             if (second.statusCode() != 200) {
                 throw new IOException("скачивание: HTTP " + second.statusCode());
             }

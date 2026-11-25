@@ -11,6 +11,7 @@ import ru.hahgps.model.Poi;
 import ru.hahgps.model.Route;
 import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TrackerColor;
+import ru.hahgps.model.TrackerShare;
 import ru.hahgps.model.TransportType;
 import ru.hahgps.testsupport.FakeWorld;
 
@@ -223,6 +224,48 @@ class SqliteStorageProviderTest {
     }
 
     @Test
+    void bodyPartColorAndSharesSurviveRoundTrip() {
+        long now = 1_700_000_000_000L;
+        UUID owner = UUID.randomUUID();
+        Tracker tracker = new Tracker(0, "TRK-PART", "На зомби", TrackerColor.GREEN, false,
+                owner, "owner", "world", 1.5, 70.0, 2.5, UUID.randomUUID(), false, now, now, now);
+        tracker.setBodyPart("right-arm");
+        Tracker created = provider.createTracker(tracker);
+        assertNotNull(created);
+        assertEquals("right-arm", created.getBodyPart());
+
+        Tracker saved = provider.getTrackers().get(0);
+        assertEquals("right-arm", saved.getBodyPart());
+        assertEquals(ru.hahgps.model.BodyPart.RIGHT_ARM, saved.part());
+
+        // Цвет — изменяемая часть записи: доступ к трекеру даёт и смену цвета.
+        Tracker recolored = provider.getTrackers().get(0);
+        recolored.setColor(TrackerColor.PURPLE);
+        assertTrue(provider.updateTracker(recolored));
+        assertEquals(TrackerColor.PURPLE, provider.getTrackers().get(0).getColor());
+
+        // Доступ: добавили, пережил перезагрузку, отозвали, и вместе с
+        // трекером ушли и сами строки доступа.
+        UUID friend = UUID.randomUUID();
+        assertTrue(provider.addTrackerShare(created.getId(), friend, "friend", owner));
+        Map<Integer, List<TrackerShare>> shares = provider.getTrackerShares();
+        assertEquals(1, shares.size());
+        assertEquals(friend, shares.get(created.getId()).get(0).playerId());
+        assertEquals("friend", shares.get(created.getId()).get(0).playerName());
+
+        // Повторная выдача — не дубль, а обновление имени.
+        assertTrue(provider.addTrackerShare(created.getId(), friend, "friend2", owner));
+        assertEquals(1, provider.getTrackerShares().get(created.getId()).size());
+
+        assertTrue(provider.removeTrackerShare(created.getId(), friend));
+        assertTrue(provider.getTrackerShares().isEmpty());
+
+        assertTrue(provider.addTrackerShare(created.getId(), friend, "friend", owner));
+        assertTrue(provider.deleteTracker(created.getId()));
+        assertTrue(provider.getTrackerShares().isEmpty(), "доступы уходят вместе с трекером");
+    }
+
+    @Test
     void ruinedTrackerKeepsItsFlagAndLastSeenTime() {
         long now = 1_700_000_000_000L;
         Tracker tracker = new Tracker(0, "TRK-RUIN", "Мокрый", TrackerColor.BLUE, false,
@@ -296,6 +339,30 @@ class SqliteStorageProviderTest {
         assertTrue(provider.updateTracker(saved));
         assertNull(provider.getTrackers().get(0).getSupportBlock(),
                 "снятая опора тоже сохраняется — иначе трекер снова прилипнет к блоку");
+    }
+
+    @Test
+    void trackerBatchUpdateWritesEveryRow() {
+        Tracker first = new Tracker(0, "TRK-BATCH1", "", TrackerColor.BLUE, false,
+                UUID.randomUUID(), "tester", "world", 0, 64, 0, null, false, 1L, 1L, 1L);
+        Tracker second = new Tracker(0, "TRK-BATCH2", "", TrackerColor.GREEN, false,
+                UUID.randomUUID(), "tester", "world", 0, 64, 0, null, false, 1L, 1L, 1L);
+        provider.createTracker(first);
+        provider.createTracker(second);
+
+        List<Tracker> stored = provider.getTrackers();
+        for (Tracker tracker : stored) {
+            tracker.moveTo(tracker.getX() + 10, tracker.getY() + 2, tracker.getZ(), System.currentTimeMillis());
+        }
+        assertEquals(2, provider.updateTrackers(stored), "пачка пишет все строки одной транзакцией");
+
+        Map<String, Tracker> byCode = new java.util.HashMap<>();
+        for (Tracker tracker : provider.getTrackers()) {
+            byCode.put(tracker.getCode(), tracker);
+        }
+        assertEquals(10, byCode.get("TRK-BATCH1").getX(), 0.0001);
+        assertEquals(10, byCode.get("TRK-BATCH2").getX(), 0.0001);
+        assertEquals(0, provider.updateTrackers(List.of()), "пустая пачка ничего не делает");
     }
 
     @Test

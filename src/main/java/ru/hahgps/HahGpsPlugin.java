@@ -24,11 +24,17 @@ import ru.hahgps.update.HotSwap;
 import ru.hahgps.update.DevChannel;
 import ru.hahgps.update.UpdaterService;
 import ru.hahgps.util.ConsoleBanner;
+import ru.hahgps.util.StartupTimer;
 import java.io.File;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 
 public class HahGpsPlugin extends JavaPlugin {
+
+    /** Результат стартовой загрузки iTrak: трекеры и открытые к ним доступы. */
+    private record TrackerLoad(java.util.List<Tracker> trackers,
+                               java.util.Map<Integer, java.util.List<ru.hahgps.model.TrackerShare>> shares) {
+    }
 
     private static HahGpsPlugin instance;
 
@@ -70,11 +76,14 @@ public class HahGpsPlugin extends JavaPlugin {
     public void onEnable() {
         instance = this;
         stopping = false;
+        StartupTimer timer = new StartupTimer("включение (onEnable)");
 
         configManager = new ConfigManager(this);
         configManager.load();
+        timer.phase("конфиг");
         messagesManager = new MessagesManager(this);
         messagesManager.load(configManager.getLanguage());
+        timer.phase("сообщения");
 
         // Пак собирает и раздаёт панель EXODUS(OS) — плагин только сообщает
         // клиенту ссылку, сам ничего не хранит и не хостит.
@@ -83,8 +92,10 @@ public class HahGpsPlugin extends JavaPlugin {
 
         registerPendingCommand();
         registerPendingItrakCommand();
+        timer.phase("команды");
 
         initStorage();
+        timer.report(this);
     }
 
     private void registerPendingCommand() {
@@ -248,6 +259,7 @@ public class HahGpsPlugin extends JavaPlugin {
         if (!isEnabled()) {
             return;
         }
+        StartupTimer timer = new StartupTimer("включение");
         try {
             poiService = new PoiService(dataService);
             categoryService = new CategoryService(dataService);
@@ -267,6 +279,7 @@ public class HahGpsPlugin extends JavaPlugin {
             routeRecordingService = new RouteRecordingService();
             trackerService = new TrackerService(this, dataService);
             commandManager = new CommandManager(this);
+            timer.phase("сервисы");
             ru.hahgps.util.CmdLink.texts(key -> {
                 ru.hahgps.config.MessagesManager msgs = messagesManager;
                 if (msgs == null) return null;
@@ -291,13 +304,22 @@ public class HahGpsPlugin extends JavaPlugin {
                 getLogger().log(Level.WARNING, "HahGps: трекеры iTrak не загрузились", error);
                 return java.util.List.<Tracker>of();
             });
-            trackersFuture.thenAccept(loadedTrackers -> Bukkit.getScheduler().runTask(this, () -> {
-                if (!isEnabled() || stopping || trackerService == null) {
-                    return;
-                }
-                trackerService.load(loadedTrackers);
-                trackerService.start();
-            }));
+            // Доступы к трекерам грузим вместе с ними: без этого после рестарта
+            // игрок, которому открыли трекер, видел бы его только после
+            // повторной выдачи доступа.
+            var sharesFuture = dataService.getTrackerShares().exceptionally(error -> {
+                getLogger().log(Level.WARNING, "HahGps: доступы к трекерам iTrak не загрузились", error);
+                return java.util.Map.<Integer, java.util.List<ru.hahgps.model.TrackerShare>>of();
+            });
+            trackersFuture.thenCombine(sharesFuture, TrackerLoad::new)
+                    .thenAccept(loaded -> Bukkit.getScheduler().runTask(this, () -> {
+                        if (!isEnabled() || stopping || trackerService == null) {
+                            return;
+                        }
+                        trackerService.load(loaded.trackers(), loaded.shares());
+                        trackerService.start();
+                    }));
+            timer.phase("трекеры");
 
             categoryService.seedDefaults(configManager.getDefaultCategories())
                     .whenComplete((v, error) -> {
@@ -328,6 +350,7 @@ public class HahGpsPlugin extends JavaPlugin {
                     return commandManager.onTabComplete(sender, command, "gps", full);
                 });
             }
+            timer.phase("команды");
 
             // Отложенная регистрация слушателей и запуск таймеров: регистрация
             // событий и создание задач в главном потоке дают вклад в скачок MSPT
@@ -366,9 +389,13 @@ public class HahGpsPlugin extends JavaPlugin {
                 }
             }, 4L);
 
-            initUpdater();
+            // Обновлятор запускаем последним и вне главного потока: первый
+            // запрос к GitHub поднимает java.net.http (2–8 с на холодную), и
+            // раньше это целиком попадало в тик сервера при каждом /reload.
+            Bukkit.getScheduler().runTaskLater(this, this::initUpdater, 6L);
 
             ConsoleBanner.printBanner(this, getPluginMeta().getVersion());
+            timer.report(this);
             getLogger().info("HahGps enabled. Storage: " + configManager.getStorageType());
         } catch (Throwable t) {
             getLogger().log(Level.SEVERE, "HahGps: startup failed", t);
@@ -377,21 +404,29 @@ public class HahGpsPlugin extends JavaPlugin {
     }
 
     private void initUpdater() {
-
-        UpdaterService.ensureTokenFile(this);
-        DevChannel.ensureKeyFile(this);
-        HotSwap.prime();
-        updater = new UpdaterService(this);
-        updater.start();
-        devChannel = new DevChannel(this);
-        devChannel.start();
-
-        HotSwap.announceLastResult(this, updater.announcer());
+        if (!isEnabled() || stopping) {
+            return;
+        }
+        try {
+            UpdaterService.ensureTokenFile(this);
+            DevChannel.ensureKeyFile(this);
+            HotSwap.prime();
+            UpdaterService next = new UpdaterService(this);
+            next.start();
+            updater = next;
+            DevChannel channel = new DevChannel(this);
+            channel.start();
+            devChannel = channel;
+            HotSwap.announceLastResult(this, next.announcer());
+        } catch (Throwable t) {
+            getLogger().log(Level.WARNING, "HahGps: не удалось запустить обновление", t);
+        }
     }
 
     @Override
     public void onDisable() {
         stopping = true;
+        StartupTimer timer = new StartupTimer("выключение");
 
         UpdaterService service = updater;
         updater = null;
@@ -403,6 +438,7 @@ public class HahGpsPlugin extends JavaPlugin {
         if (channel != null) {
             channel.stop();
         }
+        timer.phase("обновление");
 
         if (visualizationTask != null) {
             try {
@@ -419,6 +455,7 @@ public class HahGpsPlugin extends JavaPlugin {
         } catch (Throwable t) {
             getLogger().log(Level.WARNING, "HahGps: tracker stop failed", t);
         }
+        timer.phase("трекеры");
         try {
             if (navigationService != null) {
                 navigationService.stop();
@@ -447,6 +484,7 @@ public class HahGpsPlugin extends JavaPlugin {
         } catch (Throwable t) {
             getLogger().log(Level.WARNING, "HahGps: GUI cleanup failed", t);
         }
+        timer.phase("остановка");
 
 
         DataService data = dataService;
@@ -457,6 +495,7 @@ public class HahGpsPlugin extends JavaPlugin {
                 getLogger().log(Level.WARNING, "HahGps: storage shutdown failed", t);
             }
         }
+        timer.phase("хранилище");
         // Провайдер закрываем отдельным if, а не else-if: если shutdown()
         // бросил, соединение всё равно должно закрыться.
         if (storageProvider != null) {
@@ -486,6 +525,7 @@ public class HahGpsPlugin extends JavaPlugin {
         }
 
         getLogger().info("HahGps disabled.");
+        timer.report(this);
     }
 
     public static HahGpsPlugin getInstance() {

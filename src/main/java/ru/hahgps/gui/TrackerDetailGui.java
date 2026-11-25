@@ -13,11 +13,13 @@ import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.command.subcommands.ItrakCommand;
 import ru.hahgps.item.ItemIds;
 import ru.hahgps.model.Tracker;
+import ru.hahgps.model.TrackerColor;
 import ru.hahgps.service.TrackerService;
 import ru.hahgps.util.LocationUtil;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Карточка трекера: живые координаты, статус, кнопки маршрута и слежения.
@@ -158,21 +160,30 @@ public class TrackerDetailGui extends GuiScreen {
                 ItemIds.ITRAK_WATCH));
 
         if (service.canManage(player, tracker)) {
-            // Карта из карточки убрана: маршрут, переименование и удаление —
-            // всё, что нужно от трекера, находится здесь же.
+            // Кнопки «Подобрать» здесь больше нет: трекер снимают только
+            // кисточкой (и только так — с игрока). Вместо неё — цвет, доступ
+            // и удаление: маршрут, слежение и имя остались на месте.
             inventory.setItem(13, GuiUtil.item(Material.NAME_TAG,
                     comp("gui.itrak-rename"),
                     List.of(comp("gui.lore-itrak-rename")),
                     ItemIds.ITRAK_RENAME));
+            inventory.setItem(14, GuiUtil.item(Material.INK_SAC,
+                    comp("gui.itrak-color"),
+                    List.of(comp("gui.lore-itrak-color"),
+                            comp("gui.lore-itrak-color-now",
+                                    "color", plugin.getMessages().get(tracker.getColor().messageKey()))),
+                    ItemIds.ITRAK_DETAIL));
         }
 
-        boolean canTake = service.canManage(player, tracker) && service.canTake(player, tracker);
-        inventory.setItem(14, GuiUtil.item(canTake ? Material.CHEST : Material.BARRIER,
-                comp(canTake ? "gui.itrak-take" : "gui.itrak-take-far"),
-                List.of(comp(canTake ? "gui.lore-itrak-take" : "gui.lore-itrak-take-far")),
-                ItemIds.ITRAK_TAKE));
-
-        if (service.canManage(player, tracker)) {
+        if (service.canShare(player, tracker)) {
+            inventory.setItem(15, GuiUtil.item(Material.WRITABLE_BOOK,
+                    comp("gui.itrak-share"),
+                    List.of(comp("gui.lore-itrak-share"),
+                            comp("gui.lore-itrak-share-list",
+                                    "players", shareListText(service, tracker))),
+                    ItemIds.ITRAK_WATCH));
+            // Удаление не возвращает предмет: трекер остаётся там, где стоит,
+            // и просто исчезает из списка владельца.
             inventory.setItem(16, GuiUtil.item(Material.LAVA_BUCKET,
                     comp("gui.itrak-delete"),
                     List.of(comp("gui.lore-itrak-delete")),
@@ -203,6 +214,9 @@ public class TrackerDetailGui extends GuiScreen {
                 lines.add(comp("gui.lore-itrak-carrier", "name", carrier));
             }
             lines.add(comp("gui.lore-itrak-code", "code", tracker.getCode()));
+            if (tracker.part() != null) {
+                lines.add(comp("gui.lore-itrak-part", "part", service.partText(tracker)));
+            }
             lines.add(comp("gui.lore-itrak-status", "status", service.statusText(signal, tracker)));
             lines.add(comp("gui.lore-itrak-state", "state", service.stateText(signal, tracker, now)));
             if (tracker.isRuined()) {
@@ -250,6 +264,92 @@ public class TrackerDetailGui extends GuiScreen {
         return icon;
     }
 
+    /** Кнопка доступа: ЛКМ — добавить игрока, ПКМ — отозвать. */
+    private void nudgeShare(HahGpsPlugin plugin, Player player, Tracker tracker,
+                            ClickType clickType, int id, String name) {
+        TrackerService service = plugin.getTrackerService();
+        if (clickType.isRightClick()) {
+            InputManager.getInstance().request(player,
+                    plugin.getMessages().getPrefixed("input-itrak-unshare", "name", name),
+                    input -> {
+                        UUID target = ItrakCommand.resolvePlayerId(input);
+                        if (target == null) {
+                            player.sendMessage(plugin.getMessages().getPrefixed("itrak-player-not-found",
+                                    "name", input));
+                            return;
+                        }
+                        Tracker live = service.byId(id);
+                        if (live == null) {
+                            return;
+                        }
+                        service.unshare(live, target).whenComplete((ok, error) ->
+                                plugin.getDataService().runSync(() -> {
+                                    if (!player.isOnline()) {
+                                        return;
+                                    }
+                                    if (error != null || !Boolean.TRUE.equals(ok)) {
+                                        player.sendMessage(plugin.getMessages().getPrefixed(
+                                                "itrak-share-none", "player", input));
+                                        return;
+                                    }
+                                    player.sendMessage(plugin.getMessages().getPrefixed(
+                                            "itrak-unshared", "player", input));
+                                    new TrackerDetailGui(player, id, listPage).open();
+                                }));
+                    });
+            return;
+        }
+        InputManager.getInstance().request(player,
+                plugin.getMessages().getPrefixed("input-itrak-share", "name", name),
+                input -> {
+                    UUID target = ItrakCommand.resolvePlayerId(input);
+                    if (target == null) {
+                        player.sendMessage(plugin.getMessages().getPrefixed("itrak-player-not-found",
+                                "name", input));
+                        return;
+                    }
+                    Tracker live = service.byId(id);
+                    if (live == null) {
+                        return;
+                    }
+                    if (target.equals(player.getUniqueId())) {
+                        player.sendMessage(plugin.getMessages().getPrefixed("itrak-share-self"));
+                        return;
+                    }
+                    service.share(live, player.getUniqueId(), target, input)
+                            .whenComplete((ok, error) -> plugin.getDataService().runSync(() -> {
+                                if (!player.isOnline()) {
+                                    return;
+                                }
+                                if (error != null || !Boolean.TRUE.equals(ok)) {
+                                    player.sendMessage(plugin.getMessages().getPrefixed(
+                                            "itrak-share-failed"));
+                                    return;
+                                }
+                                player.sendMessage(plugin.getMessages().getPrefixed("itrak-shared",
+                                        "name", name, "player", input));
+                                new TrackerDetailGui(player, id, listPage).open();
+                            }));
+                });
+    }
+
+    /** Кому уже открыт доступ — строкой для лора кнопки. */
+    private String shareListText(TrackerService service, Tracker tracker) {
+        List<ru.hahgps.model.TrackerShare> shared = service.shareList(tracker);
+        if (shared.isEmpty()) {
+            return HahGpsPlugin.getInstance().getMessages().get("itrak-share-none-list");
+        }
+        StringBuilder out = new StringBuilder();
+        for (ru.hahgps.model.TrackerShare share : shared) {
+            if (out.length() > 0) {
+                out.append(", ");
+            }
+            out.append(share.playerName() == null || share.playerName().isBlank()
+                    ? share.playerId().toString().substring(0, 8) : share.playerName());
+        }
+        return out.toString();
+    }
+
     @Override
     public void onClick(int slot, ClickType clickType) {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
@@ -283,6 +383,43 @@ public class TrackerDetailGui extends GuiScreen {
                 GuiTheme.click(player);
                 refresh();
             }
+            case 14 -> {
+                if (!service.canManage(player, tracker)) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
+                    GuiTheme.deny(player);
+                    return;
+                }
+                TrackerColor[] colors = TrackerColor.values();
+                int current = 0;
+                for (int i = 0; i < colors.length; i++) {
+                    if (colors[i] == tracker.getColor()) {
+                        current = i;
+                        break;
+                    }
+                }
+                int step = clickType.isRightClick() ? colors.length - 1 : 1;
+                TrackerColor next = colors[(current + step) % colors.length];
+                if (!service.recolor(tracker, next)) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("itrak-color-same"));
+                    GuiTheme.deny(player);
+                    return;
+                }
+                player.sendMessage(plugin.getMessages().getPrefixed("itrak-color-changed",
+                        "color", plugin.getMessages().get(next.messageKey())));
+                GuiTheme.click(player);
+                refresh();
+            }
+            case 15 -> {
+                if (!service.canShare(player, tracker)) {
+                    player.sendMessage(plugin.getMessages().getPrefixed("itrak-share-owner-only"));
+                    GuiTheme.deny(player);
+                    return;
+                }
+                int id = tracker.getId();
+                String name = tracker.getDisplayName();
+                player.closeInventory();
+                nudgeShare(plugin, player, tracker, clickType, id, name);
+            }
             case 13 -> {
                 if (!service.canManage(player, tracker)) {
                     player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
@@ -300,33 +437,9 @@ public class TrackerDetailGui extends GuiScreen {
                         });
                 GuiTheme.click(player);
             }
-            case 14 -> {
-                if (!service.canManage(player, tracker) || !service.canTake(player, tracker)) {
-                    GuiTheme.deny(player);
-                    return;
-                }
-                String name = tracker.getDisplayName();
-                player.closeInventory();
-                service.take(player, tracker).whenComplete((ok, error) ->
-                        plugin.getDataService().runSync(() -> {
-                            if (!player.isOnline()) {
-                                return;
-                            }
-                            if (error != null) {
-                                reportError(error);
-                                return;
-                            }
-                            player.sendMessage(plugin.getMessages().getPrefixed("itrak-taken", "name", name));
-                        }));
-            }
             case 16 -> {
-                if (!service.canManage(player, tracker)) {
+                if (!service.canShare(player, tracker)) {
                     player.sendMessage(plugin.getMessages().getPrefixed("no-permission"));
-                    GuiTheme.deny(player);
-                    return;
-                }
-                if (!clickType.isShiftClick()) {
-                    player.sendMessage(plugin.getMessages().getPrefixed("itrak-delete-hint"));
                     GuiTheme.deny(player);
                     return;
                 }
@@ -341,7 +454,10 @@ public class TrackerDetailGui extends GuiScreen {
                                 reportError(error);
                                 return;
                             }
-                            player.sendMessage(plugin.getMessages().getPrefixed("itrak-removed", "name", name));
+                            // Удаление из меню — это «убрать из моих»: предмет
+                            // не возвращается, трекер остаётся там, где стоял.
+                            player.sendMessage(plugin.getMessages().getPrefixed("itrak-unlisted",
+                                    "name", name));
                         }));
             }
             case NAV_CLOSE_SMALL -> player.closeInventory();
