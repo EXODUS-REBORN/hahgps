@@ -76,9 +76,9 @@ public class HahGpsPlugin extends JavaPlugin {
         messagesManager = new MessagesManager(this);
         messagesManager.load(configManager.getLanguage());
 
-        // Ресурспак не навязывается при входе: сервис только готовит раздачу,
-        // а отправляет пак команда /gps pack.
-        resourcePackService = new ResourcePackService(this, configManager, messagesManager);
+        // Пак собирает и раздаёт панель EXODUS(OS) — плагин только сообщает
+        // клиенту ссылку, сам ничего не хранит и не хостит.
+        resourcePackService = new ResourcePackService(this, configManager);
         resourcePackService.start();
 
         registerPendingCommand();
@@ -267,6 +267,24 @@ public class HahGpsPlugin extends JavaPlugin {
             routeRecordingService = new RouteRecordingService();
             trackerService = new TrackerService(this, dataService);
             commandManager = new CommandManager(this);
+            ru.hahgps.util.CmdLink.texts(key -> {
+                ru.hahgps.config.MessagesManager msgs = messagesManager;
+                if (msgs == null) return null;
+                String text = msgs.get(key);
+                return text.startsWith("Missing:") || text.contains("Missing:") ? null : text;
+            });
+            ru.hahgps.util.CmdLink.describer(command -> {
+                ru.hahgps.config.MessagesManager msgs = messagesManager;
+                if (msgs == null) return "";
+                String path = command == null ? "" : command.trim();
+                while (path.startsWith("/")) path = path.substring(1);
+                String[] parts = path.split("\\s+");
+                if (parts.length < 2) return "";
+                String top = parts[1].toLowerCase(java.util.Locale.ROOT);
+                String text = msgs.get("help-" + top, "description", "");
+                if (text == null || text.contains("Missing:") || text.isBlank()) return "";
+                return text;
+            });
             initTrackerCodes();
 
             var trackersFuture = dataService.getTrackers().exceptionally(error -> {
@@ -392,14 +410,6 @@ public class HahGpsPlugin extends JavaPlugin {
             } catch (Throwable ignored) {
             }
             visualizationTask = null;
-        }
-
-        try {
-            if (resourcePackService != null) {
-                resourcePackService.stop();
-            }
-        } catch (Throwable t) {
-            getLogger().log(Level.WARNING, "HahGps: resource pack stop failed", t);
         }
 
         try {

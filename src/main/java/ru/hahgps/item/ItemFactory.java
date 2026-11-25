@@ -102,7 +102,7 @@ public final class ItemFactory {
                     "ПКМ в воздух — бросить")) + "</gray>"));
             lore.add(GuiTheme.mm("<#66aaff>▸ </#66aaff><gray>"
                     + GuiTheme.escapeForMini(message("itrak-item-hint-remove",
-                    "ПКМ пустой рукой — снять")) + "</gray>"));
+                    "ПКМ кисточкой — снять")) + "</gray>"));
             meta.lore(lore);
 
             meta.setCustomModelData(ItemIds.tracker(color, spec.waterproof()));

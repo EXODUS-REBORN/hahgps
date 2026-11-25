@@ -19,12 +19,13 @@ HahGPS — плагин навигации для Minecraft сервера (Pape
 ru.hahgps
 ├── HahGpsPlugin.java          — главный класс плагина, точка входа
 ├── command/                   — система команд
-│   ├── CommandManager.java    — диспетчер команд /gps
+│   ├── CommandManager.java    — диспетчер команд /gps (алиас /g, ввод параметров)
 │   ├── SubCommand.java        — интерфейс подкоманд
 │   └── subcommands/           — реализации подкоманд
 ├── config/                    — конфигурация
 │   ├── ConfigManager.java     — доступ к config.yml
-│   └── MessagesManager.java   — локализация (messages_ru/en.yml)
+│   └── MessagesManager.java   — локализация (messages_ru/en.yml); чат идёт через CmdLink
+│                                (команды в тексте становятся кнопками)
 ├── item/                      — предметы и кастомные ID моделей
 │   ├── ItemIds.java           — CustomModelData всех предметов (ресурспак)
 │   ├── ItemFactory.java       — iTrak и локатор (с радиусом); PDC-данные
@@ -63,6 +64,7 @@ ru.hahgps
 │   ├── TrackerColor.java      — 8 цветов трекера
 │   └── TransportType.java     — тип транспорта
 ├── service/                   — бизнес-логика
+│   ├── ResourcePackService.java — ссылка на пак панели EXODUS(OS) (файл не хостим)
 │   ├── CategoryService.java   — операции с категориями
 │   ├── GraphService.java      — владелец дорожного графа (copy-on-write)
 │   ├── HudService.java        — интеграция с ItemsAdder HUD
@@ -71,7 +73,6 @@ ru.hahgps
 │   ├── WalkGrid.java          — A* по клеткам мира (обход стен, без Bukkit)
 │   ├── WalkPathService.java   — пеший маршрут по блокам в главном потоке порциями
 │   ├── PoiService.java        — операции с точками
-│   ├── ResourcePackService.java — раздача hahgps.zip по /gps pack (публичный URL, HTTP/URL)
 │   ├── RouteRecordingService.java — запись пути игрока для графа
 │   ├── RouteService.java      — построение маршрутов (свой пул потоков)
 │   ├── SearchService.java     — поиск с fuzzy-matching
@@ -162,26 +163,15 @@ ru.hahgps
 
 **NavigationService** — управление навигацией:
 - Создаёт сессии навигации для игроков
-- Обновляет BossBar (Adventure API) с нарисованной стрелкой и расстоянием
-- Отправляет подсказки в чат: префикс, тот же глиф стрелки, локальный текст
+- Обновляет BossBar (Adventure API) с ванильной стрелкой и расстоянием
+- Отправляет подсказки в чат: префикс, та же стрелка, локальный текст
 - По смене направления не спамит: ключ последней строки/подсказки хранится в сессии
 
-**ResourcePackService** — раздача пака стрелок:
-- Читает встроенный `hahgps.zip` из jar (или берёт `resource-pack.url`)
-- Публичный адрес — `https://hahgps.hakerone.ru/hahgps.zip`: файл лежит на
-  сервере `192.168.0.64`, его отдаёт nginx (`127.0.0.1:8124`) через Cloudflare
-  Tunnel (`hahgps-pack.service`), поэтому пак качается за NAT без открытых портов
-- `resource-pack.publish` — каталог веб-раздачи на этом же хосте: плагин
-  копирует туда свежий zip при старте/reload, если байты отличаются
-- Поднимает HTTP-сервер на `resource-pack.port` и отдаёт только этот файл
-  (`resource-pack.url: local`)
-- `resource-pack.host` или адрес интерфейса default-маршрута попадает в URL
-- Пак отправляет только команда `/gps pack`; при входе — никогда
-- Хэш навязывает только для своего HTTP-сервера; для публичного адреса версию
-  в `?v=` берёт из файла раздачи (локально — без скачивания) — чужой файл с
-  другим sha1 иначе роняет установку у клиента
-- `PlayerResourcePackStatusEvent` с FAILED_DOWNLOAD/INVALID_URL не считается
-  «увиденной версией»: игрок получит пак повторно, а причина попадёт в лог
+**ResourcePackService** — ссылка на пак сервера:
+- Пак собирает и раздаёт панель EXODUS(OS); плагин его не хранит и нигде не хостит
+- При входе отправляет клиенту `resource-pack.url` (по умолчанию пак BUILD-сервера)
+- Хэш не навязывает: файл за тем же адресом пересобирается кнопкой в панели
+- Команды `/gps pack`, права `gps.pack`, zip в jar и HTTP-сервера больше нет
 
 ### 5. Визуализация
 

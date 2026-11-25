@@ -105,7 +105,7 @@ public abstract class GuiScreen implements InventoryHolder {
 
     protected List<Component> lore(String key, String... args) {
         try {
-            return List.of(HahGpsPlugin.getInstance().getMessages().getComponent(key, args));
+            return List.of(HahGpsPlugin.getInstance().getMessages().getComponentPlain(key, args));
         } catch (Throwable t) {
             return List.of();
         }
@@ -113,7 +113,7 @@ public abstract class GuiScreen implements InventoryHolder {
 
 
     protected Component comp(String key, String... args) {
-        return HahGpsPlugin.getInstance().getMessages().getComponent(key, args);
+        return HahGpsPlugin.getInstance().getMessages().getComponentPlain(key, args);
     }
 
 

@@ -159,12 +159,18 @@ def tracker_top(color_key: str, waterproof: bool = False,
     draw = ImageDraw.Draw(image)
 
     # Голова крипера вместо яблока — компактный логотип, а не пол-лица.
+    # Сама голова красится в цвет трекера: раньше цвет жил только на бампере,
+    # и синий/красный/белый iTrak выглядели одинаково.
     head_box = [21, 20, 43, 42]
-    draw.rounded_rectangle(head_box, radius=4, fill=_GREEN + (255,),
-                           outline=_GREEN_DARK + (255,), width=2)
-    draw.line([24, 23, 40, 23], fill=_GREEN_LIGHT + (255,), width=1)
-    draw.line([23, 24, 23, 38], fill=_GREEN_LIGHT + (255,), width=1)
-    draw.line([24, 39, 40, 39], fill=_GREEN_DARK + (255,), width=1)
+    head = color
+    head_edge = shade(color, 0.42)
+    head_light = mix(color, (255, 255, 255), 0.42)
+    head_shadow = shade(color, 0.68)
+    draw.rounded_rectangle(head_box, radius=4, fill=head + (255,),
+                           outline=head_edge + (255,), width=2)
+    draw.line([24, 23, 40, 23], fill=head_light + (255,), width=1)
+    draw.line([23, 24, 23, 38], fill=head_light + (255,), width=1)
+    draw.line([24, 39, 40, 39], fill=head_shadow + (255,), width=1)
 
     # Глаза.
     draw.rectangle([24, 26, 28, 30], fill=_FACE + (255,))
@@ -216,12 +222,16 @@ def tracker_edge(color_key: str, waterproof: bool = False,
         draw.ellipse([size - 7, 4, size - 3, 8], fill=_CYAN + (255,))
     return image
 def tracker_back(size: int = SIDE) -> Image.Image:
-    """Задняя крышка: шлифованный металл, кольцо, винты и серийник."""
+    """Задняя крышка: шлифованный металл, кольцо, винты и серийник.
+
+    Круг рисуется от края до края: эта текстура висит на нижней, широкой
+    грани диска, и раньше там оставался квадрат кромки — сзади трекер
+    выглядел прямоугольной пластиной, а не шайбой.
+    """
     big, draw = _supersampled(size)
     edge = size * SS
-    draw.ellipse([1 * SS, 1 * SS, edge - 1 * SS, edge - 1 * SS],
-                 fill=_STEEL_DARK + (255,))
-    draw.ellipse([3 * SS, 3 * SS, edge - 3 * SS, edge - 3 * SS],
+    draw.ellipse([0, 0, edge, edge], fill=_STEEL_DARK + (255,))
+    draw.ellipse([2 * SS, 2 * SS, edge - 2 * SS, edge - 2 * SS],
                  fill=_STEEL + (255,))
     # Радиальный блик.
     draw.ellipse([6 * SS, 6 * SS, edge - 7 * SS, edge - 7 * SS],

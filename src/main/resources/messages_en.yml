@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Palette schema version: a mismatch replaces the file with the bundled one (old -> .bak)
-palette-version: 17
+palette-version: 18
 
 no-permission: "<#3f86ff>✖ You don't have permission to run this command.</#3f86ff>"
 player-only: "<#3f86ff>✖ This command is for players only.</#3f86ff>"
@@ -112,10 +112,6 @@ search-route-button: "  <#66aaff>[build route]</#66aaff>"
 
 # --- Misc ---
 reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>HahGps configuration reloaded.</gray>"
-pack-auto-updated: "<#8fe9f5>✔</#8fe9f5> <gray>Resource pack updated to the new version.</gray>"
-pack-sent: "<#8fe9f5>✔</#8fe9f5> <gray>Resource pack sent — confirm the install in Minecraft.</gray>"
-pack-unavailable: "<#3f86ff>✖ Resource pack is unavailable: check resource-pack in config.yml.</#3f86ff>"
-pack-disabled: "<#3f86ff>✖ Resource pack sharing is disabled in config.yml.</#3f86ff>"
 loading-data: "<gray><italic>Loading data…</italic></gray>"
 error-occurred: "<#3f86ff>✖ An error occurred:</#3f86ff> <white>{error}</white>"
 world-not-found: "<#3f86ff>✖ World <white><bold>{world}</bold></white> not found.</#3f86ff>"
@@ -280,7 +276,7 @@ itrak-duration-hours: "{hours} h {minutes} min"
 itrak-item-code: "Code"
 itrak-item-hint-attach: "Right-click a block to attach"
 itrak-item-hint-throw: "Right-click the air to throw"
-itrak-item-hint-remove: "Right-click with an empty hand to pick it up"
+itrak-item-hint-remove: "Right-click with a brush to pick it up"
 itrak-locator-name: "Locator"
 itrak-locator-lore: "Finds nearby iTrak trackers"
 itrak-locator-radius: "Search radius: {radius} blocks"
@@ -293,6 +289,7 @@ itrak-rename-need-item: "<#3f86ff>✖ Hold a tracker or specify a placed one by 
 itrak-item-renamed: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker name:</gray> <white><bold>{name}</bold></white>"
 input-itrak-rename: "<#66aaff>→</#66aaff> <gray>Type a new name for</gray> <white><bold>{name}</bold></white> <dark_gray>·</dark_gray> <gray>a dash clears the name</gray>"
 help-itrak: "iTrak trackers, locator and live tracking"
+help-ask: "Run a command from a button (asks for values)"
 
 itrak-thrown: "<#8fe9f5>✔</#8fe9f5> <gray>Tracker thrown</gray>"
 itrak-thrown-failed: "<#3f86ff>✖ Could not throw the tracker.</#3f86ff>"
@@ -300,7 +297,8 @@ itrak-tracker-fell: "<#8fe9f5>✔</#8fe9f5> <gray>Block broken — tracker dropp
 itrak-tracker-fell-owner: "<#66aaff>→</#66aaff> <gray>Your tracker dropped:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-tracker-fell-entity-owner: "<#66aaff>→</#66aaff> <gray>Your tracker</gray> <white><bold>{name}</bold></white> <gray>fell off</gray> <#8fc6ff>{entity}</#8fc6ff> <gray>and dropped:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-craft-one-by-one: "<#66aaff>→</#66aaff> <gray>Trackers are crafted one at a time: take the result with a normal click.</gray>"
-itrak-item-remove-hint: "Right-click the block with an empty hand to detach"
+itrak-item-remove-hint: "Right-click the block with a brush to detach"
+itrak-take-brush: "<#3f86ff>✖ A tracker can only be removed with a brush</#3f86ff>"
 
 # --- GUI: every button in one tone, no rainbow per section ---
 gui:
@@ -435,3 +433,15 @@ edge-not-found: "<#3f86ff>✖ Edge not found.</#3f86ff>"
 edge-updated: "<#8fe9f5>✔</#8fe9f5> <gray>Edge updated.</gray>"
 visual-enabled: "<#8fe9f5>✔</#8fe9f5> <gray>Visualization</gray> <white><bold>{type}</bold></white> <dark_gray>enabled.</dark_gray>"
 visual-disabled: "<#8fe9f5>✔</#8fe9f5> <gray>Visualization disabled.</gray>"
+
+кнопки-нажми: "Click — runs immediately"
+кнопки-спросит: "Click — asks for a value, then runs"
+кнопки-вставить: "Click — puts the command into chat"
+ask-usage: "<#3f86ff>✖ Nothing to run. Example:</#3f86ff> <bold><white>/gps ask gps point info NAME</white></bold>"
+ask-prompt: |
+  <bold><gradient:#2464c8:#8fe9f5>═══ VALUE NEEDED ═══</gradient></bold>
+  <gray>Command:</gray> <#8fc6ff><bold>{usage}</bold></#8fc6ff>
+  <gray>Write your value instead of the angle-bracket parameters and press Enter.</gray>
+  <dark_gray>Cancel — type «-»</dark_gray>
+ask-too-few: "<#3f86ff>✖ Values needed: <bold><white>{count}</white></bold> — write them space-separated.</#3f86ff>"
+ask-running: "<#66aaff>→</#66aaff> <gray>Running:</gray> <white>{usage}</white>"

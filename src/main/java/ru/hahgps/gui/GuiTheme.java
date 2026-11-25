@@ -368,11 +368,8 @@ public final class GuiTheme {
         if (item == null || item.getType() == Material.AIR) return item;
         ItemMeta m = item.getItemMeta();
         if (m == null) return item;
-        try {
-            m.setEnchantmentGlintOverride(true);
-        } catch (Throwable ignored) {
-            m.addEnchant(Enchantment.UNBREAKING, 1, true);
-        }
+        m.setEnchantmentGlintOverride(false);
+        m.removeEnchant(Enchantment.UNBREAKING);
         m.addItemFlags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES);
         item.setItemMeta(m);
         return item;

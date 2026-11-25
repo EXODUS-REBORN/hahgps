@@ -4,14 +4,12 @@ import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
-import org.bukkit.event.player.PlayerResourcePackStatusEvent;
 import ru.hahgps.HahGpsPlugin;
 import ru.hahgps.config.ConfigManager;
 import ru.hahgps.config.MessagesManager;
 import ru.hahgps.model.NavigationSession;
 import ru.hahgps.model.Tracker;
 import ru.hahgps.model.TransportType;
-import ru.hahgps.util.ArrowStyle;
 import ru.hahgps.util.LocationUtil;
 import ru.hahgps.util.RouteArrow;
 import java.util.Iterator;
@@ -228,18 +226,16 @@ public class NavigationService {
         double delta = LocationUtil.normalizeAngle(angleToTarget - facing);
 
         RouteArrow arrow = config.isShowArrow() ? RouteArrow.of(delta) : null;
-        boolean glyphs = useGlyphs(player);
 
         BossBar bar = bossBars.get(player.getUniqueId());
         if (bar != null) {
             // Отправляем пакет только если строка/полоса действительно
             // изменились: стоящий на месте игрок получал их дважды в секунду.
             String distanceText = LocationUtil.formatDistance(distanceToTarget);
-            Component nextTitle = title(arrow == null ? null
-                    : (glyphs ? arrow.glyphComponent() : Component.text(arrow.unicode())),
+            Component nextTitle = title(arrow == null ? null : Component.text(arrow.unicode()),
                     targetName, distanceText);
-            // Ключ сравнения: режим (глиф/юникод), направление, цель, расстояние.
-            String nextKey = (arrow == null ? "-" : (glyphs ? "g" : "u") + arrow.key())
+            // Ключ сравнения: направление, цель, расстояние.
+            String nextKey = (arrow == null ? "-" : arrow.key())
                     + "|" + targetName + "|" + distanceText;
             float progress = session.getTotalDistance() > 0
                     ? (float) Math.max(0.0, Math.min(1.0, distanceToTarget / session.getTotalDistance()))
@@ -271,14 +267,13 @@ public class NavigationService {
     /**
      * Подсказка в чате: префикс, стрелка направления и текст.
      *
-     * Стрелка — тот же глиф из пака, что и в боссбаре (или ванильный символ
-     * в режиме unicode/без пака), поэтому в чате и наверху экрана направление
-     * выглядит одинаково. В messages_*.yml стрелок больше нет — иначе они
-     * дублировались бы.
+     * Стрелка — та же ванильная, что и в боссбаре, поэтому в чате и наверху
+     * экрана направление выглядит одинаково. В messages_*.yml стрелок больше
+     * нет — иначе они дублировались бы.
      */
     private Component hintMessage(Player player, RouteArrow arrow, String hintKey) {
         Component prefix = messages.getComponent("prefix");
-        Component icon = useGlyphs(player) ? arrow.glyphComponent() : Component.text(arrow.unicode());
+        Component icon = Component.text(arrow.unicode());
         return prefix.append(icon)
                 .append(Component.text(" "))
                 .append(messages.getComponent(hintKey));
@@ -355,10 +350,9 @@ public class NavigationService {
      * {@code стрелка + цель + расстояние}. Порядок именно такой: стрелка
      * первая, чтобы она читалась сразу.
      *
-     * Стрелка — либо компонент с нарисованным глифом (шрифт
-     * {@code hahgps:arrow} из ресурспака), либо ванильный символ BMP.
-     * Эмодзи-иконки транспорта (👣🚗🚌🚁🚢) по-прежнему не используются:
-     * они вне BMP, и шрифт Minecraft рисует вместо них пустой квадрат.
+     * Стрелка — ванильный символ BMP. Эмодзи-иконки транспорта
+     * (👣🚗🚌🚁🚢) не используются: они вне BMP, и шрифт Minecraft рисует
+     * вместо них пустой квадрат.
      */
     private Component title(Component lead, String targetName, String distance) {
         Component out = Component.empty();
@@ -372,23 +366,6 @@ public class NavigationService {
             out = out.append(Component.text(" " + distance));
         }
         return out;
-    }
-
-    /**
-     * Глифы из пака вместо ванильных стрелок. В режиме AUTO — только если
-     * клиент подтвердил загрузку серверного ресурспака: на непропатченном
-     * клиенте символ из приватной области Unicode превратился бы в квадрат.
-     */
-    private boolean useGlyphs(Player player) {
-        ArrowStyle style = config.getArrowStyle();
-        if (style == ArrowStyle.GLYPHS) {
-            return true;
-        }
-        if (style == ArrowStyle.UNICODE) {
-            return false;
-        }
-        return player.getResourcePackStatus()
-                == PlayerResourcePackStatusEvent.Status.SUCCESSFULLY_LOADED;
     }
 
     private BossBar.Color parseColor(String name) {

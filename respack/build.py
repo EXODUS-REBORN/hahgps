@@ -139,18 +139,22 @@ def model_tracker(color_key: str, waterproof: bool = False) -> dict:
             # Нижний диск — тонкий, чтобы силуэт читался круглым.
             _element((3.5, 0, 3.5, 12.5, 0.05, 12.5), {
                 "north": "#edge", "south": "#edge", "west": "#edge",
-                "east": "#edge", "up": "#edge", "down": "#back",
+                "east": "#edge", "up": "#back", "down": "#back",
             }),
             # Узкий корпус-«таблетка» под крышкой: он спрятан в тени диска.
+            # Низ тоже задняя крышка: иначе сквозь прозрачные углы снизу
+            # просвечивала цветная кромка прямоугольником.
             _element((3.2, 0.05, 3.2, 12.8, 1.95, 12.8), {
                 "north": "#edge", "south": "#edge", "west": "#edge",
-                "east": "#edge", "up": "#edge", "down": "#edge",
+                "east": "#edge", "up": "#back", "down": "#back",
             }),
             # Крышка-диск шире корпуса: углы прозрачны, силуэт круглый,
             # боковая кромка всего 0.05 — квадратной «рамки» почти не видно.
+            # Низ — круглая задняя крышка: с кромкой на нижней грани трекер
+            # сзади выглядел прямоугольной пластиной, а не шайбой.
             _element((0.9, 1.95, 0.9, 15.1, 2.0, 15.1), {
                 "north": "#edge", "south": "#edge", "west": "#edge",
-                "east": "#edge", "up": "#top", "down": "#edge",
+                "east": "#edge", "up": "#top", "down": "#back",
             }),
         ],
         "display": DISPLAY_TRACKER,
@@ -756,12 +760,6 @@ def main() -> None:
     problems = validate()
     previews = build_previews()
     archive = zip_pack()
-    # Копия для jar: /gps pack раздаёт именно этот файл, поэтому он должен
-    # попадать в сборку вместе с плагином.
-    jar_pack = ROOT.parent / "src/main/resources/hahgps.zip"
-    if jar_pack.parent.is_dir():
-        shutil.copyfile(archive, jar_pack)
-        print(f"в jar: {jar_pack}")
     print(f"пак: {PACK}")
     print(f"zip: {archive} ({archive.stat().st_size / 1024:.1f} КБ)")
     print(f"item definitions: {len(list((PACK / 'assets/minecraft/items').glob('*.json')))}")
