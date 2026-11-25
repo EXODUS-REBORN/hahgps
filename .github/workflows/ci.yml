@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Ресурспак (кладётся в jar для /gps pack)
+      - name: Ресурспак (исходники моделей для пака сервера)
         run: |
           set -euo pipefail
           python3 -m pip install --quiet pillow numpy

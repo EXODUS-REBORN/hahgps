@@ -54,7 +54,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Ресурспак (кладётся в jar для /gps pack)
+      - name: Ресурспак (исходники моделей для пака сервера)
         run: |
           set -euo pipefail
           python3 -m pip install --quiet pillow numpy
@@ -106,7 +106,7 @@ jobs:
             ls -la target/*.jar || true
             exit 1
           fi
-          echo "публикую $TAG с файлом $JAR (ресурспак в релиз не кладём: модели — в панели VedaMir)"
+          echo "публикую $TAG с файлом $JAR (ресурспак в релиз не кладём: модели — в панели EXODUS(OS))"
           # Тело релиза — короткий текст из release-notes.txt (1–2 предложения):
           # он же печатается в стартовом баннере и строке истории README (см. AGENTS.md).
           if gh release view "$TAG" >/dev/null 2>&1; then

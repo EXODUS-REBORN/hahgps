@@ -27,9 +27,6 @@ public class ReloadCommand implements SubCommand {
         HahGpsPlugin plugin = HahGpsPlugin.getInstance();
         plugin.getConfigManager().reload();
         plugin.getMessages().reload(plugin.getConfigManager().getLanguage());
-        if (plugin.getResourcePackService() != null) {
-            plugin.getResourcePackService().reload();
-        }
         player.sendMessage(plugin.getMessages().getPrefixed("reloaded"));
     }
 

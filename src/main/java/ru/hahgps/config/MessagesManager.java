@@ -17,7 +17,7 @@ public class MessagesManager {
      * messages_ru.yml уже лежит (он не перезаписывается, пока версия файла
      * не ниже текущей). Старая копия сохраняется рядом как {@code .bak}.
      */
-    public static final int PALETTE_VERSION = 17;
+    public static final int PALETTE_VERSION = 18;
 
     private final HahGpsPlugin plugin;
     private volatile YamlConfiguration messages;
@@ -230,6 +230,10 @@ public class MessagesManager {
     }
 
     public Component getComponent(String key, String... args) {
+        return ru.hahgps.util.CmdLink.decorate(safe(get(key, args)));
+    }
+
+    public Component getComponentPlain(String key, String... args) {
         return safe(get(key, args));
     }
 
@@ -238,7 +242,7 @@ public class MessagesManager {
     }
 
     public Component getPrefixed(String key, String... args) {
-        return safe(get("prefix", args) + get(key, args));
+        return ru.hahgps.util.CmdLink.decorate(safe(get("prefix", args) + get(key, args)));
     }
 
 

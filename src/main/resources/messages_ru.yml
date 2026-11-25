@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Версия схемы палитры: при несовпадении файл заменяется эталоном (старый — в .bak)
-palette-version: 17
+palette-version: 18
 
 no-permission: "<#3f86ff>✖ У вас нет прав для выполнения этой команды.</#3f86ff>"
 player-only: "<#3f86ff>✖ Эта команда доступна только игрокам.</#3f86ff>"
@@ -68,7 +68,7 @@ category-not-found: "<#3f86ff>✖ Категория <white><bold>{name}</bold><
 category-exists: "<#3f86ff>✖ Категория с таким именем уже существует.</#3f86ff>"
 cannot-delete-default: "<#3f86ff>✖ Нельзя удалить стандартную категорию.</#3f86ff>"
 category-not-empty: "<#3f86ff>✖ В категории <white><bold>{name}</bold></white> ещё есть точки — сначала удали их или перенеси в другую категорию.</#3f86ff>"
-point-no-categories: "<#3f86ff>✖ Категорий нет — точка не создана.</#3f86ff> <gray>Создай категорию:</gray> <white><bold>/gps category create</bold></white>"
+point-no-categories: "<#3f86ff>✖ Категорий нет — точка не создана.</#3f86ff> <gray>Нажми</gray> <white><bold>/gps category create</bold></white><gray>.</gray>"
 name-too-long: "<#3f86ff>✖ Слишком длинное имя — максимум <white><bold>{max}</bold></white> символа.</#3f86ff>"
 point-category-fallback: "<#8fe9f5>✔</#8fe9f5> <gray>Категория</gray> <white><bold>{name}</bold></white> <gray>не найдена — точка сохранена в</gray> <#8fc6ff><bold>{category}</bold></#8fc6ff>"
 transport-disabled: "<#3f86ff>✖ Транспорт «<white><bold>{transport}</bold></white>» выключен в config.yml.</#3f86ff>"
@@ -80,10 +80,10 @@ route-started: "<#8fe9f5>✔</#8fe9f5> <gray>Навигация к точке</g
 route-stopped: "<#8fe9f5>✔</#8fe9f5> <gray>Навигация остановлена.</gray>"
 no-active-route: "<#3f86ff>✖ У вас нет активной навигации.</#3f86ff>"
 route-record-started: "<#8fe9f5>✔</#8fe9f5> <gray>Запись маршрута начата — иди по дороге, потом</gray> <white>/gps route record stop</white><gray>.</gray>"
-route-record-stopped: "<#8fe9f5>✔</#8fe9f5> <gray>Запись остановлена: точек</gray> <#8fc6ff><bold>{count}</bold></#8fc6ff><gray>. Сохрани командой</gray> <white>/gps route save</white><gray>.</gray>"
+route-record-stopped: "<#8fe9f5>✔</#8fe9f5> <gray>Запись остановлена: точек</gray> <#8fc6ff><bold>{count}</bold></#8fc6ff><gray>. Нажми</gray> <white>/gps route save</white><gray>, чтобы сохранить.</gray>"
 route-record-empty: "<#3f86ff>✖ Ничего не записано — пройди хотя бы несколько блоков.</#3f86ff>"
 route-record-none: "<#3f86ff>✖ Нет записанного маршрута: сначала <white>/gps route record start</white>.</#3f86ff>"
-route-record-already: "<#3f86ff>✖ Запись уже идёт — останови её командой <white>/gps route record stop</white>.</#3f86ff>"
+route-record-already: "<#3f86ff>✖ Запись уже идёт — нажми <white>/gps route record stop</white>.</#3f86ff>"
 route-saved: "<#8fe9f5>✔</#8fe9f5> <gray>Маршрут</gray> <white><bold>{name}</bold></white> <gray>сохранён: точек</gray> <#8fc6ff>{count}</#8fc6ff><gray>, длина</gray> <#8fc6ff>{length}</#8fc6ff><gray>. Граф дорог пересобран.</gray>"
 route-exists: "<#3f86ff>✖ Маршрут с именем <white><bold>{name}</bold></white> уже существует.</#3f86ff>"
 arrival: "<#8fe9f5><bold>✔ ЦЕЛЬ ДОСТИГНУТА</bold></#8fe9f5>"
@@ -112,10 +112,6 @@ search-route-button: "  <#66aaff>[построить маршрут]</#66aaff>"
 
 # --- Прочее ---
 reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>Конфигурация HahGps перезагружена.</gray>"
-pack-auto-updated: "<#8fe9f5>✔</#8fe9f5> <gray>Ресурспак обновлён до новой версии.</gray>"
-pack-sent: "<#8fe9f5>✔</#8fe9f5> <gray>Ресурспак отправлен — подтвердите установку в окне Minecraft.</gray>"
-pack-unavailable: "<#3f86ff>✖ Ресурспак недоступен: проверьте resource-pack в config.yml.</#3f86ff>"
-pack-disabled: "<#3f86ff>✖ Раздача ресурспака выключена в config.yml.</#3f86ff>"
 loading-data: "<gray><italic>Загрузка данных…</italic></gray>"
 error-occurred: "<#3f86ff>✖ Произошла ошибка:</#3f86ff> <white>{error}</white>"
 world-not-found: "<#3f86ff>✖ Мир <white><bold>{world}</bold></white> не найден.</#3f86ff>"
@@ -142,7 +138,7 @@ help-visual: "Визуализация графа дорог"
 # --- Обновления (/gps update) ---
 update-checking: "<gray><italic>Проверяю релизы…</italic></gray>"
 update-downloading: "<gray><italic>Скачиваю новую версию…</italic></gray>"
-update-nothing-to-apply: "<#3f86ff>✖ Применять нечего — сначала подготовьте обновление:</#3f86ff> <bold><white>/gps update install</white></bold>"
+update-nothing-to-apply: "<#3f86ff>✖ Применять нечего — нажми:</#3f86ff> <bold><white>/gps update install</white></bold>"
 update-hotswap-failed: "<#3f86ff>✖ Горячая подмена не удалась:</#3f86ff> <white>{reason}</white>"
 update-reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>Настройки обновления перечитаны.</gray>"
 
@@ -163,7 +159,7 @@ dev-latest: "<gray>Пререлизов новее нет: установлен<
 dev-available: "<#8fe9f5><bold>⬆ Новый пререлиз</bold></#8fe9f5> <font:minecraft:uniform><white>{version}</white></font> <dark_gray>·</dark_gray> <gray>база</gray> <white>{base}</white>"
 dev-staged: "<#8fe9f5>✔</#8fe9f5> <gray>Пререлиз</gray> <font:minecraft:uniform><white>{version}</white></font> <gray>скачан и ставится на ходу.</gray>"
 dev-behind: "<gray>Канал пререлизов отстал: сборка</gray> <white>{version}</white> <gray>на базе</gray> <white>{base}</white><gray>, установлено</gray> <white>{current}</white><gray>.</gray>"
-dev-key-rejected: "<#3f86ff>✖ Сервер пререлизов не принял ключ</#3f86ff> <gray>— проверь</gray> <white>plugins/HahGps/keyydev.txt</white><gray>, потом</gray> <bold><white>/gps update reload</white></bold>"
+dev-key-rejected: "<#3f86ff>✖ Сервер пререлизов не принял ключ</#3f86ff> <gray>— проверь</gray> <white>plugins/HahGps/keyydev.txt</white><gray>, потом нажми</gray> <bold><white>/gps update reload</white></bold>"
 dev-failed: "<#3f86ff>✖ Канал пререлизов:</#3f86ff> <white>{error}</white>"
 
 # --- Ввод в чат ---
@@ -280,7 +276,7 @@ itrak-duration-hours: "{hours} ч {minutes} мин"
 itrak-item-code: "Код"
 itrak-item-hint-attach: "ПКМ по блоку — прицепить"
 itrak-item-hint-throw: "ПКМ в воздух — бросить"
-itrak-item-hint-remove: "ПКМ пустой рукой — снять"
+itrak-item-hint-remove: "ПКМ кисточкой — снять"
 itrak-locator-name: "Локатор"
 itrak-locator-lore: "Ищет трекеры iTrak поблизости"
 itrak-locator-radius: "Радиус поиска: {radius} блоков"
@@ -293,6 +289,7 @@ itrak-rename-need-item: "<#3f86ff>✖ Возьми трекер в руку ил
 itrak-item-renamed: "<#8fe9f5>✔</#8fe9f5> <gray>Название трекера:</gray> <white><bold>{name}</bold></white>"
 input-itrak-rename: "<#66aaff>→</#66aaff> <gray>Напиши новое название для</gray> <white><bold>{name}</bold></white> <dark_gray>·</dark_gray> <gray>дефис снимает название</gray>"
 help-itrak: "Трекеры iTrak, локатор и слежение"
+help-ask: "Выполнить команду по кнопке (спросит значения)"
 
 itrak-thrown: "<#8fe9f5>✔</#8fe9f5> <gray>Трекер брошен</gray>"
 itrak-thrown-failed: "<#3f86ff>✖ Не удалось бросить трекер.</#3f86ff>"
@@ -300,7 +297,8 @@ itrak-tracker-fell: "<#8fe9f5>✔</#8fe9f5> <gray>Блок сломан — тр
 itrak-tracker-fell-owner: "<#66aaff>→</#66aaff> <gray>Твой трекер выпал:</gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-tracker-fell-entity-owner: "<#66aaff>→</#66aaff> <gray>Твой трекер</gray> <white><bold>{name}</bold></white> <gray>слетел и выпал:</gray> <#8fc6ff>{entity}</#8fc6ff> <dark_gray>·</dark_gray> <#8fc6ff>{world} {x}, {y}, {z}</#8fc6ff>"
 itrak-craft-one-by-one: "<#66aaff>→</#66aaff> <gray>Трекеры крафтятся по одному: забери результат обычным кликом.</gray>"
-itrak-item-remove-hint: "ПКМ пустой рукой — снять"
+itrak-item-remove-hint: "ПКМ кисточкой — снять"
+itrak-take-brush: "<#3f86ff>✖ Снять трекер можно только кисточкой</#3f86ff>"
 
 # --- GUI: все кнопки одного тона, без разноцветья по разделам ---
 gui:
@@ -435,3 +433,16 @@ edge-not-found: "<#3f86ff>✖ Ребро не найдено.</#3f86ff>"
 edge-updated: "<#8fe9f5>✔</#8fe9f5> <gray>Ребро обновлено.</gray>"
 visual-enabled: "<#8fe9f5>✔</#8fe9f5> <gray>Визуализация</gray> <white><bold>{type}</bold></white> <dark_gray>включена.</dark_gray>"
 visual-disabled: "<#8fe9f5>✔</#8fe9f5> <gray>Визуализация выключена.</gray>"
+
+# --- Кнопки команд и ввод значений (CmdLink/ask) ---
+кнопки-нажми: "Клик — выполнится сразу"
+кнопки-спросит: "Клик — спросит значение и выполнит"
+кнопки-вставить: "Клик — команда подставится в чат"
+ask-usage: "<#3f86ff>✖ Что выполнить? Пример:</#3f86ff> <bold><white>/gps ask gps point info ИМЯ</white></bold>"
+ask-prompt: |
+  <bold><gradient:#2464c8:#8fe9f5>═══ НУЖНО ЗНАЧЕНИЕ ═══</gradient></bold>
+  <gray>Команда:</gray> <#8fc6ff><bold>{usage}</bold></#8fc6ff>
+  <gray>Впиши вместо параметров в угловых скобках своё значение и нажми Enter.</gray>
+  <dark_gray>Отмена — напиши «-»</dark_gray>
+ask-too-few: "<#3f86ff>✖ Нужно значений: <bold><white>{count}</white></bold> — впиши их через пробел.</#3f86ff>"
+ask-running: "<#66aaff>→</#66aaff> <gray>Выполняю:</gray> <white>{usage}</white>"

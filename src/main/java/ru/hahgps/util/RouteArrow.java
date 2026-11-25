@@ -1,36 +1,24 @@
 package ru.hahgps.util;
 
-import net.kyori.adventure.key.Key;
-import net.kyori.adventure.text.Component;
-
 /**
  * Восемь направлений маршрута — как стрелки навигатора.
  *
- * Для каждого направления есть два вида:
- * <ul>
- *   <li>{@link #unicode()} — ванильный символ (BMP), работает без ресурспака;</li>
- *   <li>{@link #glyphComponent()} — нарисованный 8×8 глиф из ресурспака
- *       в шрифте {@code hahgps:arrow}.</li>
- * </ul>
+ * Рисуются ванильными символами ({@code ↑↖←↙↓↘→↗}): своего ресурспака у
+ * плагина нет, а пак сервера собирает панель — шрифтов она не умеет.
  *
  * Знак угла: положительная дельта — цель левее игрока (как в
- * {@link DirectionUtil} было раньше: {@code ↑↖←↙↓↘→↗}).
- * Коды глифов ровно те же, что в {@code respack/build.py}
- * (U+E000…U+E007 в порядке объявления).
+ * {@link DirectionUtil} было раньше).
  */
 public enum RouteArrow {
 
-    STRAIGHT('\uE000', "↑", "straight"),
-    SLIGHT_LEFT('\uE001', "↖", "slight-left"),
-    LEFT('\uE002', "←", "left"),
-    SHARP_LEFT('\uE003', "↙", "sharp-left"),
-    BACK('\uE004', "↓", "back"),
-    SHARP_RIGHT('\uE005', "↘", "sharp-right"),
-    RIGHT('\uE006', "→", "right"),
-    SLIGHT_RIGHT('\uE007', "↗", "slight-right");
-
-    /** Шрифт ресурспака {@code assets/hahgps/font/arrow.json}. */
-    public static final Key FONT = Key.key("hahgps", "arrow");
+    STRAIGHT("↑", "straight"),
+    SLIGHT_LEFT("↖", "slight-left"),
+    LEFT("←", "left"),
+    SHARP_LEFT("↙", "sharp-left"),
+    BACK("↓", "back"),
+    SHARP_RIGHT("↘", "sharp-right"),
+    RIGHT("→", "right"),
+    SLIGHT_RIGHT("↗", "slight-right");
 
     /** Границы секторов, градусы: прямо / чуть / поворот / резко / разворот. */
     private static final double STRAIGHT_LIMIT = 22.5;
@@ -38,22 +26,15 @@ public enum RouteArrow {
     private static final double TURN_LIMIT = 112.5;
     private static final double SHARP_LIMIT = 157.5;
 
-    private final char glyph;
     private final String unicode;
     private final String key;
 
-    RouteArrow(char glyph, String unicode, String key) {
-        this.glyph = glyph;
+    RouteArrow(String unicode, String key) {
         this.unicode = unicode;
         this.key = key;
     }
 
-    /** Символ приватной области Unicode для шрифта {@link #FONT}. */
-    public char glyphChar() {
-        return glyph;
-    }
-
-    /** Ванильная стрелка для клиентов без ресурспака. */
+    /** Ванильная стрелка направления. */
     public String unicode() {
         return unicode;
     }
@@ -66,11 +47,6 @@ public enum RouteArrow {
     /** Ключ подсказки в messages_*.yml: {@code hint-straight}, … */
     public String hintKey() {
         return "hint-" + key;
-    }
-
-    /** Компонент с нарисованным глифом (шрифт ресурспака). */
-    public Component glyphComponent() {
-        return Component.text(String.valueOf(glyph)).font(FONT);
     }
 
     /**

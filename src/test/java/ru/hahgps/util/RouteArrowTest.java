@@ -9,8 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Стрелки маршрута — контракт с ресурспаком: коды глифов и порядок секторов
- * менять нельзя, иначе на клиенте с паком поедут направления.
+ * Стрелки маршрута: сектора направлений и ванильные символы. Рисованных
+ * глифов и своего ресурспака у плагина больше нет.
  */
 class RouteArrowTest {
 
@@ -45,23 +45,6 @@ class RouteArrowTest {
     }
 
     @Test
-    void everyDirectionHasOwnGlyphInPrivateUseArea() {
-        Set<Character> glyphs = new HashSet<>();
-        for (RouteArrow arrow : RouteArrow.values()) {
-            assertTrue(glyphs.add(arrow.glyphChar()), "дубль глифа: " + arrow);
-            assertTrue(arrow.glyphChar() >= '\uE000' && arrow.glyphChar() <= '\uE007',
-                    "глиф вне зарезервированного диапазона: " + arrow);
-        }
-        assertEquals(RouteArrow.values().length, glyphs.size());
-    }
-
-    @Test
-    void glyphOrderMatchesRespack() {
-        assertEquals('\uE000', RouteArrow.STRAIGHT.glyphChar());
-        assertEquals('\uE007', RouteArrow.SLIGHT_RIGHT.glyphChar());
-    }
-
-    @Test
     void unicodeFallbackIsBmpAndUnique() {
         Set<String> unicode = new HashSet<>();
         for (RouteArrow arrow : RouteArrow.values()) {
@@ -81,11 +64,6 @@ class RouteArrowTest {
         assertEquals("hint-sharp-right", RouteArrow.SHARP_RIGHT.hintKey());
         assertEquals("hint-right", RouteArrow.RIGHT.hintKey());
         assertEquals("hint-slight-right", RouteArrow.SLIGHT_RIGHT.hintKey());
-    }
-
-    @Test
-    void fontIsTheOneBuiltIntoThePack() {
-        assertEquals("hahgps:arrow", RouteArrow.FONT.asString());
     }
 
     @Test

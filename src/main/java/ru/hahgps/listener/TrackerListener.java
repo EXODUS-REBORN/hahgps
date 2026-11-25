@@ -31,12 +31,17 @@ import ru.hahgps.util.EntityNames;
  * Действия с iTrak в мире:
  * <ul>
  *   <li>ПКМ трекером по блоку — прицепить, ПКМ в воздух — бросить (Shift — аккуратно);</li>
- *   <li>ПКМ пустой рукой по блоку с трекером — снять; Shift+ПКМ по существу — снять с него;</li>
+ *   <li>ПКМ <b>кисточкой</b> по блоку с трекером — снять; Shift+ПКМ кисточкой по
+ *       существу — снять с него (пустая рука больше не снимает: iTrak — датчик,
+ *       а не панелька, снять его можно только инструментом);</li>
  *   <li>поломка опорного блока — предмет возвращается в мир.</li>
  * </ul>
  * События отменяются: трекер — предмет-устройство, а не блок и не инструмент.
  */
 public class TrackerListener implements Listener {
+
+    /** Снять iTrak можно только этим предметом: кисточка «подцепляет» датчик. */
+    public static final Material REMOVE_TOOL = Material.BRUSH;
 
     private final HahGpsPlugin plugin;
 
@@ -72,10 +77,17 @@ public class TrackerListener implements Listener {
             TrackerService service = plugin.getTrackerService();
             if (service != null) {
                 Tracker onBlock = service.trackerOnBlock(clicked);
-                if (onBlock != null && item.getType().isAir()) {
-                    denyUse(event);
-                    takeTracker(player, onBlock);
-                    return;
+                if (onBlock != null) {
+                    if (item.getType() == REMOVE_TOOL) {
+                        denyUse(event);
+                        takeTracker(player, onBlock);
+                        return;
+                    }
+                    // Трекер снимается только кисточкой: пустой рукой — лишь
+                    // подсказка, само ванильное действие не трогаем.
+                    if (item.getType().isAir()) {
+                        player.sendMessage(plugin.getMessages().getPrefixed("itrak-take-brush"));
+                    }
                 }
             }
         }
@@ -212,7 +224,7 @@ public class TrackerListener implements Listener {
         Entity target = event.getRightClicked();
         TrackerService service = plugin.getTrackerService();
 
-        if (item.getType().isAir() && player.isSneaking() && service != null
+        if (item.getType() == REMOVE_TOOL && player.isSneaking() && service != null
                 && player.hasPermission("gps.itrak")) {
             Tracker attached = service.trackerOnEntity(target.getUniqueId());
             if (attached != null && service.canManage(player, attached)) {

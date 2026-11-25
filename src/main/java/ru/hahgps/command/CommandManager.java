@@ -5,6 +5,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import ru.hahgps.HahGpsPlugin;
+import ru.hahgps.gui.InputManager;
 import ru.hahgps.command.subcommands.*;
 import ru.hahgps.model.Poi;
 import ru.hahgps.model.TransportType;
@@ -30,16 +31,92 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         register(new RouteCommand());
         register(new LogCommand());
         register(new ReloadCommand());
-        register(new PackCommand());
         register(new UpdateCommand());
         register(new HelpCommand());
         register(new EdgeCommand());
         register(new VisualCommand());
         register(new ItrakCommand());
+        register(new AskCommand());
     }
+
+    private static final Map<String, String> ALIASES = Map.ofEntries(
+            Map.entry("p", "point"),
+            Map.entry("c", "category"),
+            Map.entry("g", "goto"),
+            Map.entry("s", "search"),
+            Map.entry("r", "route"),
+            Map.entry("m", "menu"),
+            Map.entry("h", "help"),
+            Map.entry("i", "itrak"),
+            Map.entry("v", "visual"),
+            Map.entry("e", "edge"),
+            Map.entry("l", "log"),
+            Map.entry("u", "update"),
+            Map.entry("rl", "reload"));
 
     private void register(SubCommand cmd) {
         roots.put(cmd.name().toLowerCase(), cmd);
+    }
+
+    public boolean ask(Player player, String command) {
+        if (player == null || command == null || command.isBlank()) return false;
+        String raw = ru.hahgps.util.CmdLink.templateOf(command);
+        if (raw.isBlank()) return false;
+        final String template = raw.startsWith("/") ? raw : "/" + raw;
+        int needed = ru.hahgps.util.CmdLink.placeholderCount(template);
+        if (needed == 0) {
+            runLater(player, template);
+            return true;
+        }
+        InputManager input = InputManager.getInstance();
+        input.request(player, plugin.getMessages().getPrefixed("ask-prompt",
+                "usage", template), text -> {
+            String[] parts = text.trim().split("\\s+");
+            if (parts.length < needed || parts[0].isBlank()) {
+                player.sendMessage(plugin.getMessages().getPrefixed("ask-too-few",
+                        "count", String.valueOf(needed)));
+                return;
+            }
+            String filled = fill(template, parts);
+            if (filled != null) {
+                player.sendMessage(plugin.getMessages().getPrefixed("ask-running",
+                        "usage", filled));
+                runLater(player, filled);
+            }
+        });
+        return true;
+    }
+
+    static String fill(String template, String[] parts) {
+        StringBuilder out = new StringBuilder();
+        int word = 0;
+        for (String token : template.split("\\s+")) {
+            if (token.isEmpty()) continue;
+            if (out.length() > 0) out.append(' ');
+            if (token.indexOf('<') >= 0 || token.indexOf('%') >= 0) {
+                if (word >= parts.length) return null;
+                out.append(parts[word++]);
+            } else {
+                out.append(token);
+            }
+        }
+        return out.toString();
+    }
+
+    private void runLater(Player player, String command) {
+        String body = command.startsWith("/") ? command.substring(1) : command;
+        if (body.startsWith("gps ")) {
+            body = "gps " + rewriteAliases(body.substring(4));
+        }
+        final String run = body;
+        plugin.getServer().getScheduler().runTask(plugin, () -> player.performCommand(run));
+    }
+
+    private static String rewriteAliases(String rest) {
+        String[] parts = rest.split("\\s+", 2);
+        if (parts.length == 0 || parts[0].isEmpty()) return rest;
+        String head = ALIASES.getOrDefault(parts[0].toLowerCase(), parts[0]);
+        return parts.length == 1 ? head : head + " " + parts[1];
     }
 
     public Map<String, SubCommand> getSubcommands() {
@@ -58,9 +135,6 @@ public class CommandManager implements CommandExecutor, TabCompleter {
                 }
                 plugin.getConfigManager().reload();
                 plugin.getMessages().reload(plugin.getConfigManager().getLanguage());
-                if (plugin.getResourcePackService() != null) {
-                    plugin.getResourcePackService().reload();
-                }
                 sender.sendMessage("HahGps: конфигурация и сообщения перезагружены.");
                 return true;
             }
@@ -87,6 +161,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             return true;
         }
 
+        args[0] = ALIASES.getOrDefault(args[0].toLowerCase(), args[0].toLowerCase());
         SubCommand current = roots.get(args[0].toLowerCase());
         if (current == null) {
             tryGoto(player, args);

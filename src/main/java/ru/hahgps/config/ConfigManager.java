@@ -3,7 +3,6 @@ import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.configuration.file.FileConfiguration;
 import ru.hahgps.HahGpsPlugin;
-import ru.hahgps.util.ArrowStyle;
 
 import java.util.Arrays;
 import java.util.List;
@@ -53,7 +52,6 @@ public class ConfigManager {
         }
         checkEnum("navigation.bossbar-color", "BLUE", BarColor::valueOf, v -> v != null);
         checkEnum("navigation.bossbar-style", "SOLID", BarStyle::valueOf, v -> v != null);
-        checkEnum("navigation.arrow-style", "AUTO", ArrowStyle::valueOf, v -> v != null);
 
         String language = config.getString("language", "ru");
         if (language == null || !LANGUAGES.contains(language.toLowerCase(Locale.ROOT))) {
@@ -125,7 +123,6 @@ public class ConfigManager {
                     "множитель крюка должен быть в диапазоне 1.0..5.0 — использую 1.35");
             config.set("navigation.walk-detour-factor", 1.35);
         }
-        checkRange("resource-pack.port", 8123, 1024, 65535);
     }
 
     /** Числовая настройка с диапазоном: опечатка не должна ронять игру. */
@@ -224,62 +221,31 @@ public class ConfigManager {
         return isEnumValue(name, BarStyle.values()) ? name.toUpperCase(Locale.ROOT) : "SOLID";
     }
 
-    /** Как рисовать стрелку: auto — глифы только если клиент загрузил пак. */
-    public ArrowStyle getArrowStyle() {
-        String name = config.getString("navigation.arrow-style", "AUTO");
-        if (name == null) {
-            return ArrowStyle.AUTO;
-        }
-        try {
-            return ArrowStyle.valueOf(name.toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException ignored) {
-            return ArrowStyle.AUTO;
-        }
-    }
-
     // ------------------------------------------------------------------
-    // Ресурспак стрелок (/gps pack)
+    // Пак сервера (раздаёт панель EXODUS(OS), плагин только ссылается)
     // ------------------------------------------------------------------
 
-    /** Раздача пака по команде; при входе он не отправляется. */
+    /** Присылать игроку ссылку на пак панели при входе. */
     public boolean isResourcePackEnabled() {
         return config.getBoolean("resource-pack.enabled", true);
     }
 
-    /** Внешний URL на hahgps.zip; пусто — плагин раздаёт пак из jar сам. */
+    /** Пак сервера BUILD из панели EXODUS(OS): панель его собирает и раздаёт. */
+    static final String PANEL_PACK_URL =
+            "https://vedamirs-support.ru/api/minecraft/v1/resource-pack/?server=1";
+
+    /**
+     * Адрес пака на панели. Пусто — пак не отправляется; старые конфиги без
+     * ключа получают адрес панели, чтобы модели были на месте без правок.
+     */
     public String getResourcePackUrl() {
-        String url = config.getString("resource-pack.url", "");
+        String url = config.getString("resource-pack.url", PANEL_PACK_URL);
         return url == null ? "" : url.trim();
     }
 
-    /** Порт встроенного HTTP-сервера, если внешний URL не задан. */
-    public int getResourcePackPort() {
-        return Math.max(1024, Math.min(65535, config.getInt("resource-pack.port", 8123)));
-    }
-
-    /** Адрес сервера в ссылке на пак; пусто — определить автоматически. */
-    public String getResourcePackHost() {
-        String host = config.getString("resource-pack.host", "");
-        return host == null ? "" : host.trim();
-    }
-
-    /**
-     * Каталог веб-раздачи на этом же хосте (его отдаёт nginx через Cloudflare
-     * Tunnel). Плагин копирует туда собранный hahgps.zip; пусто — не копировать.
-     */
-    public String getResourcePackPublish() {
-        String dir = config.getString("resource-pack.publish", "");
-        return dir == null ? "" : dir.trim();
-    }
-
     /** Текст в окне подтверждения установки пака. */
-    /** Автоматически досылать обновлённый пак тем, кто уже ставил старый. */
-    public boolean isResourcePackAutoUpdate() {
-        return config.getBoolean("resource-pack.auto-update", true);
-    }
-
     public String getResourcePackPrompt() {
-        String prompt = config.getString("resource-pack.prompt", "HahGPS: стрелки маршрута");
+        String prompt = config.getString("resource-pack.prompt", "HahGPS: модели и иконки");
         return prompt == null || prompt.isBlank() ? "HahGPS" : prompt;
     }
 
