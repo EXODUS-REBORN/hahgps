@@ -118,6 +118,63 @@ python3 docs/devrelease/publish.py --project hahgps --list
 - **Тесты**: `util/CmdLinkTest` (7: кнопка, параметры, варианты, склейка текста, подсказка,
   короткий корень, подстановка значений). Всего 229 зелёных, `./mvnw -o clean package` → 2.1.0.
 
+## Модели в мире: физика из EXODUS-OS (27.11.2026)
+
+Владелец попросил скопировать из `EXODUS-REBORN/EXODUS-OS-PERSONAL` физику поставленных в мир
+моделей (коллизию, хитбокс, посадку) в наши плагины. Перенесено в hahtojer
+(`ru.newjerseyhah.vmodel`) и сюда — `src/main/java/ru/hahgps/vmodel/` (тот же набор классов).
+Оригинал — `os.exodus.bridge.vmodel`, репозиторий при переносе только читался.
+
+| Класс | Что делает |
+|---|---|
+| `ModelShape` / `ModelBoxes` | геометрия: коробка+поворот, `parts` → OBB, slab-луч, SAT-пересечения |
+| `ModelDefinition` / `ModelParse` | определение модели и разбор ответа панели/`models.yml` |
+| `Json` | свой компактный JSON-парсер (gson/org.json в зависимостях нет) |
+| `PanelClient` | панель EXODUS(OS): `GET/POST /api/minecraft/v1/vmodels/?server=N`, Bearer-токен |
+| `ModelSolids` | **коллизия**: невидимые шалкеры на маркер-арморстендах, шаг 0.55, до 40 клеток |
+| `ModelSeats` | точки «сесть» |
+| `ModelPackets` / `ModelScheduler` | `ItemDisplay` модели и персональная видимость по радиусу |
+| `ModelEditor` / `Placement` | призрак, шаги поворота 15…180°, проверка пересечений |
+| `VirtualModelsService` | фасад: синхронизация с панелью, события, тикер, маркер |
+
+**Интеграция:** `HahGpsPlugin.onStorageReady` поднимает `VirtualModelsService` в `runTaskLater(3)`;
+`onDisable` — `models.stop()`; подкоманда `vmodel` в `CommandManager` (+ алиас `vm`), реализация
+`command/subcommands/VmodelCommand`. Секция `vmodel` в `config.yml`, права `gps.models`,
+`gps.models.give`, `gps.models.admin`, тексты `vmodel-*` и `help-vmodel` в обоих `messages_*.yml`
+(`PALETTE_VERSION` поднят до 20).
+
+**Токен панели:** `plugins/HahGps/models-token.txt` (файл с заглушкой создаётся сам), env
+`HAHGPS_MODELS_TOKEN`, затем `HAHTOJER_MODELS_TOKEN`. Без токена работают только модели из
+`plugins/HahGps/models.yml` (секции `models`/`placements`).
+
+**Ловушки:**
+- проект собирается под **Java 17** — `switch`-паттерны и безусловный `instanceof`-паттерн
+  запрещены (в hahtojer Java 21, там можно);
+- `CommandButtonTextsTest` держит список разрешённых корней команд — `vmodel` туда добавлен;
+  в текстах сообщений не писать `<ник>`/`<ключ>` (MiniMessage съест), для синтаксиса — `{usage}`;
+- координаты клеток коллизии **абсолютные**, базу второй раз не прибавлять;
+- шалкер обязан быть пассажиром маркер-стенда, иначе падает и съезжает с модели;
+- `setCanTick` есть не на всех версиях Paper — вызов в `try/catch`.
+
+**Документация:** `docs/vmodel.md`, README (возможности, команды, права). Тесты: `vmodel/JsonTest`,
+`ModelBoxesTest`, `ModelParseTest`, `ModelLayoutTest`; всего **282** зелёных,
+`./mvnw -o clean package` → `target/hahgps-2.2.0.jar`.
+
+## Консоль пререлизов молчит (28.11.2026)
+
+Владелец показал лог, где `[HahGps] Пререлизы: Пререлизов новее нет: установлен 1.1.2` падало
+каждые две минуты. Плановая проверка канала (`DevChannel.start` → `checkAsync(..., quiet = true)`)
+больше не пишет в консоль итог «новее нет» **вообще** — это норма, а не событие. Остальные итоги
+(появился пререлиз, ошибка, ключ не принят, канал выключен) пишутся только при смене итога.
+Разбор — `DevChannel.logsQuiet(outcome, previous)`, тесты — `update/DevChannelQuietTest`.
+Ручные `/gps update dev` и `/gps update devcheck` отвечают всегда.
+
+**Грабли хоста:** `/tmp` здесь — tmpfs с `usrquota`, и квота пользователя на нём уже выбрана
+(`Disk quota exceeded` на любой записи). Maven и sqlite-jdbc пишут во временный каталог, поэтому
+`./mvnw -o clean package` падает на `SqliteStorageProviderTest` с `NativeLibraryNotFound`. Запускать
+с `JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=/home/dh-s-1/.cache/jtmp` (каталог в домашней ФС) — тогда все
+тесты зелёные.
+
 ## Ресурспак (обязательно при правках предметов)
 
 - Любое изменение моделей, текстур, `CustomModelData` или блоков-предметов
