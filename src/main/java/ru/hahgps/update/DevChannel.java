@@ -89,6 +89,12 @@ public final class DevChannel {
 
     private volatile boolean installedRead;
 
+    /** Итог прошлой плановой проверки — чтобы не писать одно и то же в консоль каждые 2 минуты. */
+    private volatile String lastQuietOutcome = "";
+
+    /** Итоги, о которых плановая проверка молчит всегда: «новее нет» — это норма, а не событие. */
+    private static final java.util.Set<String> QUIET_SILENT = java.util.Set.of("latest");
+
     public DevChannel(HahGpsPlugin plugin) {
         this.plugin = plugin;
     }
@@ -236,7 +242,7 @@ public final class DevChannel {
                 + (parseProxy(proxyUrl) == null ? "" : " (через прокси " + proxyUrl + ")"));
         long period = intervalMinutes * 60L * 20L;
         task = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin,
-                () -> checkAsync(text -> { }, autoDownload), 20L * 90L, period);
+                () -> checkAsync(text -> { }, autoDownload, true), 20L * 90L, period);
     }
 
     public synchronized void stop() {
@@ -334,19 +340,30 @@ public final class DevChannel {
 
     /** Проверка канала: {@code installIfNewer=false} — только рассказать. */
     public void checkAsync(Consumer<String> feedback, boolean installIfNewer) {
+        checkAsync(feedback, installIfNewer, false);
+    }
+
+    /**
+     * Проверка канала.
+     *
+     * @param quiet {@code true} для плановой проверки по таймеру: в консоль пишется только
+     *              смена итога («новее нет» → «есть пререлиз», ошибка и т.п.), а не одна и та же
+     *              строка каждые две минуты.
+     */
+    public void checkAsync(Consumer<String> feedback, boolean installIfNewer, boolean quiet) {
         if (!enabled) {
-            reply(feedback, plugin.getMessages().get("dev-disabled"));
+            reply(feedback, quiet, "disabled", plugin.getMessages().get("dev-disabled"));
             return;
         }
         if (key.isEmpty()) {
             key = readKey();
         }
         if (key.isEmpty()) {
-            reply(feedback, plugin.getMessages().get("dev-no-key", "file", keyFile));
+            reply(feedback, quiet, "no-key", plugin.getMessages().get("dev-no-key", "file", keyFile));
             return;
         }
         if (busy) {
-            reply(feedback, plugin.getMessages().get("update-checking"));
+            reply(feedback, quiet, "busy", plugin.getMessages().get("update-checking"));
             return;
         }
         busy = true;
@@ -357,30 +374,30 @@ public final class DevChannel {
                 lastCheckMs = System.currentTimeMillis();
                 lastError = "";
                 if (remote == null) {
-                    reply(feedback, plugin.getMessages().get("dev-none"));
+                    reply(feedback, quiet, "none", plugin.getMessages().get("dev-none"));
                     return;
                 }
                 latestVersion = remote.version();
                 String base = remote.base() == null ? "" : remote.base();
                 if (!base.isEmpty() && compare(currentBase(current), base) > 0) {
-                    reply(feedback, plugin.getMessages().get("dev-behind",
+                    reply(feedback, quiet, "behind", plugin.getMessages().get("dev-behind",
                             "version", remote.version(), "base", base, "current", current));
                     return;
                 }
                 Build local = installed();
                 String localVersion = local == null ? "" : local.version();
                 if (!localVersion.isEmpty() && compare(remote.version(), localVersion) <= 0) {
-                    reply(feedback, plugin.getMessages().get("dev-latest", "version", localVersion));
+                    reply(feedback, quiet, "latest", plugin.getMessages().get("dev-latest", "version", localVersion));
                     return;
                 }
-                reply(feedback, plugin.getMessages().get("dev-available",
+                reply(feedback, quiet, "available", plugin.getMessages().get("dev-available",
                         "version", remote.version(), "base", base.isEmpty() ? "?" : base));
                 announce("dev-available", "version", remote.version(),
                         "base", base.isEmpty() ? "?" : base);
                 if (!installIfNewer) return;
                 Path jar = download(remote);
                 stagedJar = jar;
-                reply(feedback, plugin.getMessages().get("dev-staged", "version", remote.version()));
+                reply(feedback, quiet, "staged", plugin.getMessages().get("dev-staged", "version", remote.version()));
                 if (hotApply && plugin.isEnabled() && !HotSwap.running()) {
                     final Path staged = jar;
                     Bukkit.getScheduler().runTask(plugin, () -> HotSwap.apply(plugin, staged, false, feedback));
@@ -390,12 +407,11 @@ public final class DevChannel {
                 plugin.getLogger().warning("Пререлизы: сервер " + channelUrl()
                         + " не принял ключ из plugins/HahGps/" + keyFile
                         + " — канал остановлен до /gps update reload.");
-                reply(feedback, plugin.getMessages().get("dev-key-rejected"));
+                reply(feedback, quiet, "key-rejected", plugin.getMessages().get("dev-key-rejected"));
                 stopTask();
             } catch (Exception e) {
                 lastError = e.getMessage() == null ? e.toString() : e.getMessage();
-                plugin.getLogger().warning("Пререлизы: " + lastError);
-                reply(feedback, plugin.getMessages().get("dev-failed", "error", lastError));
+                reply(feedback, quiet, "failed", plugin.getMessages().get("dev-failed", "error", lastError));
             } finally {
                 busy = false;
             }
@@ -606,6 +622,15 @@ public final class DevChannel {
     }
 
     private void reply(Consumer<String> feedback, String text) {
+        reply(feedback, false, "manual", text);
+    }
+
+    /**
+     * Отдать ответ игроку (если он есть) и в консоль. Плановая проверка ({@code quiet}) в консоль не
+     * пишет «новее нет» вовсе: это норма, а не событие. Остальные итоги — только при смене, иначе
+     * каждые две минуты в лог падала одна и та же строка.
+     */
+    private void reply(Consumer<String> feedback, boolean quiet, String outcome, String text) {
         if (feedback != null) {
             String message = text == null ? "" : text;
             try {
@@ -614,7 +639,17 @@ public final class DevChannel {
                 // плагин уже выключается — отвечать некуда
             }
         }
+        if (quiet) {
+            boolean log = logsQuiet(outcome, lastQuietOutcome);
+            lastQuietOutcome = outcome;
+            if (!log) return;
+        }
         plugin.getLogger().info("Пререлизы: " + stripTags(text));
+    }
+
+    /** Пишет ли плановая проверка этот итог в консоль: только смену и только не «новее нет». */
+    static boolean logsQuiet(String outcome, String previous) {
+        return !outcome.equals(previous) && !QUIET_SILENT.contains(outcome);
     }
 
     private static String stripTags(String text) {

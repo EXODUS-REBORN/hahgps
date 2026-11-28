@@ -60,6 +60,9 @@ public class HahGpsPlugin extends JavaPlugin {
     private TrackerService trackerService;
     private ResourcePackService resourcePackService;
 
+    /** Модели в мире (физика из EXODUS-OS): каталог с панели, коллизия шалкерами, точки «сесть». */
+    private ru.hahgps.vmodel.VirtualModelsService vmodels;
+
     private volatile boolean hotSwapping;
 
     /**
@@ -374,6 +377,16 @@ public class HahGpsPlugin extends JavaPlugin {
 
             Bukkit.getScheduler().runTaskLater(this, () -> {
                 try {
+                    ru.hahgps.vmodel.VirtualModelsService models = new ru.hahgps.vmodel.VirtualModelsService(this);
+                    models.start();
+                    vmodels = models;
+                } catch (Throwable t) {
+                    getLogger().log(Level.WARNING, "HahGps: модели в мире не поднялись", t);
+                }
+            }, 3L);
+
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                try {
                     navigationService.start();
                     visualizationTask = Bukkit.getScheduler().runTaskTimer(this, () -> {
                         try {
@@ -439,6 +452,16 @@ public class HahGpsPlugin extends JavaPlugin {
             channel.stop();
         }
         timer.phase("обновление");
+
+        ru.hahgps.vmodel.VirtualModelsService models = vmodels;
+        vmodels = null;
+        if (models != null) {
+            try {
+                models.stop();
+            } catch (Throwable t) {
+                getLogger().log(Level.FINE, "HahGps: модели — остановка", t);
+            }
+        }
 
         if (visualizationTask != null) {
             try {
@@ -594,6 +617,10 @@ public class HahGpsPlugin extends JavaPlugin {
 
     public TrackerService getTrackerService() {
         return trackerService;
+    }
+
+    public ru.hahgps.vmodel.VirtualModelsService getVmodels() {
+        return vmodels;
     }
 
     public ResourcePackService getResourcePackService() {

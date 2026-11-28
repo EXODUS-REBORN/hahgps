@@ -25,7 +25,7 @@ class CommandButtonTextsTest {
 
     private static final Set<String> ROOTS = Set.of(
             "menu", "point", "category", "goto", "search", "route", "log", "reload",
-            "update", "help", "edge", "visual", "itrak", "ask", "off", "pack");
+            "update", "help", "edge", "visual", "itrak", "ask", "off", "pack", "vmodel");
 
     private static List<String[]> parse(Path file) throws IOException {
         List<String[]> out = new ArrayList<>();

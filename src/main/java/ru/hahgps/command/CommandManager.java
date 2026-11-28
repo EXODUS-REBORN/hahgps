@@ -37,6 +37,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         register(new VisualCommand());
         register(new ItrakCommand());
         register(new AskCommand());
+        register(new VmodelCommand());
     }
 
     private static final Map<String, String> ALIASES = Map.ofEntries(
@@ -52,7 +53,8 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             Map.entry("e", "edge"),
             Map.entry("l", "log"),
             Map.entry("u", "update"),
-            Map.entry("rl", "reload"));
+            Map.entry("rl", "reload"),
+            Map.entry("vm", "vmodel"));
 
     private void register(SubCommand cmd) {
         roots.put(cmd.name().toLowerCase(), cmd);

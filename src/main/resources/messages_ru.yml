@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Версия схемы палитры: при несовпадении файл заменяется эталоном (старый — в .bak)
-palette-version: 19
+palette-version: 20
 
 no-permission: "<#3f86ff>✖ У вас нет прав для выполнения этой команды.</#3f86ff>"
 player-only: "<#3f86ff>✖ Эта команда доступна только игрокам.</#3f86ff>"
@@ -469,3 +469,45 @@ ask-prompt: |
   <dark_gray>Отмена — напиши «-»</dark_gray>
 ask-too-few: "<#3f86ff>✖ Нужно значений: <bold><white>{count}</white></bold> — впиши их через пробел.</#3f86ff>"
 ask-running: "<#66aaff>→</#66aaff> <gray>Выполняю:</gray> <white>{usage}</white>"
+
+# --- Модели в мире (/gps vmodel) ---
+help-vmodel: "Модели в мире: коллизия, посадка, каталог с панели"
+vmodel-disabled: "<#3f86ff>✖ Раздел моделей выключен:</#3f86ff> <gray>config.yml →</gray> <white>vmodel.enabled</white>"
+vmodel-header: "<bold><gradient:#2464c8:#8fe9f5>═══ МОДЕЛИ В МИРЕ ═══</gradient></bold>"
+vmodel-status: "<gray>моделей:</gray> <white><bold>{models}</bold></white> <dark_gray>·</dark_gray> <gray>поставлено:</gray> <white><bold>{placed}</bold></white> <dark_gray>·</dark_gray> <gray>клеток коллизии:</gray> <white><bold>{cells}</bold></white> <dark_gray>·</dark_gray> <gray>панель:</gray> <#8fc6ff>{panel}</#8fc6ff>"
+vmodel-status-line: "<dark_gray>│</dark_gray> <gray>{status}</gray>"
+vmodel-panel-on: "ключ есть"
+vmodel-panel-off: "без ключа"
+vmodel-last-sync: "<dark_gray>│</dark_gray> <gray>последняя синхронизация:</gray> <white>{seconds} с назад</white>"
+vmodel-sync-error: "<dark_gray>│</dark_gray> <#3f86ff>✖ ошибка: {error}</#3f86ff>"
+vmodel-sync-started: "<#8fe9f5>✔</#8fe9f5> <gray>Синхронизация с панелью запущена.</gray> <white><italic>Результат — в логе и в /gps vmodel status</italic></white>"
+vmodel-no-token: "<#3f86ff>✖ Токена панели нет:</#3f86ff> <gray>впиши его в</gray> <white>plugins/HahGps/models-token.txt</white> <gray>(панель → Сервер → API). Пока работают только модели из</gray> <white>models.yml</white><gray>.</gray>"
+vmodel-panel-error: "панель не ответила"
+vmodel-panel-broken: "битый ответ панели"
+vmodel-marker-name: "<#8fc6ff><bold>Модель:</bold></#8fc6ff> <white>{model}</white>"
+vmodel-give-usage: "<#3f86ff>✖ Использование:</#3f86ff> <bold><white>{usage}</white></bold> <gray>(без ника — себе)</gray>"
+vmodel-offline: "<#3f86ff>✖ Игрок <white><bold>{player}</bold></white> не в сети.</#3f86ff>"
+vmodel-gave: "<#8fe9f5>✔</#8fe9f5> <gray>Выдан маркер</gray> <white><bold>{model}</bold></white> <gray>для</gray> <#8fc6ff>{player}</#8fc6ff>"
+vmodel-not-found: "<#3f86ff>✖ Модель <white><bold>{model}</bold></white> не найдена в каталоге.</#3f86ff> <gray>Список:</gray> <#66aaff>→</#66aaff> <white>/gps vmodel list</white>"
+vmodel-reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>Каталог и расстановки перечитаны, коллизия пересобрана.</gray>"
+vmodel-radius-now: "<gray>Радиус видимости моделей:</gray> <white><bold>{radius}</bold></white> <gray>блоков.</gray>"
+vmodel-radius-number: "<#3f86ff>✖ Нужно целое число блоков (4..128).</#3f86ff>"
+vmodel-radius-set: "<#8fe9f5>✔</#8fe9f5> <gray>Радиус видимости моделей:</gray> <white><bold>{radius}</bold></white> <gray>блоков.</gray>"
+vmodel-list-empty: "<#3f86ff>✖ Каталог пуст.</#3f86ff> <gray>Нужен токен панели или записи в</gray> <white>models.yml</white>"
+vmodel-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ МОДЕЛИ ({total}) ═══</gradient></bold>"
+vmodel-list-line: "<dark_gray>│</dark_gray> <gray>{index}.</gray> <white>{model}</white>"
+vmodel-list-cut: "<dark_gray>│</dark_gray> <gray>… и ещё</gray> <white>{left}</white><gray>. Уточни фильтром в той же команде.</gray>"
+vmodel-local-file: "<gray>Локальный каталог:</gray> <white>plugins/HahGps/{file}</white> <gray>(секции</gray> <white>models</white> <gray>и</gray> <white>placements</white><gray>)</gray>"
+vmodel-no-permission: "<#3f86ff>✖ Нет права ставить и снимать модели</#3f86ff> <gray>(нужно</gray> <white>gps.models</white><gray>).</gray>"
+vmodel-no-space: "<#3f86ff>✖ Здесь модель не поставить:</#3f86ff> <gray>нужна разрешённая грань.</gray>"
+vmodel-overlap: "<#3f86ff>✖ Модель пересекается с блоком или другой моделью.</#3f86ff>"
+vmodel-placed: "<#8fe9f5>✔</#8fe9f5> <gray>Модель</gray> <white><bold>{model}</bold></white> <gray>поставлена.</gray>"
+vmodel-taken: "<#8fe9f5>✔</#8fe9f5> <gray>Модель снята.</gray>"
+vmodel-taken-hand: "<#8fe9f5>✔</#8fe9f5> <gray>Модель у тебя в руке.</gray>"
+vmodel-look-at-model: "<#3f86ff>✖ Модель перед тобой не найдена:</#3f86ff> <gray>наведись на неё или ударь.</gray>"
+vmodel-interact: "<#8fc6ff><bold>Модель:</bold></#8fc6ff> <white>{model}</white> <gray>— взаимодействие.</gray>"
+vmodel-seat-taken: "<#3f86ff>✖ Место занято.</#3f86ff>"
+vmodel-seated: "<#8fe9f5>✔</#8fe9f5> <gray>Сели.</gray> <dark_gray>Shift — встать.</dark_gray>"
+vmodel-step: "<#66aaff>→</#66aaff> <gray>Шаг поворота:</gray> <white><bold>{degrees}°</bold></white>"
+vmodel-rotated: "<#66aaff>→</#66aaff> <gray>Поворот</gray> <white>{degrees}°</white> <dark_gray>·</dark_gray> <gray>шаг</gray> <white>{step}°</white>"
+

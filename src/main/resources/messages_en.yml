@@ -34,7 +34,7 @@
 prefix: "<gray>[</gray><bold><gradient:#2464c8:#8fe9f5>GPS</gradient></bold><gray>]</gray> "
 
 # Palette schema version: a mismatch replaces the file with the bundled one (old -> .bak)
-palette-version: 19
+palette-version: 20
 
 no-permission: "<#3f86ff>✖ You don't have permission to run this command.</#3f86ff>"
 player-only: "<#3f86ff>✖ This command is for players only.</#3f86ff>"
@@ -468,3 +468,45 @@ ask-prompt: |
   <dark_gray>Cancel — type «-»</dark_gray>
 ask-too-few: "<#3f86ff>✖ Values needed: <bold><white>{count}</white></bold> — write them space-separated.</#3f86ff>"
 ask-running: "<#66aaff>→</#66aaff> <gray>Running:</gray> <white>{usage}</white>"
+
+# --- World models (/gps vmodel) ---
+help-vmodel: "World models: collision, seats, panel catalog"
+vmodel-disabled: "<#3f86ff>✖ The model section is disabled:</#3f86ff> <gray>config.yml →</gray> <white>vmodel.enabled</white>"
+vmodel-header: "<bold><gradient:#2464c8:#8fe9f5>═══ WORLD MODELS ═══</gradient></bold>"
+vmodel-status: "<gray>models:</gray> <white><bold>{models}</bold></white> <dark_gray>·</dark_gray> <gray>placed:</gray> <white><bold>{placed}</bold></white> <dark_gray>·</dark_gray> <gray>collision cells:</gray> <white><bold>{cells}</bold></white> <dark_gray>·</dark_gray> <gray>panel:</gray> <#8fc6ff>{panel}</#8fc6ff>"
+vmodel-status-line: "<dark_gray>│</dark_gray> <gray>{status}</gray>"
+vmodel-panel-on: "token present"
+vmodel-panel-off: "no token"
+vmodel-last-sync: "<dark_gray>│</dark_gray> <gray>last sync:</gray> <white>{seconds}s ago</white>"
+vmodel-sync-error: "<dark_gray>│</dark_gray> <#3f86ff>✖ error: {error}</#3f86ff>"
+vmodel-sync-started: "<#8fe9f5>✔</#8fe9f5> <gray>Panel sync started.</gray> <white><italic>Result goes to the log and /gps vmodel status</italic></white>"
+vmodel-no-token: "<#3f86ff>✖ No panel token:</#3f86ff> <gray>put it into</gray> <white>plugins/HahGps/models-token.txt</white> <gray>(panel → Server → API). Until then only models from</gray> <white>models.yml</white> <gray>work.</gray>"
+vmodel-panel-error: "the panel did not answer"
+vmodel-panel-broken: "broken panel response"
+vmodel-marker-name: "<#8fc6ff><bold>Model:</bold></#8fc6ff> <white>{model}</white>"
+vmodel-give-usage: "<#3f86ff>✖ Usage:</#3f86ff> <bold><white>{usage}</white></bold> <gray>(without a name — for yourself)</gray>"
+vmodel-offline: "<#3f86ff>✖ Player <white><bold>{player}</bold></white> is offline.</#3f86ff>"
+vmodel-gave: "<#8fe9f5>✔</#8fe9f5> <gray>Marker</gray> <white><bold>{model}</bold></white> <gray>given to</gray> <#8fc6ff>{player}</#8fc6ff>"
+vmodel-not-found: "<#3f86ff>✖ Model <white><bold>{model}</bold></white> is not in the catalog.</#3f86ff> <gray>List:</gray> <#66aaff>→</#66aaff> <white>/gps vmodel list</white>"
+vmodel-reloaded: "<#8fe9f5>✔</#8fe9f5> <gray>Catalog and placements reloaded, collision rebuilt.</gray>"
+vmodel-radius-now: "<gray>Model view radius:</gray> <white><bold>{radius}</bold></white> <gray>blocks.</gray>"
+vmodel-radius-number: "<#3f86ff>✖ A whole number of blocks is required (4..128).</#3f86ff>"
+vmodel-radius-set: "<#8fe9f5>✔</#8fe9f5> <gray>Model view radius:</gray> <white><bold>{radius}</bold></white> <gray>blocks.</gray>"
+vmodel-list-empty: "<#3f86ff>✖ The catalog is empty.</#3f86ff> <gray>A panel token or entries in</gray> <white>models.yml</white> <gray>are needed.</gray>"
+vmodel-list-header: "<bold><gradient:#2464c8:#8fe9f5>═══ MODELS ({total}) ═══</gradient></bold>"
+vmodel-list-line: "<dark_gray>│</dark_gray> <gray>{index}.</gray> <white>{model}</white>"
+vmodel-list-cut: "<dark_gray>│</dark_gray> <gray>… and</gray> <white>{left}</white> <gray>more. Narrow it down in the same command.</gray>"
+vmodel-local-file: "<gray>Local catalog:</gray> <white>plugins/HahGps/{file}</white> <gray>(sections</gray> <white>models</white> <gray>and</gray> <white>placements</white><gray>)</gray>"
+vmodel-no-permission: "<#3f86ff>✖ You may not place or pick up models</#3f86ff> <gray>(needs</gray> <white>gps.models</white><gray>).</gray>"
+vmodel-no-space: "<#3f86ff>✖ The model cannot be placed here:</#3f86ff> <gray>an allowed face is required.</gray>"
+vmodel-overlap: "<#3f86ff>✖ The model overlaps a block or another model.</#3f86ff>"
+vmodel-placed: "<#8fe9f5>✔</#8fe9f5> <gray>Model</gray> <white><bold>{model}</bold></white> <gray>placed.</gray>"
+vmodel-taken: "<#8fe9f5>✔</#8fe9f5> <gray>Model picked up.</gray>"
+vmodel-taken-hand: "<#8fe9f5>✔</#8fe9f5> <gray>The model is in your hand.</gray>"
+vmodel-look-at-model: "<#3f86ff>✖ No model in front of you:</#3f86ff> <gray>look at it or hit it.</gray>"
+vmodel-interact: "<#8fc6ff><bold>Model:</bold></#8fc6ff> <white>{model}</white> <gray>— interaction.</gray>"
+vmodel-seat-taken: "<#3f86ff>✖ That seat is taken.</#3f86ff>"
+vmodel-seated: "<#8fe9f5>✔</#8fe9f5> <gray>Seated.</gray> <dark_gray>Shift to stand up.</dark_gray>"
+vmodel-step: "<#66aaff>→</#66aaff> <gray>Rotation step:</gray> <white><bold>{degrees}°</bold></white>"
+vmodel-rotated: "<#66aaff>→</#66aaff> <gray>Rotation</gray> <white>{degrees}°</white> <dark_gray>·</dark_gray> <gray>step</gray> <white>{step}°</white>"
+

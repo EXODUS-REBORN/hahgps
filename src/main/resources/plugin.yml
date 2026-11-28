@@ -76,3 +76,12 @@ permissions:
   gps.itrak.admin:
     description: See, take and remove any tracker
     default: op
+  gps.models:
+    description: Place and pick up world models (/gps vmodel)
+    default: op
+  gps.models.give:
+    description: Give model markers (/gps vmodel give)
+    default: op
+  gps.models.admin:
+    description: Sync the model catalog with the panel and reload it
+    default: op
